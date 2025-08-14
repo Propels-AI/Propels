@@ -3,8 +3,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch"
+    "build": "tsc && npm run copy-assets",
+    "dev": "tsc --watch",
+    "copy-assets": "cp manifest.json popup.html dist/",
+    "clean": "rm -rf dist"
   },
   "dependencies": {
     "@demo/shared": "workspace:*"
