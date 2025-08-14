@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Propels Demo Capturer",
+  "version": "1.0.0",
+  "description": "Capture your screen and create interactive product demos",
+  "permissions": ["activeTab", "storage", "scripting"],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Demo Builder"
+  }
+}
