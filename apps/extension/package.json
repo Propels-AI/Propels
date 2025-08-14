@@ -12,7 +12,7 @@
     "@demo/shared": "workspace:*"
   },
   "devDependencies": {
-    "@types/chrome": "^0.0.268",
+    "@types/chrome": "^0.1.4",
     "typescript": "^5.4.5"
   }
 }
