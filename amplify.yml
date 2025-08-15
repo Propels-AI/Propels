@@ -6,9 +6,10 @@ applications:
         preBuild:
           commands:
             - npm install -g pnpm
+            - pnpm --version
+            - pnpm install --frozen-lockfile
         build:
           commands:
-            - pnpm install --frozen-lockfile
             - npx ampx pipeline-deploy --branch $AWS_BRANCH --app-id $AWS_APP_ID
     frontend:
       buildPath: /
@@ -16,15 +17,16 @@ applications:
         preBuild:
           commands:
             - npm install -g pnpm
+            - pnpm --version
+            - pnpm install --frozen-lockfile
         build:
           commands:
-            - pnpm install --frozen-lockfile
-            - pnpm --filter webapp build
+            - pnpm run build
       artifacts:
         baseDirectory: apps/webapp/dist
         files:
-          - '**/*'
+          - "**/*"
       cache:
         paths:
+          - .npm/**/*
           - node_modules/**/*
-          - apps/webapp/node_modules/**/*
