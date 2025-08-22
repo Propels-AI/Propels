@@ -1,11 +1,13 @@
 import type { VerifyAuthChallengeResponseTriggerEvent } from 'aws-lambda';
 
 export const handler = async (event: VerifyAuthChallengeResponseTriggerEvent) => {
-  console.log('VerifyAuthChallengeResponse trigger started');
-  console.log('Event:', JSON.stringify(event, null, 2));
+  console.log('VerifyAuthChallengeResponse trigger started', {
+    triggerSource: event.triggerSource,
+    region: event.region
+  });
   
   // Check if there was an error sending the email
-  const emailError = event.request.privateChallengeParameters.emailError;
+  const emailError = event.request?.privateChallengeParameters?.emailError;
   if (emailError === 'true') {
     console.log('Email error detected in private challenge parameters');
     // If there was an email error, fail the authentication
@@ -15,12 +17,14 @@ export const handler = async (event: VerifyAuthChallengeResponseTriggerEvent) =>
   }
   
   // Get the expected OTP code from private challenge parameters
-  const expectedOtp = event.request.privateChallengeParameters.otp;
-  console.log('Expected OTP:', expectedOtp);
+  const expectedOtp = event.request?.privateChallengeParameters?.otp;
+  const userResponse = event.request?.challengeAnswer;
   
-  // Get the user's response from the request
-  const userResponse = event.request.challengeAnswer;
-  console.log('User response:', userResponse);
+  console.log('OTP verification attempt', {
+    hasExpectedOtp: !!expectedOtp,
+    hasUserResponse: !!userResponse,
+    responseLength: userResponse?.length || 0
+  });
   
   // Verify the user's response
   if (expectedOtp && userResponse && expectedOtp === userResponse) {
@@ -31,7 +35,8 @@ export const handler = async (event: VerifyAuthChallengeResponseTriggerEvent) =>
     event.response.answerCorrect = false;
   }
   
-  console.log('VerifyAuthChallengeResponse trigger completed');
-  console.log('Response:', JSON.stringify(event.response, null, 2));
+  console.log('VerifyAuthChallengeResponse trigger completed', {
+    answerCorrect: event.response.answerCorrect
+  });
   return event;
 };

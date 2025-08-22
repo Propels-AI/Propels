@@ -1,16 +1,19 @@
 import type { CreateAuthChallengeTriggerEvent } from 'aws-lambda';
 import { SES } from '@aws-sdk/client-ses';
+import { randomInt } from 'crypto';
 
 
 export const handler = async (event: CreateAuthChallengeTriggerEvent) => {
-  console.log('CreateAuthChallenge trigger started');
-  console.log('Event:', JSON.stringify(event, null, 2));
+  console.log('CreateAuthChallenge trigger started', {
+    triggerSource: event.triggerSource,
+    region: event.region,
+    hasUserName: !!event.userName
+  });
   
   // For passwordless auth, we'll always use CUSTOM_CHALLENGE
   if (event.request.challengeName === 'CUSTOM_CHALLENGE') {
-    // Create a simple OTP code (in production, you'd want a more secure method)
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    console.log('Generated OTP:', otp);
+    // Generate cryptographically secure 6-digit OTP
+    const otp = randomInt(100000, 1000000).toString();
     
     // Store the OTP code in private challenge parameters
     // This is only accessible in the verifyAuthChallengeResponse trigger
@@ -21,13 +24,11 @@ export const handler = async (event: CreateAuthChallengeTriggerEvent) => {
     
     // Get the email address from userAttributes, or fallback to clientMetadata (from frontend signIn options)
     const email = event.request.userAttributes.email || event.request.clientMetadata?.email;
-    console.log("event.request.userAttributes")
-    console.info(event.request.userAttributes)
-    console.log("event.request.clientMetadata")
-    console.info(event.request.clientMetadata)
-    console.log('Email address resolved:', email);
-    console.log('UserName field:', event.userName);
-    console.log('All user attributes:', JSON.stringify(event.request.userAttributes, null, 2));
+    console.log('Email resolution', {
+      hasEmailInAttributes: !!event.request.userAttributes.email,
+      hasEmailInMetadata: !!event.request.clientMetadata?.email,
+      emailResolved: !!email
+    });
     
     // Send the OTP code via email using SES
     if (email) {
@@ -52,7 +53,7 @@ export const handler = async (event: CreateAuthChallengeTriggerEvent) => {
       
       try {
         const result = await ses.sendEmail(params);
-        console.log('Email sent successfully:', JSON.stringify(result, null, 2));
+        console.log('Email sent successfully', { messageId: result.MessageId });
       } catch (error) {
         console.error('Failed to send email:', error);
         // Store error information in the event response
@@ -67,7 +68,9 @@ export const handler = async (event: CreateAuthChallengeTriggerEvent) => {
     console.log('Challenge name is not CUSTOM_CHALLENGE:', event.request.challengeName);
   }
   
-  console.log('CreateAuthChallenge trigger completed');
-  console.log('Response:', JSON.stringify(event.response, null, 2));
+  console.log('CreateAuthChallenge trigger completed', {
+    challengeMetadata: event.response.challengeMetadata,
+    hasPrivateParams: !!event.response.privateChallengeParameters
+  });
   return event;
 };

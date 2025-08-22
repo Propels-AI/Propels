@@ -1,8 +1,12 @@
 import type { DefineAuthChallengeTriggerEvent } from 'aws-lambda';
 
 export const handler = async (event: DefineAuthChallengeTriggerEvent) => {
-  console.log('DefineAuthChallenge trigger started');
-  console.log('Event:', JSON.stringify(event, null, 2));
+  console.log('DefineAuthChallenge trigger started', {
+    triggerSource: event.triggerSource,
+    region: event.region,
+    sessionLength: event.request.session.length,
+    userNotFound: event.request.userNotFound
+  });
   
   // If Cognito indicates the user does not exist, fail immediately so the client can sign up first
   if (event.request.userNotFound) {
@@ -50,7 +54,10 @@ export const handler = async (event: DefineAuthChallengeTriggerEvent) => {
     }
   }
   
-  console.log('DefineAuthChallenge trigger completed');
-  console.log('Response:', JSON.stringify(event.response, null, 2));
+  console.log('DefineAuthChallenge trigger completed', {
+    failAuthentication: event.response.failAuthentication,
+    issueTokens: event.response.issueTokens,
+    challengeName: event.response.challengeName
+  });
   return event;
 };
