@@ -51,8 +51,7 @@ export function RedirectToSignIn(props: RedirectToSignInProps) {
 
   React.useEffect(() => {
     if (!isLoading && !user) {
-      const currentPath =
-        typeof window !== "undefined" ? window.location.pathname : "";
+      const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
       const redirectPath = returnTo || currentPath;
       if (redirectPath) {
         localStorage.setItem("returnToAfterAuth", redirectPath);
@@ -64,27 +63,12 @@ export function RedirectToSignIn(props: RedirectToSignInProps) {
 
       navigate(authPath);
     }
-  }, [
-    user,
-    isLoading,
-    navigate,
-    returnTo,
-    authPath,
-    redirectMessage,
-    redirectDescription,
-    showToast,
-  ]);
+  }, [user, isLoading, navigate, returnTo, authPath, redirectMessage, redirectDescription, showToast]);
 
   return null;
 }
 
-export function RedirectToDashboard({
-  to = "/dashboard",
-  replace = true,
-}: {
-  to?: string;
-  replace?: boolean;
-}) {
+export function RedirectToDashboard({ to = "/dashboard", replace = true }: { to?: string; replace?: boolean }) {
   const navigate = useNavigate();
   const { user, isLoading } = useAuth();
   const [hasHandledRedirect, setHasHandledRedirect] = React.useState(false);
@@ -151,8 +135,7 @@ export function AuthGuard({
       </>
     );
   if (!user) {
-    if (redirectOnUnauthenticated)
-      return <RedirectToSignIn {...redirectOptions} />;
+    if (redirectOnUnauthenticated) return <RedirectToSignIn {...redirectOptions} />;
     return fallback ? <>{fallback}</> : null;
   }
   return <>{children}</>;

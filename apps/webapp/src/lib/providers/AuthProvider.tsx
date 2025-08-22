@@ -1,10 +1,4 @@
-import React, {
-  createContext,
-  useContext,
-  useEffect,
-  useReducer,
-  ReactNode,
-} from "react";
+import React, { createContext, useContext, useEffect, useReducer, ReactNode } from "react";
 import { Hub } from "@aws-amplify/core";
 import { fetchUserAttributes, getCurrentUser, signOut } from "aws-amplify/auth";
 
@@ -83,11 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  return (
-    <AuthContext.Provider value={{ state, dispatch }}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={{ state, dispatch }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

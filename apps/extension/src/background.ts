@@ -92,38 +92,25 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     // Check if recording is active
     const result = await chrome.storage.local.get(["isRecording"]);
     if (result.isRecording) {
-      console.log(
-        "🔄 Background: Page loaded during recording, injecting content script on:",
-        tab.url
-      );
+      console.log("🔄 Background: Page loaded during recording, injecting content script on:", tab.url);
       try {
         await chrome.scripting.executeScript({
           target: { tabId: tabId },
           files: ["content.js"],
         });
-        console.log(
-          "✅ Background: Content script injected successfully on new page"
-        );
+        console.log("✅ Background: Content script injected successfully on new page");
 
         // Small delay then send START_CAPTURE message to resume recording
         setTimeout(async () => {
           try {
             await chrome.tabs.sendMessage(tabId, { type: "START_CAPTURE" });
-            console.log(
-              "📤 Background: Sent START_CAPTURE to content script on new page"
-            );
+            console.log("📤 Background: Sent START_CAPTURE to content script on new page");
           } catch (error) {
-            console.log(
-              "❌ Background: Failed to send START_CAPTURE to new page:",
-              error
-            );
+            console.log("❌ Background: Failed to send START_CAPTURE to new page:", error);
           }
         }, 100);
       } catch (error) {
-        console.log(
-          "❌ Background: Failed to inject content script on new page:",
-          error
-        );
+        console.log("❌ Background: Failed to inject content script on new page:", error);
       }
     }
   }
@@ -198,12 +185,7 @@ chrome.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
       console.log("🔍 Background: GET_RECORDING_STATE request received");
       chrome.storage.local.get(["isRecording", "stepCount"], (result) => {
         console.log("📦 Background: Storage result:", result);
-        console.log(
-          "🎯 Background: Local variables - isRecording:",
-          isRecording,
-          "stepCount:",
-          stepCount
-        );
+        console.log("🎯 Background: Local variables - isRecording:", isRecording, "stepCount:", stepCount);
 
         const response = {
           success: true,
@@ -220,7 +202,6 @@ chrome.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
       return false;
   }
 });
-
 
 async function handleStartCapture() {
   console.log("🎬 Background: Starting demo capture...");
@@ -293,9 +274,7 @@ function handleSaveCaptureSession(data: DemoCapture[]) {
   chrome.action.setBadgeBackgroundColor({ color: "#4F46E5" });
 }
 
-async function handleGetCaptureSession(
-  sendResponse: (response: CaptureSessionResponse) => void
-) {
+async function handleGetCaptureSession(sendResponse: (response: CaptureSessionResponse) => void) {
   console.log("Getting capture session...");
   try {
     const captures = await indexedDBManager.getAllCaptures();
@@ -329,10 +308,7 @@ async function handleClearCaptureSession() {
   }
 }
 
-async function handleCaptureScreenshot(
-  captureData: DemoCapture,
-  sendResponse: (response: any) => void
-) {
+async function handleCaptureScreenshot(captureData: DemoCapture, sendResponse: (response: any) => void) {
   console.log("Capturing screenshot for:", captureData);
   try {
     // Get the active tab
@@ -350,9 +326,7 @@ async function handleCaptureScreenshot(
     const screenshotDataUrl = await chrome.tabs.captureVisibleTab();
 
     // Convert data URL to Blob
-    const screenshotBlob = await fetch(screenshotDataUrl).then((res) =>
-      res.blob()
-    );
+    const screenshotBlob = await fetch(screenshotDataUrl).then((res) => res.blob());
 
     // Update the capture data with the actual screenshot
     const updatedCapture: DemoCapture = {
@@ -394,79 +368,75 @@ function triggerAuthenticatedUpload() {
   // 2. Uploading each screenshot to S3
   // 3. Creating demo and step records in the backend
   // For now, we'll just log that this would happen
-  console.log(
-    "Would upload screenshots to S3 and create demo records in backend"
-  );
+  console.log("Would upload screenshots to S3 and create demo records in backend");
 }
 
 // Handle requests from the web app for data synchronization
-chrome.runtime.onMessageExternal.addListener(
-  (message: any, _sender, sendResponse) => {
-    console.log("Received external message from web app:", message);
+chrome.runtime.onMessageExternal.addListener((message: any, _sender, sendResponse) => {
+  console.log("Received external message from web app:", message);
 
-    switch (message.type) {
-      case "REQUEST_CAPTURE_DATA":
-      case "GET_CAPTURE_SESSION":
-        // Return the captured data from IndexedDB
-        indexedDBManager
-          .getAllCaptures()
-          .then(async (captures) => {
-            // External messaging doesn't reliably transfer Blob objects.
-            // Convert each Blob to a data URL for the web app.
-            const serialized = await Promise.all(
-              captures.map(async (c) => {
-                let screenshotDataUrl = "";
-                try {
-                  screenshotDataUrl = await blobToDataUrl(c.screenshotBlob);
-                } catch (e) {
-                  console.warn("Failed to convert blob to data URL for capture", c.id, e);
-                }
-                return {
-                  id: c.id,
-                  pageUrl: c.pageUrl,
-                  timestamp: c.timestamp,
-                  stepOrder: c.stepOrder,
-                  screenshotDataUrl,
-                  // Pass-through click metadata for editor placement
-                  // @ts-ignore
-                  clickX: (c as any).clickX,
-                  // @ts-ignore
-                  clickY: (c as any).clickY,
-                  // @ts-ignore
-                  scrollX: (c as any).scrollX,
-                  // @ts-ignore
-                  scrollY: (c as any).scrollY,
-                  // @ts-ignore
-                  viewportWidth: (c as any).viewportWidth,
-                  // @ts-ignore
-                  viewportHeight: (c as any).viewportHeight,
-                  // @ts-ignore
-                  devicePixelRatio: (c as any).devicePixelRatio,
-                  // @ts-ignore
-                  xNorm: (c as any).xNorm,
-                  // @ts-ignore
-                  yNorm: (c as any).yNorm,
-                };
-              })
-            );
-            sendResponse({ success: true, data: serialized });
-          })
-          .catch((error) => {
-            console.error("Error retrieving capture data:", error);
-            sendResponse({
-              success: false,
-              error: "Failed to retrieve capture data",
-            });
+  switch (message.type) {
+    case "REQUEST_CAPTURE_DATA":
+    case "GET_CAPTURE_SESSION":
+      // Return the captured data from IndexedDB
+      indexedDBManager
+        .getAllCaptures()
+        .then(async (captures) => {
+          // External messaging doesn't reliably transfer Blob objects.
+          // Convert each Blob to a data URL for the web app.
+          const serialized = await Promise.all(
+            captures.map(async (c) => {
+              let screenshotDataUrl = "";
+              try {
+                screenshotDataUrl = await blobToDataUrl(c.screenshotBlob);
+              } catch (e) {
+                console.warn("Failed to convert blob to data URL for capture", c.id, e);
+              }
+              return {
+                id: c.id,
+                pageUrl: c.pageUrl,
+                timestamp: c.timestamp,
+                stepOrder: c.stepOrder,
+                screenshotDataUrl,
+                // Pass-through click metadata for editor placement
+                // @ts-ignore
+                clickX: (c as any).clickX,
+                // @ts-ignore
+                clickY: (c as any).clickY,
+                // @ts-ignore
+                scrollX: (c as any).scrollX,
+                // @ts-ignore
+                scrollY: (c as any).scrollY,
+                // @ts-ignore
+                viewportWidth: (c as any).viewportWidth,
+                // @ts-ignore
+                viewportHeight: (c as any).viewportHeight,
+                // @ts-ignore
+                devicePixelRatio: (c as any).devicePixelRatio,
+                // @ts-ignore
+                xNorm: (c as any).xNorm,
+                // @ts-ignore
+                yNorm: (c as any).yNorm,
+              };
+            })
+          );
+          sendResponse({ success: true, data: serialized });
+        })
+        .catch((error) => {
+          console.error("Error retrieving capture data:", error);
+          sendResponse({
+            success: false,
+            error: "Failed to retrieve capture data",
           });
-        return true; // Keep message channel open for async response
-      default:
-        console.log("Unknown external message type:", message.type);
-        sendResponse({ success: false, error: "Unknown message type" });
-    }
-
-    return true;
+        });
+      return true; // Keep message channel open for async response
+    default:
+      console.log("Unknown external message type:", message.type);
+      sendResponse({ success: false, error: "Unknown message type" });
   }
-);
+
+  return true;
+});
 
 // Helpers
 function blobToDataUrl(blob: Blob): Promise<string> {

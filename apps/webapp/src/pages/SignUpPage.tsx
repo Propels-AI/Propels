@@ -1,10 +1,6 @@
 import { useState, useEffect } from "react";
 import "@aws-amplify/ui-react/styles.css";
-import {
-  SignedIn,
-  SignedOut,
-  RedirectToDashboard,
-} from "@/lib/auth/AuthComponents";
+import { SignedIn, SignedOut, RedirectToDashboard } from "@/lib/auth/AuthComponents";
 import { PasswordlessAuth } from "@/components/auth/PasswordlessAuth";
 import { useNavigate } from "react-router-dom";
 
@@ -22,10 +18,9 @@ export default function SignUpPage() {
     const checkForAnonymousSession = async () => {
       try {
         // Try to send message to extension
-        const response = await chrome.runtime.sendMessage(
-          process.env.EXTENSION_ID || "",
-          { type: "GET_CAPTURE_SESSION" }
-        );
+        const response = await chrome.runtime.sendMessage(process.env.EXTENSION_ID || "", {
+          type: "GET_CAPTURE_SESSION",
+        });
 
         if (response?.success && response?.data?.length > 0) {
           setHasAnonymousSession(true);
@@ -56,10 +51,9 @@ export default function SignUpPage() {
 
     try {
       // Request data from extension
-      const response = await chrome.runtime.sendMessage(
-        process.env.EXTENSION_ID || "",
-        { type: "GET_CAPTURE_SESSION" }
-      );
+      const response = await chrome.runtime.sendMessage(process.env.EXTENSION_ID || "", {
+        type: "GET_CAPTURE_SESSION",
+      });
 
       if (response?.success && response?.data) {
         // Upload each screenshot blob to S3 and create demo records

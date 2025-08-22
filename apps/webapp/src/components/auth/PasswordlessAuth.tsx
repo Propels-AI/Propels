@@ -4,20 +4,10 @@ import { useEffect, useState, FormEvent, useId, useRef } from "react";
 import { Hub } from "@aws-amplify/core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  InputOTP,
-  InputOTPGroup,
-  InputOTPSlot,
-} from "@/components/ui/input-otp";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { Label } from "@/components/ui/label";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import {
-  signIn,
-  confirmSignIn,
-  signUp,
-  confirmSignUp,
-  resendSignUpCode,
-} from "aws-amplify/auth";
+import { signIn, confirmSignIn, signUp, confirmSignUp, resendSignUpCode } from "aws-amplify/auth";
 import { Mail, CheckCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -94,9 +84,7 @@ function PasswordlessAuthComponent({
           clientMetadata: { email: email.trim() },
         },
       });
-      log(
-        "signIn(CUSTOM_WITHOUT_SRP) succeeded; switching to otpVerification for existing user"
-      );
+      log("signIn(CUSTOM_WITHOUT_SRP) succeeded; switching to otpVerification for existing user");
       setIsSignUpFlow(false);
       setError(null);
       setMode("otpVerification");
@@ -110,24 +98,16 @@ function PasswordlessAuthComponent({
       // Backend returns NotAuthorizedException for non-existent users in custom auth flow
       if (
         error.name === "UserNotFoundException" ||
-        (error.name === "NotAuthorizedException" &&
-          error.message?.includes("Incorrect username or password"))
+        (error.name === "NotAuthorizedException" && error.message?.includes("Incorrect username or password"))
       ) {
         try {
-          const tp =
-            "Temp!" +
-            Math.random()
-              .toString(36)
-              .slice(2) +
-            "A1";
+          const tp = "Temp!" + Math.random().toString(36).slice(2) + "A1";
           await signUp({
             username: email.trim(),
             password: tp,
             options: { userAttributes: { email: email.trim() } },
           });
-          log(
-            "signUp succeeded; isSignUpFlow set true; switching to otpVerification (confirmation code expected)"
-          );
+          log("signUp succeeded; isSignUpFlow set true; switching to otpVerification (confirmation code expected)");
           setIsSignUpFlow(true);
           setTempPassword(tp);
           setError(null);
@@ -147,9 +127,7 @@ function PasswordlessAuthComponent({
                   clientMetadata: { email: email.trim() },
                 },
               });
-              log(
-                "Retry signIn after UsernameExistsException succeeded; switching to otpVerification"
-              );
+              log("Retry signIn after UsernameExistsException succeeded; switching to otpVerification");
               setError(null);
               setMode("otpVerification");
               toast.success("Check your email!", {
@@ -158,19 +136,12 @@ function PasswordlessAuthComponent({
               return;
             } catch (retryErr) {
               const r = retryErr as { message?: string };
-              logError(
-                "Retry signIn after UsernameExistsException failed",
-                retryErr
-              );
-              setError(
-                r.message || suErr.message || "Failed to continue sign in."
-              );
+              logError("Retry signIn after UsernameExistsException failed", retryErr);
+              setError(r.message || suErr.message || "Failed to continue sign in.");
               return;
             }
           }
-          setError(
-            suErr.message || "Failed to start sign up. Please try again."
-          );
+          setError(suErr.message || "Failed to start sign up. Please try again.");
         }
       } else if (error.name === "UserNotConfirmedException") {
         log("User exists but not confirmed; sending confirmation code");
@@ -187,17 +158,10 @@ function PasswordlessAuthComponent({
         }
       } else if (
         error.name === "NotAuthorizedException" &&
-        error.message
-          ?.toLowerCase()
-          .includes("incorrect code. please try again")
+        error.message?.toLowerCase().includes("incorrect code. please try again")
       ) {
         try {
-          const tp =
-            "Temp!" +
-            Math.random()
-              .toString(36)
-              .slice(2) +
-            "A1";
+          const tp = "Temp!" + Math.random().toString(36).slice(2) + "A1";
           await signUp({
             username: email.trim(),
             password: tp,
@@ -205,9 +169,7 @@ function PasswordlessAuthComponent({
           });
           setIsSignUpFlow(true);
           setTempPassword(tp);
-          log(
-            "signUp succeeded after NotAuthorizedException; isSignUpFlow set true; awaiting confirmation code"
-          );
+          log("signUp succeeded after NotAuthorizedException; isSignUpFlow set true; awaiting confirmation code");
           setMode("otpVerification");
           toast.success("Check your email!", {
             description: "We sent a confirmation code to create your account.",
@@ -220,21 +182,15 @@ function PasswordlessAuthComponent({
             setIsSignUpFlow(true);
             setMode("otpVerification");
             toast.success("Check your email!", {
-              description:
-                "We sent a confirmation code to verify your account.",
+              description: "We sent a confirmation code to verify your account.",
             });
             return;
           }
           setError(e.message || "Failed to sign up. Please try again.");
         }
-      } else if (
-        error.name === "NotAuthorizedException" &&
-        error.message?.toLowerCase().includes("email")
-      ) {
+      } else if (error.name === "NotAuthorizedException" && error.message?.toLowerCase().includes("email")) {
         log("Email-related NotAuthorizedException encountered");
-        setError(
-          "Failed to send email. Please check your email address and try again."
-        );
+        setError("Failed to send email. Please check your email address and try again.");
       } else {
         log("Unhandled error on email submit");
         setError(error.message || "Failed to start sign in. Please try again.");
@@ -263,9 +219,7 @@ function PasswordlessAuthComponent({
           username: email.trim(),
           confirmationCode: otpCode.trim(),
         });
-        log(
-          "Sign-up confirmed successfully, now signing in with temp password"
-        );
+        log("Sign-up confirmed successfully, now signing in with temp password");
 
         if (!tempPassword) {
           throw new Error("Missing temporary password for sign-in");
@@ -285,9 +239,7 @@ function PasswordlessAuthComponent({
       logError("OTP submit failed", err);
       const anyErr = err as any;
       const name = anyErr?.name as string | undefined;
-      const msg =
-        (anyErr?.message as string | undefined) ||
-        "Invalid code. Please try again.";
+      const msg = (anyErr?.message as string | undefined) || "Invalid code. Please try again.";
       const http = anyErr?.$metadata?.httpStatusCode as number | undefined;
 
       if (name === "ExpiredCodeException") {
@@ -302,9 +254,7 @@ function PasswordlessAuthComponent({
         name === "NotAuthorizedException" ||
         name === "InvalidParameterException" ||
         name === "ResourceNotFoundException" ||
-        (typeof msg === "string" &&
-          /session|challenge/i.test(msg) &&
-          !msg.toLowerCase().includes("code")) ||
+        (typeof msg === "string" && /session|challenge/i.test(msg) && !msg.toLowerCase().includes("code")) ||
         http === 400;
 
       if (
@@ -314,9 +264,7 @@ function PasswordlessAuthComponent({
         name !== "ExpiredCodeException"
       ) {
         try {
-          log(
-            "Attempting session recovery: re-triggering custom challenge signIn"
-          );
+          log("Attempting session recovery: re-triggering custom challenge signIn");
           await signIn({
             username: email.trim(),
             options: {
@@ -343,16 +291,12 @@ function PasswordlessAuthComponent({
   return (
     <div
       className={`w-full space-y-6 ${
-        isInDialog
-          ? "p-6"
-          : "max-w-md mx-auto p-6 bg-background text-foreground rounded-lg shadow-md border"
+        isInDialog ? "p-6" : "max-w-md mx-auto p-6 bg-background text-foreground rounded-lg shadow-md border"
       }`}
     >
       {isInDialog && (
         <DialogHeader>
-          <DialogTitle className="sr-only">
-            {mode === "emailEntry" ? "Sign In or Sign Up" : "Verify Email"}
-          </DialogTitle>
+          <DialogTitle className="sr-only">{mode === "emailEntry" ? "Sign In or Sign Up" : "Verify Email"}</DialogTitle>
         </DialogHeader>
       )}
 
@@ -360,9 +304,7 @@ function PasswordlessAuthComponent({
         <div className="space-y-6">
           {hasAnonymousSession && (
             <div className="p-4 bg-blue-50 dark:bg-blue-950 text-blue-800 dark:text-blue-200 rounded-md border border-blue-200 dark:border-blue-800">
-              <p className="font-semibold">
-                Sign up to save the demo you just captured!
-              </p>
+              <p className="font-semibold">Sign up to save the demo you just captured!</p>
             </div>
           )}
 
@@ -374,20 +316,12 @@ function PasswordlessAuthComponent({
               <Mail className="h-6 w-6" />
             </div>
             <div className="text-center space-y-1">
-              <h2 className="text-2xl font-semibold leading-none tracking-tight">
-                Sign In or Sign Up
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                Enter your email to get a one-time code.
-              </p>
+              <h2 className="text-2xl font-semibold leading-none tracking-tight">Sign In or Sign Up</h2>
+              <p className="text-sm text-muted-foreground">Enter your email to get a one-time code.</p>
             </div>
           </div>
 
-          <form
-            ref={formRef}
-            className="grid gap-4"
-            onSubmit={handleEmailSubmit}
-          >
+          <form ref={formRef} className="grid gap-4" onSubmit={handleEmailSubmit}>
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor={`${id}-email`}>Email</Label>
@@ -404,17 +338,9 @@ function PasswordlessAuthComponent({
               </div>
             </div>
 
-            {error && (
-              <p className="text-sm text-red-600 dark:text-red-500 text-center">
-                {error}
-              </p>
-            )}
+            {error && <p className="text-sm text-red-600 dark:text-red-500 text-center">{error}</p>}
 
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={isLoading || !email.trim()}
-            >
+            <Button type="submit" className="w-full" disabled={isLoading || !email.trim()}>
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -436,9 +362,7 @@ function PasswordlessAuthComponent({
               <CheckCircle className="h-6 w-6" />
             </div>
             <div className="text-center space-y-1">
-              <h2 className="text-2xl font-semibold leading-none tracking-tight">
-                Check your email
-              </h2>
+              <h2 className="text-2xl font-semibold leading-none tracking-tight">Check your email</h2>
               <p className="text-sm text-muted-foreground">
                 We sent a 6-digit code to <strong>{email}</strong>
               </p>
@@ -448,9 +372,7 @@ function PasswordlessAuthComponent({
           <form ref={formRef} className="grid gap-4" onSubmit={handleOtpSubmit}>
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor={`${id}-confirmation-code`}>
-                  Verification Code
-                </Label>
+                <Label htmlFor={`${id}-confirmation-code`}>Verification Code</Label>
                 <InputOTP
                   maxLength={6}
                   value={otpCode}
@@ -492,13 +414,9 @@ function PasswordlessAuthComponent({
                         if (isSignUpFlow) {
                           log("Resend: sign-up flow -> resendSignUpCode");
                           await resendSignUpCode({ username: email.trim() });
-                          toast.success(
-                            "Confirmation code resent. Please check your email."
-                          );
+                          toast.success("Confirmation code resent. Please check your email.");
                         } else {
-                          log(
-                            "Resend: existing user flow -> re-trigger custom challenge signIn"
-                          );
+                          log("Resend: existing user flow -> re-trigger custom challenge signIn");
                           await signIn({
                             username: email.trim(),
                             options: {
@@ -506,9 +424,7 @@ function PasswordlessAuthComponent({
                               clientMetadata: { email: email.trim() },
                             },
                           });
-                          toast.success(
-                            "Confirmation code resent. Please check your email."
-                          );
+                          toast.success("Confirmation code resent. Please check your email.");
                         }
                         setOtpCode("");
                         setResendDisabled(true);
@@ -529,17 +445,9 @@ function PasswordlessAuthComponent({
               </div>
             </div>
 
-            {error && (
-              <p className="text-sm text-red-600 dark:text-red-500 text-center">
-                {error}
-              </p>
-            )}
+            {error && <p className="text-sm text-red-600 dark:text-red-500 text-center">{error}</p>}
 
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={isLoading || otpCode.length !== 6}
-            >
+            <Button type="submit" className="w-full" disabled={isLoading || otpCode.length !== 6}>
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
