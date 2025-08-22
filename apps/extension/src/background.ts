@@ -372,10 +372,42 @@ function triggerAuthenticatedUpload() {
 }
 
 // Handle requests from the web app for data synchronization
-chrome.runtime.onMessageExternal.addListener((message: any, _sender, sendResponse) => {
-  console.log("Received external message from web app:", message);
+chrome.runtime.onMessageExternal.addListener((message: any, sender, sendResponse) => {
+  // Basic allowlist validation
+  const allowedOrigins = new Set<string>([
+    "http://localhost:5173",
+    "https://app.propels.ai",
+  ]);
+  // Optionally restrict to trusted extension IDs. Leave empty to skip.
+  const trustedExtensionIds = new Set<string>([
+    // e.g., "abcdefghijklmnopabcdefghijklmnop"
+  ]);
 
-  switch (message.type) {
+  const origin = (sender as any)?.origin || (sender.url ? new URL(sender.url).origin : undefined);
+  const callerId = sender.id;
+
+  if (!origin || !allowedOrigins.has(origin)) {
+    console.warn("Rejected external message due to disallowed origin:", origin);
+    sendResponse({ success: false, error: "Origin not allowed" });
+    return false;
+  }
+
+  if (trustedExtensionIds.size > 0 && (!callerId || !trustedExtensionIds.has(callerId))) {
+    console.warn("Rejected external message due to untrusted sender id:", callerId);
+    sendResponse({ success: false, error: "Sender not allowed" });
+    return false;
+  }
+
+  // Sanitize and validate the payload
+  const type = typeof message?.type === "string" ? String(message.type) : "";
+  if (!type) {
+    sendResponse({ success: false, error: "Invalid message type" });
+    return false;
+  }
+
+  console.log("Received external message from web app:", { type, origin, callerId });
+
+  switch (type) {
     case "REQUEST_CAPTURE_DATA":
     case "GET_CAPTURE_SESSION":
       // Return the captured data from IndexedDB
@@ -431,7 +463,7 @@ chrome.runtime.onMessageExternal.addListener((message: any, _sender, sendRespons
         });
       return true; // Keep message channel open for async response
     default:
-      console.log("Unknown external message type:", message.type);
+      console.log("Unknown external message type:", type);
       sendResponse({ success: false, error: "Unknown message type" });
   }
 

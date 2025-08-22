@@ -3,7 +3,7 @@
   "name": "Propels Demo Capturer",
   "version": "1.0.0",
   "description": "Capture your screen and create interactive product demos",
-  "permissions": ["activeTab", "storage", "scripting", "tabs", "notifications"],
+  "permissions": ["activeTab", "storage", "scripting", "tabs"],
   "host_permissions": ["http://*/*", "https://*/*"],
   "background": {
     "service_worker": "background.js",
@@ -21,6 +21,7 @@
     "default_title": "Demo Builder"
   },
   "externally_connectable": {
-    "matches": ["http://localhost:5173/*", "https://*.propels.ai/*"]
+    "matches": ["http://localhost:5173/*", "https://app.propels.ai/*"],
+    "accepts_tls_channel_id": false
   }
 }
