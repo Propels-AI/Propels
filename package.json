@@ -3,10 +3,15 @@
   "private": true,
   "version": "0.0.0",
   "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "dev": "pnpm --filter webapp dev",
     "build": "pnpm --filter webapp build",
     "build:all": "pnpm -r build",
     "lint": "pnpm -r lint",
     "preview": "pnpm --filter webapp preview"
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2"
   }
 }

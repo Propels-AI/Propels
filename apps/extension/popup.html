@@ -1,60 +1,52 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <style>
-    body {
-      width: 300px;
-      padding: 16px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    }
-    .header {
-      text-align: center;
-      margin-bottom: 16px;
-    }
-    .button {
-      width: 100%;
-      padding: 12px;
-      margin: 8px 0;
-      border: none;
-      border-radius: 6px;
-      background: #007bff;
-      color: white;
-      cursor: pointer;
-      font-size: 14px;
-    }
-    .button:hover {
-      background: #0056b3;
-    }
-    .status {
-      text-align: center;
-      margin-top: 16px;
-      font-size: 12px;
-      color: #666;
-    }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <h3>Demo Builder</h3>
-  </div>
-  
-  <button class="button" id="startCapture">
-    📸 Start Capture
-  </button>
-  
-  <button class="button" id="stopCapture">
-    ⏹️ Stop Capture
-  </button>
-  
-  <button class="button" id="viewDemos">
-    📋 View Demos
-  </button>
-  
-  <div class="status" id="status">
-    Ready to capture
-  </div>
-  
-  <script src="dist/popup.js"></script>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body {
+        width: 300px;
+        padding: 16px;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+      .header {
+        text-align: center;
+        margin-bottom: 16px;
+      }
+      .button {
+        width: 100%;
+        padding: 12px;
+        margin: 8px 0;
+        border: none;
+        border-radius: 6px;
+        background: #007bff;
+        color: white;
+        cursor: pointer;
+        font-size: 14px;
+      }
+      .button:hover {
+        background: #0056b3;
+      }
+      .status {
+        text-align: center;
+        margin-top: 16px;
+        font-size: 12px;
+        color: #666;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h3>Demo Builder</h3>
+    </div>
+
+    <button class="button" id="startCapture">📸 Start Capture</button>
+
+    <button class="button" id="stopCapture">⏹️ Stop Capture</button>
+
+    <button class="button" id="viewDemos">📋 View Demos</button>
+
+    <div class="status" id="status">Ready to capture</div>
+
+    <script src="popup.js"></script>
+  </body>
 </html>

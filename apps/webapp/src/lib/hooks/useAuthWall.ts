@@ -32,8 +32,7 @@ export function useAuthWall(options: AuthWallOptions = {}) {
   const isLoaded = !isAuthLoading;
 
   const protect = () => {
-    const currentPath =
-      typeof window !== "undefined" ? window.location.pathname : "";
+    const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
     const redirectPath = returnTo || currentPath;
     if (redirectPath) {
       localStorage.setItem("returnToAfterAuth", redirectPath);

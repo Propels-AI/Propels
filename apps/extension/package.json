@@ -1,11 +1,10 @@
 {
   "name": "@demo/extension",
   "version": "0.0.0",
-  "type": "module",
   "scripts": {
     "build": "tsc && npm run copy-assets",
     "dev": "tsc --watch",
-    "copy-assets": "cp manifest.json popup.html dist/",
+    "copy-assets": "cp manifest.json dist/ && cp popup.html dist/",
     "clean": "rm -rf dist"
   },
   "dependencies": {

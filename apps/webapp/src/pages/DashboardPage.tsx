@@ -34,9 +34,7 @@ export function DashboardPage() {
 
           <div className="mb-8">
             <p className="text-lg mb-2">Welcome, {user?.username}!</p>
-            <p className="text-gray-600">
-              You've successfully signed in with passwordless authentication.
-            </p>
+            <p className="text-gray-600">You've successfully signed in with passwordless authentication.</p>
           </div>
 
           <DemoListView />

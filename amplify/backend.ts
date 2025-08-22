@@ -22,6 +22,4 @@ const sesPolicy = new Policy(backend.createAuthChallenge.stack, "SESPolicy", {
   ],
 });
 
-backend.createAuthChallenge.resources.lambda.role?.attachInlinePolicy(
-  sesPolicy
-);
+backend.createAuthChallenge.resources.lambda.role?.attachInlinePolicy(sesPolicy);

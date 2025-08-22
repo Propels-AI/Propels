@@ -33,7 +33,11 @@ const mockDemos = [
 ];
 
 export function DemoListView() {
-  const { data: demos, isLoading, error } = useQuery({
+  const {
+    data: demos,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ["demos"],
     queryFn: () => Promise.resolve(mockDemos),
   });
@@ -59,21 +63,15 @@ export function DemoListView() {
               <h3 className="font-medium text-lg">{demo.name}</h3>
               <span
                 className={`px-2 py-1 rounded text-xs font-medium ${
-                  demo.status === "PUBLISHED"
-                    ? "bg-green-100 text-green-800"
-                    : "bg-yellow-100 text-yellow-800"
+                  demo.status === "PUBLISHED" ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
                 }`}
               >
                 {demo.status}
               </span>
             </div>
             <div className="flex justify-between items-center mt-2 text-sm text-gray-500">
-              <span>
-                Created: {new Date(demo.createdAt).toLocaleDateString()}
-              </span>
-              <span>
-                Updated: {new Date(demo.updatedAt).toLocaleDateString()}
-              </span>
+              <span>Created: {new Date(demo.createdAt).toLocaleDateString()}</span>
+              <span>Updated: {new Date(demo.updatedAt).toLocaleDateString()}</span>
             </div>
           </div>
         ))}

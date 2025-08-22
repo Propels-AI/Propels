@@ -1,9 +1,5 @@
 import "@aws-amplify/ui-react/styles.css";
-import {
-  SignedIn,
-  SignedOut,
-  RedirectToDashboard,
-} from "@/lib/auth/AuthComponents";
+import { SignedIn, SignedOut, RedirectToDashboard } from "@/lib/auth/AuthComponents";
 import { PasswordlessAuth } from "@/components/auth/PasswordlessAuth";
 import { useNavigate } from "react-router-dom";
 
