@@ -19,6 +19,10 @@ interface CaptureSessionResponse {
 // Background script for handling extension lifecycle and messaging
 console.log("🚀 Demo Builder Extension: Background script loaded at", new Date().toISOString());
 
+// Explicit allowlist for external messaging origins
+const ALLOWED_ORIGINS = new Set<string>(["http://localhost:5173", "https://app.propels.ai"]);
+// Note: external messaging is restricted by origin; no extension ID allowlist is used.
+
 // Immediate activation and aggressive keepalive
 console.log("🚀 Background: Service worker initializing...");
 
@@ -373,28 +377,13 @@ function triggerAuthenticatedUpload() {
 
 // Handle requests from the web app for data synchronization
 chrome.runtime.onMessageExternal.addListener((message: any, sender, sendResponse) => {
-  // Basic allowlist validation
-  const allowedOrigins = new Set<string>([
-    "http://localhost:5173",
-    "https://app.propels.ai",
-  ]);
-  // Optionally restrict to trusted extension IDs. Leave empty to skip.
-  const trustedExtensionIds = new Set<string>([
-    // e.g., "abcdefghijklmnopabcdefghijklmnop"
-  ]);
-
+  // Derive origin per Chrome's sender fields
   const origin = (sender as any)?.origin || (sender.url ? new URL(sender.url).origin : undefined);
   const callerId = sender.id;
 
-  if (!origin || !allowedOrigins.has(origin)) {
-    console.warn("Rejected external message due to disallowed origin:", origin);
-    sendResponse({ success: false, error: "Origin not allowed" });
-    return false;
-  }
-
-  if (trustedExtensionIds.size > 0 && (!callerId || !trustedExtensionIds.has(callerId))) {
-    console.warn("Rejected external message due to untrusted sender id:", callerId);
-    sendResponse({ success: false, error: "Sender not allowed" });
+  if (!origin || !ALLOWED_ORIGINS.has(origin)) {
+    console.warn("Blocked external message from unauthorized origin:", origin);
+    sendResponse({ success: false, error: "Unauthorized origin" });
     return false;
   }
 
@@ -405,7 +394,7 @@ chrome.runtime.onMessageExternal.addListener((message: any, sender, sendResponse
     return false;
   }
 
-  console.log("Received external message from web app:", { type, origin, callerId });
+  console.log("Received external message from web app:", message, "from", origin);
 
   switch (type) {
     case "REQUEST_CAPTURE_DATA":
