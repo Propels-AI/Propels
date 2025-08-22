@@ -6,8 +6,8 @@
   "tailwind": {
     "config": "tailwind.config.js",
     "css": "src/index.css",
-    "baseColor": "neutral",
-    "cssVariables": false
+    "baseColor": "zinc",
+    "cssVariables": true
   },
   "aliases": {
     "utils": "@/lib/utils",
