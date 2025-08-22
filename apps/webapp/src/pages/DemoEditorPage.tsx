@@ -71,7 +71,7 @@ export function DemoEditorPage() {
     const loadFromExtension = async () => {
       try {
         setLoadingSteps(true);
-        const extId = (import.meta as any).env?.CHROME_EXTENSION_ID || "";
+        const extId = (import.meta as any).env?.VITE_CHROME_EXTENSION_ID || "";
         if (typeof chrome !== "undefined" && chrome.runtime && extId) {
           const response = await chrome.runtime.sendMessage(extId, {
             type: "GET_CAPTURE_SESSION",
