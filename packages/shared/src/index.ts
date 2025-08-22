@@ -1,18 +1,26 @@
-// Shared types and utilities for the demo builder
 export interface DemoCapture {
   id: string;
   screenshotBlob: Blob;
   pageUrl: string;
   timestamp: number;
   stepOrder: number;
+  clickX?: number;
+  clickY?: number;
+  scrollX?: number;
+  scrollY?: number;
+  viewportWidth?: number;
+  viewportHeight?: number;
+  devicePixelRatio?: number;
+  xNorm?: number;
+  yNorm?: number;
 }
 
 export interface DemoMetadata {
   demoId: string;
-  itemSK: string; // METADATA
+  itemSK: string;
   ownerId?: string;
   name?: string;
-  status?: 'DRAFT' | 'PUBLISHED';
+  status?: "DRAFT" | "PUBLISHED";
   createdAt?: string;
   updatedAt?: string;
   statusUpdatedAt?: string;
@@ -22,7 +30,7 @@ export interface DemoMetadata {
 export interface DemoStep {
   id: string;
   demoId: string;
-  itemSK: string; // STEP#<lexical_id>
+  itemSK: string;
   screenshotUrl: string;
   hotspots: Hotspot[];
   pageUrl: string;
@@ -38,7 +46,40 @@ export interface Hotspot {
   nextStepId?: string;
 }
 
-// Utility functions
+export interface StartCaptureMessage {
+  type: "START_CAPTURE";
+}
+
+export interface StopCaptureMessage {
+  type: "STOP_CAPTURE";
+}
+
+export interface SaveCaptureSessionMessage {
+  type: "SAVE_CAPTURE_SESSION";
+  data: DemoCapture[];
+}
+
+export interface GetCaptureSessionMessage {
+  type: "GET_CAPTURE_SESSION";
+}
+
+export interface ClearCaptureSessionMessage {
+  type: "CLEAR_CAPTURE_SESSION";
+}
+
+export interface CaptureSessionResponse {
+  success: boolean;
+  data?: DemoCapture[];
+  error?: string;
+}
+
+export type ChromeMessage =
+  | StartCaptureMessage
+  | StopCaptureMessage
+  | SaveCaptureSessionMessage
+  | GetCaptureSessionMessage
+  | ClearCaptureSessionMessage;
+
 export const generateId = (): string => {
   return crypto.randomUUID();
 };

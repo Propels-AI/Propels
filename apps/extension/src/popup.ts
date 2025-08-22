@@ -7,8 +7,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const viewButton = document.getElementById('viewDemos') as HTMLButtonElement;
   const status = document.getElementById('status') as HTMLDivElement;
 
-  // Initial state
-  updateUI(false);
+  // Check initial recording state
+  checkRecordingState();
 
   // Event listeners
   startButton.addEventListener('click', handleStartCapture);
@@ -22,7 +22,33 @@ document.addEventListener('DOMContentLoaded', () => {
       // Get current active tab
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       
-      if (tab.id) {
+      if (!tab.id) {
+        updateStatus('❌ No active tab found');
+        return;
+      }
+
+      // Check if we can inject scripts into this tab
+      if (tab.url?.startsWith('chrome://') || tab.url?.startsWith('chrome-extension://') || tab.url?.startsWith('edge://') || tab.url?.startsWith('about:')) {
+        updateStatus('❌ Cannot capture on this type of page. Please navigate to a regular website.');
+        return;
+      }
+
+      // Always inject content script to ensure it's fresh and properly connected
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['content.js']
+        });
+        console.log('Content script injected successfully');
+        // Small delay to ensure content script is ready
+        await new Promise(resolve => setTimeout(resolve, 300));
+      } catch (injectionError) {
+        console.error('Failed to inject content script:', injectionError);
+        updateStatus('❌ Cannot inject content script. Try refreshing the page.');
+        return;
+      }
+      
+      try {
         // Send message to content script
         await chrome.tabs.sendMessage(tab.id, { type: 'START_CAPTURE' });
         
@@ -31,6 +57,9 @@ document.addEventListener('DOMContentLoaded', () => {
         
         updateUI(true);
         updateStatus('🔴 Capturing... Click on elements to record');
+      } catch (messageError) {
+        console.error('Error sending message to content script:', messageError);
+        updateStatus('❌ Cannot start capture on this page. Try refreshing and try again.');
       }
     } catch (error) {
       console.error('Error starting capture:', error);
@@ -45,16 +74,35 @@ document.addEventListener('DOMContentLoaded', () => {
       // Get current active tab
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       
-      if (tab.id) {
+      if (!tab.id) {
+        updateStatus('❌ No active tab found');
+        return;
+      }
+
+      try {
         // Send message to content script
         await chrome.tabs.sendMessage(tab.id, { type: 'STOP_CAPTURE' });
-        
-        // Send message to background script
-        await chrome.runtime.sendMessage({ type: 'STOP_CAPTURE' });
-        
-        updateUI(false);
-        updateStatus('✅ Capture completed');
+      } catch (messageError) {
+        console.log('Content script may not be available:', messageError);
       }
+      
+      // Send message to background script
+      await chrome.runtime.sendMessage({ type: 'STOP_CAPTURE' });
+      
+      updateUI(false);
+      updateStatus('✅ Capture completed. Checking authentication status...');
+      
+      // Check authentication status
+      chrome.storage.local.get(['isAuthenticated'], (result) => {
+        if (result.isAuthenticated) {
+          updateStatus('✅ Capture completed. Uploading to your account...');
+          // TODO: Trigger authenticated upload flow
+        } else {
+          updateStatus('✅ Capture completed. Opening editor to review...');
+          // Redirect to editor page so user can review/annotate anonymously
+          chrome.tabs.create({ url: 'http://localhost:5173/editor' });
+        }
+      });
     } catch (error) {
       console.error('Error stopping capture:', error);
       updateStatus('❌ Error stopping capture');
@@ -64,9 +112,8 @@ document.addEventListener('DOMContentLoaded', () => {
   function handleViewDemos() {
     console.log('View demos clicked');
     
-    // TODO: Open webapp to view demos
-    // For now, just open the webapp URL
-    const webappUrl = 'http://localhost:5173'; // Development URL
+    // Open webapp to view demos
+    const webappUrl = 'http://localhost:5173/dashboard'; // Dashboard URL
     chrome.tabs.create({ url: webappUrl });
   }
 
@@ -84,6 +131,31 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function updateStatus(message: string) {
-    status.textContent = message;
+    if (status) {
+      status.textContent = message;
+    }
+  }
+
+  // Check current recording state and update UI accordingly
+  async function checkRecordingState() {
+    try {
+      const response = await chrome.runtime.sendMessage({ type: 'GET_RECORDING_STATE' });
+      if (response && response.success) {
+        const isRecording = response.isRecording;
+        const stepCount = response.stepCount || 0;
+        
+        updateUI(isRecording);
+        
+        if (isRecording) {
+          updateStatus(`🔴 Recording active - ${stepCount} steps captured`);
+        } else {
+          updateStatus('Ready to start recording');
+        }
+      }
+    } catch (error) {
+      console.log('Error checking recording state:', error);
+      updateUI(false);
+      updateStatus('Ready to start recording');
+    }
   }
 });
