@@ -3,6 +3,7 @@ import "@aws-amplify/ui-react/styles.css";
 import { SignedIn, SignedOut, RedirectToDashboard } from "@/lib/auth/AuthComponents";
 import { PasswordlessAuth } from "@/components/auth/PasswordlessAuth";
 import { useNavigate } from "react-router-dom";
+import { syncAnonymousDemo as runSyncAnonymousDemo } from "@/lib/services/syncAnonymousDemo";
 
 export default function SignUpPage() {
   const navigate = useNavigate();
@@ -17,8 +18,9 @@ export default function SignUpPage() {
     // Send message to Chrome Extension to check for pending anonymous session
     const checkForAnonymousSession = async () => {
       try {
+        const extId = (import.meta as any).env?.VITE_CHROME_EXTENSION_ID || (window as any)?.__EXT_ID__ || "";
         // Try to send message to extension
-        const response = await chrome.runtime.sendMessage(process.env.EXTENSION_ID || "", {
+        const response = await chrome.runtime.sendMessage(extId, {
           type: "GET_CAPTURE_SESSION",
         });
 
@@ -50,23 +52,7 @@ export default function SignUpPage() {
     console.log("Syncing anonymous demo data...");
 
     try {
-      // Request data from extension
-      const response = await chrome.runtime.sendMessage(process.env.EXTENSION_ID || "", {
-        type: "GET_CAPTURE_SESSION",
-      });
-
-      if (response?.success && response?.data) {
-        // Upload each screenshot blob to S3 and create demo records
-        for (const capture of response.data) {
-          // TODO: Implement S3 upload and API calls
-          console.log("Would upload capture to S3:", capture);
-        }
-
-        // Clear the extension's capture session after sync
-        await chrome.runtime.sendMessage(process.env.EXTENSION_ID || "", {
-          type: "CLEAR_CAPTURE_SESSION",
-        });
-      }
+      await runSyncAnonymousDemo();
     } catch (error) {
       console.error("Error syncing anonymous demo data:", error);
     }

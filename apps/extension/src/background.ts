@@ -451,6 +451,18 @@ chrome.runtime.onMessageExternal.addListener((message: any, sender, sendResponse
           });
         });
       return true; // Keep message channel open for async response
+    case "CLEAR_CAPTURE_SESSION":
+      // Allow the web app (authorized origin) to clear the stored captures
+      (async () => {
+        try {
+          await handleClearCaptureSession();
+          sendResponse({ success: true });
+        } catch (e) {
+          console.error("Error clearing capture session via external message:", e);
+          sendResponse({ success: false, error: "Failed to clear capture session" });
+        }
+      })();
+      return true; // async response
     default:
       console.log("Unknown external message type:", type);
       sendResponse({ success: false, error: "Unknown message type" });

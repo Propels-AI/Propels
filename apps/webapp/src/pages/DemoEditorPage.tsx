@@ -1,9 +1,18 @@
 import React, { useEffect, useState, useRef } from "react";
 import { Input } from "@/components/ui/input";
+import { syncAnonymousDemo, type EditedDraft } from "../lib/services/syncAnonymousDemo";
+import { useAuth } from "@/lib/providers/AuthProvider";
+import { useSearchParams } from "react-router-dom";
+import { listDemoItems } from "@/lib/api/demos";
+import { getUrl } from "aws-amplify/storage";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { PasswordlessAuth } from "@/components/auth/PasswordlessAuth";
 
 export function DemoEditorPage() {
-  // Simple auth check placeholder – replace with real auth when available
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const { user } = useAuth();
+  const isAuthenticated = !!user?.userId || !!user?.username;
+  const [searchParams] = useSearchParams();
+  const demoIdParam = searchParams.get("demoId") || undefined;
   const [loadingSteps, setLoadingSteps] = useState<boolean>(false);
   const [steps, setSteps] = useState<
     Array<{
@@ -20,6 +29,8 @@ export function DemoEditorPage() {
     }>
   >([]);
   const [selectedStepIndex, setSelectedStepIndex] = useState<number>(0);
+  const [authOpen, setAuthOpen] = useState(false);
+  const pendingDraftRef = useRef<EditedDraft | null>(null);
 
   const [isDrawing, setIsDrawing] = useState(false);
   const [startPos, setStartPos] = useState({ x: 0, y: 0 });
@@ -54,11 +65,57 @@ export function DemoEditorPage() {
   const currentHotspots: Hotspot[] = currentStepId ? (hotspotsByStep[currentStepId] ?? []) : [];
 
   useEffect(() => {
-    // Replace this with your real auth state source
-    const authed = localStorage.getItem("isAuthenticated") === "true";
-    setIsAuthenticated(authed);
+    console.log("[Editor] mounted", { demoIdParam, isAuthenticated });
+  }, [demoIdParam, isAuthenticated]);
 
-    // If not authenticated, attempt to load anonymous captures from extension
+  useEffect(() => {
+    // If a demoId is provided, load saved steps from backend
+    const loadFromBackend = async (demoId: string) => {
+      try {
+        setLoadingSteps(true);
+        console.log("[Editor] Loading demo from backend", { demoId });
+        const items = await listDemoItems(demoId);
+        console.log("[Editor] listDemoItems returned", { count: items?.length, items });
+        const stepItems = (items || []).filter((it: any) => String(it.itemSK || "").startsWith("STEP#"));
+        stepItems.sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0));
+        console.log("[Editor] stepItems", { count: stepItems.length, stepItems });
+        const urls: Array<{
+          id: string;
+          pageUrl: string;
+          screenshotUrl: string;
+        }> = [];
+        const hotspotsMap: Record<string, Hotspot[]> = {};
+        for (const si of stepItems) {
+          try {
+            const path: string | undefined = si.s3Key;
+            if (!path) continue;
+            const { url } = await getUrl({ path });
+            urls.push({
+              id: String(si.itemSK).slice("STEP#".length),
+              pageUrl: si.pageUrl || "",
+              screenshotUrl: url.toString(),
+            });
+            if (si.hotspots) {
+              try {
+                const parsed = typeof si.hotspots === "string" ? JSON.parse(si.hotspots) : si.hotspots;
+                if (Array.isArray(parsed)) hotspotsMap[String(si.itemSK).slice("STEP#".length)] = parsed as Hotspot[];
+              } catch (_e) {}
+            }
+          } catch (e) {
+            console.error("[Editor] Failed to resolve S3 URL", { itemSK: si?.itemSK, s3Key: si?.s3Key }, e);
+          }
+        }
+        setSteps(urls);
+        setHotspotsByStep(hotspotsMap);
+        setSelectedStepIndex(0);
+      } catch (e) {
+        console.error("[Editor] Failed to load demo from backend", e);
+      } finally {
+        setLoadingSteps(false);
+      }
+    };
+
+    // If not loading existing demo, and not authenticated, attempt to load anonymous captures from extension
     const loadFromExtension = async () => {
       try {
         setLoadingSteps(true);
@@ -187,7 +244,12 @@ export function DemoEditorPage() {
         setLoadingSteps(false);
       }
     };
-    loadFromExtension();
+
+    if (demoIdParam) {
+      loadFromBackend(demoIdParam);
+    } else {
+      loadFromExtension();
+    }
 
     // Cleanup created object URLs on unmount
     return () => {
@@ -195,7 +257,7 @@ export function DemoEditorPage() {
         steps.forEach((s) => URL.revokeObjectURL(s.screenshotUrl));
       } catch (_e) {}
     };
-  }, []);
+  }, [demoIdParam]);
 
   // Allow user to exit annotation mode with Escape
   useEffect(() => {
@@ -212,14 +274,35 @@ export function DemoEditorPage() {
   }, []);
 
   const handleSave = async () => {
+    // Build EditedDraft from current editor state
+    const draft: EditedDraft = {
+      draftId: (crypto as any).randomUUID ? (crypto as any).randomUUID() : `${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      name: undefined,
+      steps: steps.map((s, idx) => ({ id: s.id, pageUrl: s.pageUrl, order: idx })),
+      hotspotsByStep: hotspotsByStep,
+    };
+
     if (!isAuthenticated) {
-      // Show auth wall – redirect to sign-up
-      window.location.href = "/sign-up";
+      // Persist a small JSON draft locally and prompt for sign-up
+      try {
+        localStorage.setItem(`demoEditedDraft:${draft.draftId}`, JSON.stringify(draft));
+        localStorage.setItem("pendingDraftId", draft.draftId);
+      } catch (_) {}
+      pendingDraftRef.current = draft;
+      setAuthOpen(true);
       return;
     }
-    // TODO: Implement upload to backend (S3 + API). Placeholder for now.
-    console.log("Saving demo with", currentHotspots.length, "hotspots across", steps.length, "steps");
-    alert("Demo saved (placeholder)");
+
+    // Authenticated: run sync immediately using inline draft
+    try {
+      const { demoId, stepCount } = await syncAnonymousDemo({ inlineDraft: draft });
+      console.log("Saved demo", demoId, "with steps:", stepCount);
+      window.location.href = "/dashboard";
+    } catch (e) {
+      console.error("Failed to save demo:", e);
+      alert("Failed to save demo. Please try again.");
+    }
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -336,7 +419,10 @@ export function DemoEditorPage() {
   return (
     <div className="min-h-screen flex">
       <div className="flex-1 p-8">
-        <h1 className="text-2xl font-bold mb-4">Demo Editor</h1>
+        <h1 className="text-2xl font-bold mb-1">Demo Editor</h1>
+        <div className="mb-3 text-xs text-gray-600">
+          {demoIdParam ? `Viewing saved demo: ${demoIdParam}` : "Editing local captures"}
+        </div>
         <div className="mb-4 flex items-center gap-3">
           <button
             onClick={() => (previewMode ? exitPreview() : enterPreview())}
@@ -395,6 +481,8 @@ export function DemoEditorPage() {
               alt={`Step ${selectedStepIndex + 1}`}
               className="absolute inset-0 w-full h-full object-contain"
             />
+          ) : demoIdParam ? (
+            <span className="text-gray-500 text-sm">No steps found for this demo or unable to load images.</span>
           ) : (
             <span className="text-gray-500">No captures yet</span>
           )}
@@ -474,6 +562,27 @@ export function DemoEditorPage() {
           ))}
         </div>
       </div>
+      <Dialog open={authOpen} onOpenChange={setAuthOpen}>
+        <DialogContent showCloseButton={true} className="p-0">
+          <PasswordlessAuth
+            isInDialog
+            hasAnonymousSession
+            onAuthSuccess={async () => {
+              // After sign-in, sync using the stored draft
+              const draft = pendingDraftRef.current;
+              try {
+                const { demoId, stepCount } = await syncAnonymousDemo(draft ? { inlineDraft: draft } : undefined);
+                console.log("Saved demo", demoId, "with steps:", stepCount);
+                setAuthOpen(false);
+                window.location.href = "/dashboard";
+              } catch (e) {
+                console.error("Failed to save demo after auth:", e);
+                alert("Failed to save demo after sign-in. Please try again.");
+              }
+            }}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
