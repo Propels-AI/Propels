@@ -11,12 +11,75 @@ function getModels() {
   return models;
 }
 
+// Rename demo: update METADATA record's name and updatedAt
+export async function renameDemo(demoId: string, name: string): Promise<void> {
+  const models = getModels();
+  const now = new Date().toISOString();
+  const payload = {
+    demoId,
+    itemSK: "METADATA",
+    name,
+    updatedAt: now,
+  } as any;
+  console.log("[api/demos] renameDemo ->", payload);
+  const res = await models.Demo.update(payload);
+  console.log("[api/demos] renameDemo res", res);
+  if (!res?.data || (res as any)?.errors?.length) {
+    throw new Error(
+      `renameDemo failed: ${(res as any)?.errors?.map((e: any) => e?.message).join(", ") || "no data returned"}`
+    );
+  }
+}
+
+// Set status (publish/unpublish) on METADATA and bump statusUpdatedAt, updatedAt
+export async function setDemoStatus(demoId: string, status: "DRAFT" | "PUBLISHED"): Promise<void> {
+  const models = getModels();
+  const now = new Date().toISOString();
+  const payload = {
+    demoId,
+    itemSK: "METADATA",
+    status,
+    statusUpdatedAt: now,
+    updatedAt: now,
+  } as any;
+  console.log("[api/demos] setDemoStatus ->", payload);
+  const res = await models.Demo.update(payload);
+  console.log("[api/demos] setDemoStatus res", res);
+  if (!res?.data || (res as any)?.errors?.length) {
+    throw new Error(
+      `setDemoStatus failed: ${(res as any)?.errors?.map((e: any) => e?.message).join(", ") || "no data returned"}`
+    );
+  }
+}
+
+// Delete demo: delete all items with this demoId
+export async function deleteDemo(demoId: string): Promise<void> {
+  const models = getModels();
+  console.log("[api/demos] deleteDemo -> list items for", demoId);
+  const listRes = await models.Demo.list({ filter: { demoId: { eq: demoId } } });
+  const items: any[] = listRes?.data || [];
+  console.log("[api/demos] deleteDemo found", items.length, "items");
+  for (const it of items) {
+    try {
+      const delRes = await models.Demo.delete({ demoId: it.demoId, itemSK: it.itemSK });
+      console.log("[api/demos] deleted", { demoId: it.demoId, itemSK: it.itemSK, res: delRes });
+    } catch (e) {
+      console.error("[api/demos] delete item failed", { demoId: it.demoId, itemSK: it.itemSK }, e);
+      throw e;
+    }
+  }
+}
+
 export type Hotspot = {
   id: string;
-  x: number;
-  y: number;
+  // Absolute position (legacy). Optional to allow normalized-only hotspots in editor.
+  x?: number;
+  y?: number;
   width: number;
   height: number;
+  // Preferred normalized coordinates within the image (0..1)
+  xNorm?: number;
+  yNorm?: number;
   tooltip?: string;
 };
 

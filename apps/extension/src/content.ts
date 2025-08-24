@@ -33,6 +33,16 @@
     devicePixelRatio: number;
     xNorm: number;
     yNorm: number;
+    // Additional fields for robustness with editor sizing
+    // CSS pixel coordinates (same as clickX/clickY, duplicated for clarity)
+    clickXCss?: number;
+    clickYCss?: number;
+    // DPR-scaled pixel coordinates relative to the captured bitmap
+    clickXDpr?: number;
+    clickYDpr?: number;
+    // Explicitly carry the CSS-sized screenshot dimensions
+    screenshotCssWidth?: number;
+    screenshotCssHeight?: number;
   }
 
   let isCapturing = false;
@@ -150,6 +160,13 @@
         devicePixelRatio,
         xNorm,
         yNorm,
+        // Additional DPR-aware and explicit CSS-dimension data
+        clickXCss: clickX,
+        clickYCss: clickY,
+        clickXDpr: Math.round(clickX * devicePixelRatio),
+        clickYDpr: Math.round(clickY * devicePixelRatio),
+        screenshotCssWidth: viewportWidth,
+        screenshotCssHeight: viewportHeight,
       };
 
       // Send message to background script to capture screenshot

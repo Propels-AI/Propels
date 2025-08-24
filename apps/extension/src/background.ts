@@ -438,6 +438,19 @@ chrome.runtime.onMessageExternal.addListener((message: any, sender, sendResponse
                 xNorm: (c as any).xNorm,
                 // @ts-ignore
                 yNorm: (c as any).yNorm,
+                // New DPR-aware and CSS-dimension fields
+                // @ts-ignore
+                clickXCss: (c as any).clickXCss,
+                // @ts-ignore
+                clickYCss: (c as any).clickYCss,
+                // @ts-ignore
+                clickXDpr: (c as any).clickXDpr,
+                // @ts-ignore
+                clickYDpr: (c as any).clickYDpr,
+                // @ts-ignore
+                screenshotCssWidth: (c as any).screenshotCssWidth,
+                // @ts-ignore
+                screenshotCssHeight: (c as any).screenshotCssHeight,
               };
             })
           );
