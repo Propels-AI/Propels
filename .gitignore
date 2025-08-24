@@ -29,3 +29,8 @@ amplify_outputs*
 amplifyconfiguration*
 
 .env
+
+# Prompts
+instructions
+qwen.md
+claude.md

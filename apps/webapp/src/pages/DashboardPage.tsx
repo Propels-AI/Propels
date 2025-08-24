@@ -1,4 +1,3 @@
-import React from "react";
 import { ProtectPage } from "@/lib/auth/AuthComponents";
 import { useAuth } from "@/lib/providers/AuthProvider";
 import { useNavigate } from "react-router-dom";

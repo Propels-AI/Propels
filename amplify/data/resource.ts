@@ -13,6 +13,9 @@ const schema = a.schema({
       statusUpdatedAt: a.string().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
       s3Key: a.string().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
       hotspots: a.json().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
+      order: a.integer().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
+      pageUrl: a.string().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
+      thumbnailS3Key: a.string().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
     })
     .identifier(["demoId", "itemSK"])
     .secondaryIndexes((index) => [index("ownerId").sortKeys(["statusUpdatedAt"]).name("byOwnerStatus")])
