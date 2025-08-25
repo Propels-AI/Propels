@@ -96,14 +96,13 @@
       isCapturing = true;
       captureData = [];
       stepCount = 0;
+      // Add click listener to capture screenshots on user interactions
+      // Use capture phase to prevent duplicate events
+      document.addEventListener("click", handleClick, true);
     } else {
       console.log("📊 Already capturing, preserving step count:", stepCount);
       isCapturing = true;
     }
-
-    // Add click listener to capture screenshots on user interactions
-    // Use capture phase to prevent duplicate events
-    document.addEventListener("click", handleClick, true);
 
     // Visual indicator that capture is active
     showCaptureIndicator();
