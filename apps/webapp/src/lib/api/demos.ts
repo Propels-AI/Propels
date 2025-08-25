@@ -181,11 +181,14 @@ export async function listMyDemos(): Promise<
   try {
     const ownerId = await getOwnerId();
     console.debug("[api/demos] listMyDemos ownerId:", ownerId);
+    if (!ownerId) {
+      throw new Error("Not signed in. Please sign in to view your demos.");
+    }
     const models = getModels();
     const res = await models.Demo.list({
       filter: {
         itemSK: { eq: "METADATA" },
-        ...(ownerId ? { ownerId: { eq: ownerId } } : {}),
+        ownerId: { eq: ownerId },
       },
     });
     console.debug("[api/demos] listMyDemos res:", res);

@@ -6,6 +6,7 @@ import { DashboardPage } from "@/pages/DashboardPage";
 import DemoEditorPage from "@/pages/DemoEditorPage";
 import DemoPlayer from "@/pages/DemoPlayer";
 import { AuthProvider } from "@/lib/providers/AuthProvider";
+import { Toaster } from "sonner";
 
 const queryClient = new QueryClient();
 
@@ -23,6 +24,7 @@ function App() {
             <Route path="/" element={<SignInPage />} />
           </Routes>
         </Router>
+        <Toaster richColors position="top-right" />
       </QueryClientProvider>
     </AuthProvider>
   );

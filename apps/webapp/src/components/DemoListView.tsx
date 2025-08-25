@@ -2,11 +2,14 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { listMyDemos, renameDemo, deleteDemo, setDemoStatus } from "@/lib/api/demos";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
+import { useAuth } from "@/lib/providers/AuthProvider";
 
 export function DemoListView() {
   const navigate = useNavigate();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [nameDrafts, setNameDrafts] = useState<Record<string, string>>({});
+  const { user, isLoading: authLoading } = useAuth();
+  const isAuthenticated = !!user;
   const {
     data: demos,
     isLoading,
@@ -16,6 +19,7 @@ export function DemoListView() {
   } = useQuery({
     queryKey: ["demos"],
     queryFn: () => listMyDemos(),
+    enabled: isAuthenticated,
   });
 
   // Mutations
@@ -37,6 +41,30 @@ export function DemoListView() {
   if (isLoading) console.debug("[DemoListView] loading demos...");
   if (error) console.error("[DemoListView] error loading demos:", error);
   if (!isLoading && !error) console.debug("[DemoListView] demos loaded:", demos);
+
+  // Auth loading state
+  if (authLoading) {
+    return <div>Checking authentication…</div>;
+  }
+
+  // Unauthenticated state prompt
+  if (!isAuthenticated) {
+    return (
+      <div className="w-full">
+        <h2 className="text-xl font-semibold mb-4">Your Demos</h2>
+        <div className="text-sm text-gray-700 border rounded p-4 bg-white">
+          <div className="font-medium">Sign in to view your demos</div>
+          <div className="mt-1">You need to be signed in to fetch and manage your demos.</div>
+          <a
+            href="/sign-in"
+            className="mt-3 inline-flex items-center px-3 py-1.5 text-xs font-medium rounded bg-blue-600 text-white hover:bg-blue-700"
+          >
+            Go to Sign In
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return <div>Loading demos...</div>;

@@ -56,6 +56,9 @@ export async function syncAnonymousDemo(options?: {
   if (!response?.success || !Array.isArray(response.data)) throw new Error("Failed to retrieve capture session");
   const captures: Array<any> = response.data;
   console.log("[sync] Retrieved captures count:", captures.length);
+  if (captures.length === 0) {
+    throw new Error("No captures returned, aborting demo creation");
+  }
   const captureMap = new Map<string, any>();
   captures.forEach((c) => captureMap.set(String(c.id), c));
 

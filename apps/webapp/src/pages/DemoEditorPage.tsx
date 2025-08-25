@@ -7,6 +7,7 @@ import { listDemoItems, renameDemo, setDemoStatus as setDemoStatusApi, deleteDem
 import { getUrl } from "aws-amplify/storage";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { PasswordlessAuth } from "@/components/auth/PasswordlessAuth";
+import { toast } from "sonner";
 
 export function DemoEditorPage() {
   const { user } = useAuth();
@@ -649,7 +650,29 @@ export function DemoEditorPage() {
           ) : demoIdParam ? (
             <span className="text-gray-500 text-sm">No steps found for this demo or unable to load images.</span>
           ) : (
-            <span className="text-gray-500">No captures yet</span>
+            <div className="text-center text-gray-700 p-8">
+              <h3 className="text-lg font-semibold mb-2">No captures detected</h3>
+              <p className="text-sm text-gray-500 mb-4">
+                We couldn't find any captured steps from the extension. You can try recording again, or follow our guide
+                for troubleshooting.
+              </p>
+              <div className="flex items-center justify-center gap-3">
+                <a
+                  href="#"
+                  className="inline-flex items-center px-3 py-2 rounded border bg-white hover:bg-gray-50 text-sm"
+                >
+                  Have trouble recording? Read this guide
+                </a>
+                <a
+                  href="#"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center px-3 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white text-sm"
+                >
+                  Talk to our team
+                </a>
+              </div>
+            </div>
           )}
 
           {currentHotspots.map((hotspot) => {
@@ -719,7 +742,24 @@ export function DemoEditorPage() {
       <div className="w-80 bg-gray-100 p-4 border-l">
         <h2 className="text-xl font-semibold mb-4">Steps</h2>
         <div className="space-y-2">
-          {steps.length === 0 && !loadingSteps && <div className="text-xs text-gray-500">No steps found</div>}
+          {steps.length === 0 && !loadingSteps && (
+            <div className="text-xs text-gray-600">
+              No steps yet. Try recording again, or
+              <a href="#" className="text-blue-600 hover:underline mx-1">
+                read the guide
+              </a>
+              or
+              <a
+                href="https://cal.com/propels/demo-help"
+                target="_blank"
+                rel="noreferrer"
+                className="text-blue-600 hover:underline ml-1"
+              >
+                talk to our team
+              </a>
+              .
+            </div>
+          )}
           {steps.map((s, idx) => (
             <button
               key={s.id}
@@ -743,16 +783,20 @@ export function DemoEditorPage() {
             isInDialog
             hasAnonymousSession
             onAuthSuccess={async () => {
-              // After sign-in, sync using the stored draft
+              // Close dialog immediately and inform user while we save
               const draft = pendingDraftRef.current;
+              setAuthOpen(false);
+              const toastId = toast.loading("Saving your demo…");
               try {
                 const { demoId, stepCount } = await syncAnonymousDemo(draft ? { inlineDraft: draft } : undefined);
                 console.log("Saved demo", demoId, "with steps:", stepCount);
-                setAuthOpen(false);
+                toast.success("Demo saved", { description: `${stepCount} steps uploaded.` });
                 window.location.href = "/dashboard";
               } catch (e) {
                 console.error("Failed to save demo after auth:", e);
-                alert("Failed to save demo after sign-in. Please try again.");
+                toast.error("Failed to save demo", { description: "Please try again." });
+              } finally {
+                toast.dismiss(toastId);
               }
             }}
           />
