@@ -5,7 +5,15 @@ import { Input } from "@/components/ui/input";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { Label } from "@/components/ui/label";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { signIn, confirmSignIn, signUp, confirmSignUp, resendSignUpCode, getCurrentUser, signOut } from "aws-amplify/auth";
+import {
+  signIn,
+  confirmSignIn,
+  signUp,
+  confirmSignUp,
+  resendSignUpCode,
+  getCurrentUser,
+  signOut,
+} from "aws-amplify/auth";
 import { Mail, CheckCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -91,7 +99,6 @@ function PasswordlessAuthComponent({
           const same = String(currentUsername || "").toLowerCase() === email.trim().toLowerCase();
           if (same) {
             log("Already signed in with same user; completing auth without OTP");
-            toast.success("You're already signed in");
             onAuthSuccess?.();
             return;
           } else {
@@ -114,9 +121,6 @@ function PasswordlessAuthComponent({
       setIsSignUpFlow(false);
       setError(null);
       setMode("otpVerification");
-      toast.success("Check your email!", {
-        description: "We sent a sign-in code.",
-      });
     } catch (err) {
       const error = err as { name: string; message: string };
       logError("Email submit signIn failed", err);
@@ -134,7 +138,6 @@ function PasswordlessAuthComponent({
           });
           setIsSignUpFlow(false);
           setMode("otpVerification");
-          toast.success("Check your email!", { description: "We sent a sign-in code." });
           return;
         } catch (retryErr) {
           logError("Retry after signOut failed", retryErr);
@@ -158,9 +161,6 @@ function PasswordlessAuthComponent({
           setTempPassword(tp);
           setError(null);
           setMode("otpVerification");
-          toast.success("Check your email!", {
-            description: "We sent a confirmation code to create your account.",
-          });
         } catch (signUpErr) {
           const suErr = signUpErr as { name?: string; message?: string };
           logError("signUp failed after UserNotFoundException", signUpErr);
@@ -176,9 +176,6 @@ function PasswordlessAuthComponent({
               log("Retry signIn after UsernameExistsException succeeded; switching to otpVerification");
               setError(null);
               setMode("otpVerification");
-              toast.success("Check your email!", {
-                description: "We sent a sign-in code.",
-              });
               return;
             } catch (retryErr) {
               const r = retryErr as { message?: string };
@@ -195,9 +192,6 @@ function PasswordlessAuthComponent({
           await resendSignUpCode({ username: email.trim() });
           setIsSignUpFlow(true);
           setMode("otpVerification");
-          toast.success("Check your email!", {
-            description: "We sent a confirmation code to verify your account.",
-          });
         } catch (resendErr) {
           logError("Failed to resend confirmation code", resendErr);
           setError("Failed to send confirmation code. Please try again.");
@@ -217,9 +211,6 @@ function PasswordlessAuthComponent({
           setTempPassword(tp);
           log("signUp succeeded after NotAuthorizedException; isSignUpFlow set true; awaiting confirmation code");
           setMode("otpVerification");
-          toast.success("Check your email!", {
-            description: "We sent a confirmation code to create your account.",
-          });
         } catch (e2) {
           const e = e2 as { name?: string; message?: string };
           logError("signUp failed after NotAuthorizedException", e2);
@@ -227,9 +218,6 @@ function PasswordlessAuthComponent({
             log("User exists, checking if they need confirmation");
             setIsSignUpFlow(true);
             setMode("otpVerification");
-            toast.success("Check your email!", {
-              description: "We sent a confirmation code to verify your account.",
-            });
             return;
           }
           setError(e.message || "Failed to sign up. Please try again.");
@@ -251,7 +239,6 @@ function PasswordlessAuthComponent({
     e.preventDefault();
     if (!otpCode.trim() || otpCode.length !== 6) return;
     setIsLoading(true);
-    toast.message("Verifying code…");
     setError(null);
     log("OTP submit start", { codeLen: otpCode.length });
     try {
@@ -316,9 +303,6 @@ function PasswordlessAuthComponent({
           });
           setOtpCode("");
           setMode("otpVerification");
-          toast.message("Session refreshed", {
-            description: `We sent a new code to ${email}`,
-          });
           log("Session recovery succeeded; new OTP sent");
         } catch (recoverErr) {
           logError("Session recovery failed", recoverErr);
@@ -456,7 +440,6 @@ function PasswordlessAuthComponent({
                         if (isSignUpFlow) {
                           log("Resend: sign-up flow -> resendSignUpCode");
                           await resendSignUpCode({ username: email.trim() });
-                          toast.success("Confirmation code resent. Please check your email.");
                         } else {
                           log("Resend: existing user flow -> re-trigger custom challenge signIn");
                           await signIn({
@@ -466,7 +449,6 @@ function PasswordlessAuthComponent({
                               clientMetadata: { email: email.trim() },
                             },
                           });
-                          toast.success("Confirmation code resent. Please check your email.");
                         }
                         setOtpCode("");
                         setResendDisabled(true);
@@ -489,11 +471,7 @@ function PasswordlessAuthComponent({
 
             {error && <p className="text-sm text-red-600 dark:text-red-500 text-center">{error}</p>}
 
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={isLoading || otpCode.length !== 6}
-            >
+            <Button type="submit" className="w-full" disabled={isLoading || otpCode.length !== 6}>
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

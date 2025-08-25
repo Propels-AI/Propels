@@ -8,6 +8,7 @@ import { getUrl } from "aws-amplify/storage";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { PasswordlessAuth } from "@/components/auth/PasswordlessAuth";
 import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
 
 export function DemoEditorPage() {
   const { user } = useAuth();
@@ -38,6 +39,7 @@ export function DemoEditorPage() {
   const [savingTitle, setSavingTitle] = useState(false);
   const [togglingStatus, setTogglingStatus] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [savingDemo, setSavingDemo] = useState(false);
 
   const [isDrawing, setIsDrawing] = useState(false);
   const [startPos, setStartPos] = useState({ x: 0, y: 0 });
@@ -69,9 +71,10 @@ export function DemoEditorPage() {
     const y = (containerH - h) / 2;
     return { x, y, w, h };
   };
-  const [annotationMode, setAnnotationMode] = useState<boolean>(true);
-  const [previewMode, setPreviewMode] = useState<boolean>(false);
+  // Single source of truth: when true we're previewing, when false we're annotating
+  const [isPreviewing, setIsPreviewing] = useState<boolean>(false);
   const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
+  const [imageLoading, setImageLoading] = useState<boolean>(false);
   // Track container size so we re-render hotspots on resize
   const [, setContainerSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
 
@@ -89,11 +92,18 @@ export function DemoEditorPage() {
       setNaturalSize(null);
       return;
     }
+    // Reset before loading the new image so the spinner can show while fetching
+    setNaturalSize(null);
+    setImageLoading(true);
     const img = new Image();
     img.onload = () => {
       setNaturalSize({ w: img.naturalWidth, h: img.naturalHeight });
+      setImageLoading(false);
     };
-    img.onerror = () => setNaturalSize(null);
+    img.onerror = () => {
+      setNaturalSize(null);
+      setImageLoading(false);
+    };
     img.src = url;
   }, [steps, selectedStepIndex]);
 
@@ -311,14 +321,13 @@ export function DemoEditorPage() {
     };
   }, [selectedStepIndex, naturalSize]);
 
-  // Allow user to exit annotation mode with Escape
+  // Allow user to exit preview or editing tooltip with Escape
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setIsDrawing(false);
         setEditingTooltip(null);
-        setAnnotationMode(false);
-        setPreviewMode(false);
+        setIsPreviewing(false);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -342,25 +351,37 @@ export function DemoEditorPage() {
         localStorage.setItem("pendingDraftId", draft.draftId);
       } catch (_) {}
       pendingDraftRef.current = draft;
+      setSavingDemo(true);
       setAuthOpen(true);
       return;
     }
 
     // Authenticated: run sync immediately using inline draft
     try {
+      setSavingDemo(true);
       const { demoId, stepCount } = await syncAnonymousDemo({ inlineDraft: draft });
       console.log("Saved demo", demoId, "with steps:", stepCount);
-      window.location.href = "/dashboard";
+      // Stay on editor page and attach demoId as query param
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.set("demoId", demoId);
+        window.location.href = `${url.pathname}?${url.searchParams.toString()}`;
+      } catch {
+        // Fallback to simple pathname
+        window.location.href = `${window.location.pathname}?demoId=${demoId}`;
+      }
     } catch (e) {
       console.error("Failed to save demo:", e);
       alert("Failed to save demo. Please try again.");
+    } finally {
+      setSavingDemo(false);
     }
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!imageRef.current) return;
-    // Only draw when annotation mode is enabled and we're not editing a tooltip
-    if (previewMode || !annotationMode || editingTooltip) return;
+    // Only draw when not previewing and we're not editing a tooltip
+    if (isPreviewing || editingTooltip) return;
     if (!currentStepId) return;
     // Enforce max 1 tooltip per step
     if (currentHotspots.length >= 1) {
@@ -462,8 +483,7 @@ export function DemoEditorPage() {
   const annotatedIndices = steps.map((s, idx) => (hotspotsByStep[s.id]?.length ? idx : -1)).filter((v) => v >= 0);
 
   const enterPreview = () => {
-    setAnnotationMode(false);
-    setPreviewMode(true);
+    setIsPreviewing(true);
     // If current step isn't annotated, jump to first annotated
     if (currentStepId && !(hotspotsByStep[currentStepId]?.length > 0)) {
       if (annotatedIndices.length > 0) setSelectedStepIndex(annotatedIndices[0]);
@@ -471,7 +491,7 @@ export function DemoEditorPage() {
   };
 
   const exitPreview = () => {
-    setPreviewMode(false);
+    setIsPreviewing(false);
   };
 
   const gotoPrevAnnotated = () => {
@@ -518,7 +538,7 @@ export function DemoEditorPage() {
                       setSavingTitle(false);
                     }
                   }}
-                  disabled={savingTitle}
+                  disabled={savingTitle || savingDemo}
                   className={`text-sm py-1.5 px-2 rounded border ${savingTitle ? "opacity-60" : ""}`}
                 >
                   {savingTitle ? "Saving..." : "Save Title"}
@@ -547,7 +567,7 @@ export function DemoEditorPage() {
                       setTogglingStatus(false);
                     }
                   }}
-                  disabled={togglingStatus}
+                  disabled={togglingStatus || savingDemo}
                   className={`text-sm py-1.5 px-2 rounded border bg-white hover:bg-gray-50 ${
                     togglingStatus ? "opacity-60" : ""
                   }`}
@@ -570,7 +590,7 @@ export function DemoEditorPage() {
                       setDeleting(false);
                     }
                   }}
-                  disabled={deleting}
+                  disabled={deleting || savingDemo}
                   className={`text-sm py-1.5 px-2 rounded border bg-red-600 text-white hover:bg-red-700 ${
                     deleting ? "opacity-70" : ""
                   }`}
@@ -581,25 +601,22 @@ export function DemoEditorPage() {
             </>
           )}
           <button
-            onClick={() => (previewMode ? exitPreview() : enterPreview())}
+            onClick={() => (isPreviewing ? exitPreview() : enterPreview())}
             className={`text-sm py-2 px-3 rounded border ${
-              previewMode ? "bg-green-100 border-green-400" : "bg-white border-gray-300"
+              isPreviewing ? "bg-green-100 border-green-400" : "bg-white border-gray-300"
             }`}
             title="Toggle preview mode"
           >
-            {previewMode ? "Preview: On (Esc to stop)" : "Preview: Off"}
+            {isPreviewing ? "Preview: On (Esc to stop)" : "Preview: Off"}
           </button>
           <button
-            onClick={() => setAnnotationMode((v) => !v)}
-            className={`text-sm py-2 px-3 rounded border ${
-              annotationMode ? "bg-amber-100 border-amber-400" : "bg-white border-gray-300"
+            onClick={handleSave}
+            disabled={savingDemo}
+            className={`text-sm py-2 px-3 rounded ${
+              savingDemo ? "bg-blue-400 cursor-not-allowed text-white" : "bg-blue-600 hover:bg-blue-700 text-white"
             }`}
-            title="Toggle annotation mode"
           >
-            {annotationMode ? "Annotate: On (Esc to stop)" : "Annotate: Off"}
-          </button>
-          <button onClick={handleSave} className="bg-blue-600 hover:bg-blue-700 text-white text-sm py-2 px-3 rounded">
-            Save
+            {savingDemo ? "Saving..." : "Save"}
           </button>
           {!isAuthenticated && (
             <span className="text-xs text-gray-500">You can freely edit. Saving requires sign in.</span>
@@ -608,7 +625,7 @@ export function DemoEditorPage() {
           {!loadingSteps && steps.length > 0 && (
             <span className="text-xs text-gray-600">Loaded {steps.length} captured steps</span>
           )}
-          {previewMode && (
+          {isPreviewing && (
             <div className="flex items-center gap-2 ml-auto">
               <button onClick={gotoPrevAnnotated} className="text-sm py-1 px-2 rounded border bg-white border-gray-300">
                 Prev
@@ -626,7 +643,7 @@ export function DemoEditorPage() {
         </div>
         <div
           ref={imageRef}
-          className="bg-gray-200 border rounded-xl w-full flex items-center justify-center relative overflow-hidden"
+          className="bg-gray-200 border rounded-xl w-full min-h-[320px] flex items-center justify-center relative overflow-hidden"
           style={
             naturalSize
               ? {
@@ -641,15 +658,28 @@ export function DemoEditorPage() {
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
         >
+          {/* Loading spinner while steps/images/tooltips prepare */}
+          {(loadingSteps || imageLoading || (steps.length > 0 && !naturalSize)) && (
+            <div className="absolute inset-0 flex items-center justify-center bg-white/80 z-20 pointer-events-none">
+              <div className="flex items-center gap-2 text-gray-700">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span className="text-sm">Loading…</span>
+              </div>
+            </div>
+          )}
           {steps.length > 0 ? (
             <img
               src={steps[selectedStepIndex]?.screenshotUrl}
               alt={`Step ${selectedStepIndex + 1}`}
-              className="absolute inset-0 w-full h-full object-contain"
+              onLoad={() => setImageLoading(false)}
+              onError={() => setImageLoading(false)}
+              className={`absolute inset-0 w-full h-full object-contain ${
+                loadingSteps || imageLoading || (steps.length > 0 && !naturalSize) ? "opacity-50" : "opacity-100"
+              }`}
             />
-          ) : demoIdParam ? (
+          ) : demoIdParam && !loadingSteps ? (
             <span className="text-gray-500 text-sm">No steps found for this demo or unable to load images.</span>
-          ) : (
+          ) : !loadingSteps ? (
             <div className="text-center text-gray-700 p-8">
               <h3 className="text-lg font-semibold mb-2">No captures detected</h3>
               <p className="text-sm text-gray-500 mb-4">
@@ -673,7 +703,7 @@ export function DemoEditorPage() {
                 </a>
               </div>
             </div>
-          )}
+          ) : null}
 
           {currentHotspots.map((hotspot) => {
             // Compute dot position. Prefer normalized coords relative to current image render rect.
@@ -777,7 +807,16 @@ export function DemoEditorPage() {
           ))}
         </div>
       </div>
-      <Dialog open={authOpen} onOpenChange={setAuthOpen}>
+      <Dialog
+        open={authOpen}
+        onOpenChange={(open) => {
+          setAuthOpen(open);
+          // If the user closes the auth dialog without authenticating, stop the saving state
+          if (!open && !isAuthenticated) {
+            setSavingDemo(false);
+          }
+        }}
+      >
         <DialogContent showCloseButton={true} className="p-0">
           <PasswordlessAuth
             isInDialog
@@ -786,17 +825,26 @@ export function DemoEditorPage() {
               // Close dialog immediately and inform user while we save
               const draft = pendingDraftRef.current;
               setAuthOpen(false);
+              setSavingDemo(true);
               const toastId = toast.loading("Saving your demo…");
               try {
                 const { demoId, stepCount } = await syncAnonymousDemo(draft ? { inlineDraft: draft } : undefined);
                 console.log("Saved demo", demoId, "with steps:", stepCount);
                 toast.success("Demo saved", { description: `${stepCount} steps uploaded.` });
-                window.location.href = "/dashboard";
+                // Stay on editor page and attach demoId as query param
+                try {
+                  const url = new URL(window.location.href);
+                  url.searchParams.set("demoId", demoId);
+                  window.location.href = `${url.pathname}?${url.searchParams.toString()}`;
+                } catch {
+                  window.location.href = `${window.location.pathname}?demoId=${demoId}`;
+                }
               } catch (e) {
                 console.error("Failed to save demo after auth:", e);
                 toast.error("Failed to save demo", { description: "Please try again." });
               } finally {
                 toast.dismiss(toastId);
+                setSavingDemo(false);
               }
             }}
           />
