@@ -408,21 +408,25 @@ export async function getOwnerId(): Promise<string | undefined> {
   }
 }
 
-export async function listMyDemos(): Promise<
-  Array<{ id: string; name?: string; status?: string; createdAt?: string; updatedAt?: string }>
-> {
+export async function listMyDemos(
+  status?: "DRAFT" | "PUBLISHED"
+): Promise<Array<{ id: string; name?: string; status?: string; createdAt?: string; updatedAt?: string }>> {
   try {
     const ownerId = await getOwnerId();
-    console.debug("[api/demos] listMyDemos ownerId:", ownerId);
+    console.debug("[api/demos] listMyDemos ownerId:", ownerId, "status:", status ?? "(any)");
     if (!ownerId) {
       throw new Error("Not signed in. Please sign in to view your demos.");
     }
     const models = getModels();
+    const filter: any = {
+      itemSK: { eq: "METADATA" },
+      ownerId: { eq: ownerId },
+    };
+    if (status) {
+      filter.status = { eq: status };
+    }
     const res = await models.Demo.list({
-      filter: {
-        itemSK: { eq: "METADATA" },
-        ownerId: { eq: ownerId },
-      },
+      filter,
     });
     console.debug("[api/demos] listMyDemos res:", res);
     const items = res?.data ?? [];

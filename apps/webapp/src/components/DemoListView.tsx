@@ -4,7 +4,8 @@ import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useAuth } from "@/lib/providers/AuthProvider";
 
-export function DemoListView() {
+export function DemoListView(props: { statusFilter?: "ALL" | "DRAFT" | "PUBLISHED" } = {}) {
+  const { statusFilter = "ALL" } = props;
   const navigate = useNavigate();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [nameDrafts, setNameDrafts] = useState<Record<string, string>>({});
@@ -17,8 +18,8 @@ export function DemoListView() {
     refetch,
     status,
   } = useQuery({
-    queryKey: ["demos", user?.userId],
-    queryFn: () => listMyDemos(),
+    queryKey: ["demos", user?.userId, statusFilter],
+    queryFn: () => listMyDemos(statusFilter === "ALL" ? undefined : statusFilter),
     enabled: isAuthenticated,
   });
 
