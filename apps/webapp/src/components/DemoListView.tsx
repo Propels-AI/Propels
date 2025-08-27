@@ -123,9 +123,7 @@ export function DemoListView() {
                         className="border rounded px-2 py-1 text-sm"
                         value={nameDrafts[demo.id] ?? demo.name ?? ""}
                         onClick={(e) => e.stopPropagation()}
-                        onChange={(e) =>
-                          setNameDrafts((prev) => ({ ...prev, [demo.id]: e.target.value }))
-                        }
+                        onChange={(e) => setNameDrafts((prev) => ({ ...prev, [demo.id]: e.target.value }))}
                       />
                       <button
                         className="text-xs px-2 py-1 border rounded bg-white hover:bg-gray-50"
@@ -167,9 +165,7 @@ export function DemoListView() {
                 <div className="flex items-center gap-2">
                   <span
                     className={`px-2 py-1 rounded text-xs font-medium ${
-                      demo.status === "PUBLISHED"
-                        ? "bg-green-100 text-green-800"
-                        : "bg-yellow-100 text-yellow-800"
+                      demo.status === "PUBLISHED" ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
                     }`}
                   >
                     {demo.status || "DRAFT"}

@@ -8,10 +8,179 @@ function getModels() {
   if (!models) {
     throw new Error("Amplify Data models unavailable after generateClient(). Check Amplify.configure outputs.data");
   }
+
   return models;
 }
 
-// Rename demo: update METADATA record's name and updatedAt
+function getPublicModels() {
+  console.debug("[api/demos] creating PUBLIC data client via generateClient({ authMode: 'apiKey' })...");
+  const client = generateClient({ authMode: "apiKey" as any });
+  const models: any = (client as any).models;
+  if (!models) {
+    throw new Error(
+      "Amplify Data models unavailable after generateClient() for public. Check Amplify.configure outputs.data"
+    );
+  }
+  return models;
+}
+
+export async function createPublicDemoMetadata(params: {
+  demoId: string;
+  ownerId?: string;
+  name?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}): Promise<void> {
+  const models = getModels();
+  if (!models.PublicDemo) {
+    throw new Error(
+      "PublicDemo model is not available. Did you run 'amplify push' and regenerate amplify_outputs.json?"
+    );
+  }
+  let ownerId = params.ownerId;
+  if (!ownerId) {
+    try {
+      const u = await getCurrentUser();
+      ownerId = (u as any)?.username || (u as any)?.userId;
+    } catch {}
+  }
+  const payload: any = {
+    demoId: params.demoId,
+    itemSK: "METADATA",
+    ownerId,
+    name: params.name,
+    createdAt: params.createdAt ?? new Date().toISOString(),
+    updatedAt: params.updatedAt ?? new Date().toISOString(),
+  };
+  Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
+  const res = await models.PublicDemo.create(payload);
+  if (!res?.data || (res as any)?.errors?.length) {
+    throw new Error(
+      `createPublicDemoMetadata failed: ${(res as any)?.errors?.map((e: any) => e?.message).join(", ") || "no data returned"}`
+    );
+  }
+}
+
+export async function createPublicDemoStep(params: {
+  demoId: string;
+  stepId: string;
+  s3Key?: string;
+  order?: number;
+  pageUrl?: string;
+  thumbnailS3Key?: string;
+  hotspots?: any;
+  ownerId?: string;
+}): Promise<void> {
+  const models = getModels();
+  if (!models.PublicDemo) {
+    throw new Error(
+      "PublicDemo model is not available. Did you run 'amplify push' and regenerate amplify_outputs.json?"
+    );
+  }
+  let ownerId = params.ownerId;
+  if (!ownerId) {
+    try {
+      const u = await getCurrentUser();
+      ownerId = (u as any)?.username || (u as any)?.userId;
+    } catch {}
+  }
+  const payload: Record<string, any> = {
+    demoId: params.demoId,
+    itemSK: `STEP#${params.stepId}`,
+    ownerId,
+    s3Key: params.s3Key,
+    order: params.order,
+    pageUrl: params.pageUrl,
+    thumbnailS3Key: params.thumbnailS3Key,
+  };
+  if (params.hotspots !== undefined) {
+    try {
+      payload.hotspots = typeof params.hotspots === "string" ? params.hotspots : JSON.stringify(params.hotspots);
+    } catch (e) {
+      console.warn("[api/demos] Failed to stringify public hotspots; omitting", e);
+    }
+  }
+  Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
+  const res = await models.PublicDemo.create(payload);
+  if (!res?.data || (res as any)?.errors?.length) {
+    throw new Error(
+      `createPublicDemoStep failed: ${(res as any)?.errors?.map((e: any) => e?.message).join(", ") || "no data returned"}`
+    );
+  }
+}
+
+export async function listPublicDemoItems(demoId: string) {
+  const models = getPublicModels();
+  if (!models.PublicDemo) {
+    throw new Error("PublicDemo model is not available. Backend schema not deployed or outputs not updated.");
+  }
+  const res = await models.PublicDemo.list({ filter: { demoId: { eq: demoId } } });
+  const items = res?.data ?? [];
+  for (const it of items) {
+    if (typeof (it as any).hotspots === "string") {
+      try {
+        (it as any).hotspots = JSON.parse((it as any).hotspots);
+      } catch {}
+    }
+  }
+  return items;
+}
+
+export async function deletePublicDemoItems(demoId: string) {
+  const models = getModels();
+  if (!models.PublicDemo) {
+    throw new Error("PublicDemo model is not available. Backend schema not deployed or outputs not updated.");
+  }
+  const listRes = await models.PublicDemo.list({ filter: { demoId: { eq: demoId } } });
+  const items: any[] = listRes?.data || [];
+  for (const it of items) {
+    await models.PublicDemo.delete({ demoId: it.demoId, itemSK: it.itemSK });
+  }
+}
+
+export async function mirrorDemoToPublic(demoId: string): Promise<void> {
+  console.log("[api/demos] mirrorDemoToPublic START", { demoId });
+  const now = new Date().toISOString();
+  const items = await listDemoItems(demoId);
+  if (!Array.isArray(items) || items.length === 0) {
+    console.warn("[api/demos] mirrorDemoToPublic: no private items found");
+    return;
+  }
+  const meta = items.find((it: any) => it.itemSK === "METADATA");
+  if (meta) {
+    await createPublicDemoMetadata({
+      demoId,
+      name: meta.name,
+      createdAt: meta.createdAt,
+      updatedAt: now,
+    });
+  } else {
+    console.warn("[api/demos] mirrorDemoToPublic: METADATA missing");
+  }
+  const steps = items.filter((it: any) => typeof it.itemSK === "string" && it.itemSK.startsWith("STEP#"));
+  console.log("[api/demos] mirrorDemoToPublic: steps=", steps.length);
+  for (const step of steps) {
+    let hotspots: any = undefined;
+    if (typeof step.hotspots === "string") {
+      try {
+        hotspots = JSON.parse(step.hotspots);
+      } catch {}
+    } else if (step.hotspots) {
+      hotspots = step.hotspots;
+    }
+    await createPublicDemoStep({
+      demoId,
+      stepId: step.itemSK.substring("STEP#".length),
+      s3Key: step.s3Key,
+      order: step.order,
+      pageUrl: step.pageUrl,
+      thumbnailS3Key: step.thumbnailS3Key,
+      hotspots,
+    });
+  }
+  console.log("[api/demos] mirrorDemoToPublic DONE");
+}
+
 export async function renameDemo(demoId: string, name: string): Promise<void> {
   const models = getModels();
   const now = new Date().toISOString();
@@ -31,7 +200,6 @@ export async function renameDemo(demoId: string, name: string): Promise<void> {
   }
 }
 
-// Set status (publish/unpublish) on METADATA and bump statusUpdatedAt, updatedAt
 export async function setDemoStatus(demoId: string, status: "DRAFT" | "PUBLISHED"): Promise<void> {
   const models = getModels();
   const now = new Date().toISOString();
@@ -50,9 +218,51 @@ export async function setDemoStatus(demoId: string, status: "DRAFT" | "PUBLISHED
       `setDemoStatus failed: ${(res as any)?.errors?.map((e: any) => e?.message).join(", ") || "no data returned"}`
     );
   }
+
+  try {
+    if (status === "PUBLISHED") {
+      const items = await listDemoItems(demoId);
+      if (!Array.isArray(items)) return;
+      const metadata = items.find((it: any) => it.itemSK === "METADATA");
+      if (metadata) {
+        await createPublicDemoMetadata({
+          demoId,
+          name: metadata.name,
+          createdAt: metadata.createdAt,
+          updatedAt: now,
+        });
+      }
+      const steps = items.filter((it: any) => typeof it.itemSK === "string" && it.itemSK.startsWith("STEP#"));
+      console.log("[api/demos] setDemoStatus: steps to mirror:", steps.length);
+      for (const step of steps) {
+        let hotspots: any = undefined;
+        if (typeof step.hotspots === "string") {
+          try {
+            hotspots = JSON.parse(step.hotspots);
+          } catch {}
+        } else if (step.hotspots) {
+          hotspots = step.hotspots;
+        }
+        await createPublicDemoStep({
+          demoId,
+          stepId: step.itemSK.substring("STEP#".length),
+          s3Key: step.s3Key,
+          order: step.order,
+          pageUrl: step.pageUrl,
+          thumbnailS3Key: step.thumbnailS3Key,
+          hotspots,
+        });
+      }
+      console.log("[api/demos] setDemoStatus: client mirror complete");
+    } else if (status === "DRAFT") {
+      console.log("[api/demos] setDemoStatus: removing from PublicDemo (unpublish)...");
+      await deletePublicDemoItems(demoId);
+    }
+  } catch (mirrorErr) {
+    console.error("[api/demos] setDemoStatus mirror error:", mirrorErr);
+  }
 }
 
-// Delete demo: delete all items with this demoId
 export async function deleteDemo(demoId: string): Promise<void> {
   const models = getModels();
   console.log("[api/demos] deleteDemo -> list items for", demoId);
@@ -72,12 +282,10 @@ export async function deleteDemo(demoId: string): Promise<void> {
 
 export type Hotspot = {
   id: string;
-  // Absolute position (legacy). Optional to allow normalized-only hotspots in editor.
   x?: number;
   y?: number;
   width: number;
   height: number;
-  // Preferred normalized coordinates within the image (0..1)
   xNorm?: number;
   yNorm?: number;
   tooltip?: string;
@@ -122,7 +330,6 @@ export async function createDemoStep(params: {
 }): Promise<void> {
   const { demoId, stepId, s3Key, hotspots, order, pageUrl, thumbnailS3Key, ownerId } = params;
   const models = getModels();
-  // AWSJSON often expects a JSON string. Also, strip undefined fields.
   const payload: Record<string, any> = {
     demoId,
     itemSK: `STEP#${stepId}`,
@@ -139,7 +346,6 @@ export async function createDemoStep(params: {
       console.warn("[api/demos] Failed to stringify hotspots; omitting", e);
     }
   }
-  // Remove keys with undefined to avoid invalid variable errors
   Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
 
   const res = await models.Demo.create(payload);
@@ -147,6 +353,33 @@ export async function createDemoStep(params: {
   if (!res?.data || (res as any)?.errors?.length) {
     throw new Error(
       `createDemoStep failed for ${stepId}: ${(res as any)?.errors?.map((e: any) => e?.message).join(", ") || "no data returned"}`
+    );
+  }
+}
+
+export async function updateDemoStepHotspots(params: {
+  demoId: string;
+  stepId: string;
+  hotspots?: Hotspot[];
+}): Promise<void> {
+  const { demoId, stepId, hotspots } = params;
+  const models = getModels();
+  const payload: Record<string, any> = {
+    demoId,
+    itemSK: `STEP#${stepId}`,
+  };
+  if (Array.isArray(hotspots)) {
+    try {
+      payload.hotspots = JSON.stringify(hotspots);
+    } catch (e) {
+      console.warn("[api/demos] Failed to stringify hotspots for update; omitting", e);
+    }
+  }
+  const res = await models.Demo.update(payload);
+  console.log("[api/demos] updateDemoStepHotspots result", { stepId, res });
+  if (!res?.data || (res as any)?.errors?.length) {
+    throw new Error(
+      `updateDemoStepHotspots failed for ${stepId}: ${(res as any)?.errors?.map((e: any) => e?.message).join(", ") || "no data returned"}`
     );
   }
 }

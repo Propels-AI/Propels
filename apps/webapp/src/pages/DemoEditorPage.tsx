@@ -3,7 +3,14 @@ import { Input } from "@/components/ui/input";
 import { syncAnonymousDemo, type EditedDraft } from "../lib/services/syncAnonymousDemo";
 import { useAuth } from "@/lib/providers/AuthProvider";
 import { useSearchParams } from "react-router-dom";
-import { listDemoItems, renameDemo, setDemoStatus as setDemoStatusApi, deleteDemo } from "@/lib/api/demos";
+import {
+  listDemoItems,
+  renameDemo,
+  setDemoStatus as setDemoStatusApi,
+  deleteDemo,
+  updateDemoStepHotspots,
+  mirrorDemoToPublic,
+} from "@/lib/api/demos";
 import { getUrl } from "aws-amplify/storage";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { PasswordlessAuth } from "@/components/auth/PasswordlessAuth";
@@ -21,7 +28,6 @@ export function DemoEditorPage() {
       id: string;
       pageUrl: string;
       screenshotUrl: string;
-      // coordinate metadata for pre-placement (normalized preferred)
       xNorm?: number;
       yNorm?: number;
       clickX?: number;
@@ -45,12 +51,10 @@ export function DemoEditorPage() {
   const [startPos, setStartPos] = useState({ x: 0, y: 0 });
   type Hotspot = {
     id: string;
-    // Absolute pixel coords kept for backward-compat; prefer normalized below
     x?: number;
     y?: number;
     width: number;
     height: number;
-    // Preferred: normalized position within the image (0..1), independent of container size
     xNorm?: number;
     yNorm?: number;
     tooltip?: string;
@@ -59,7 +63,6 @@ export function DemoEditorPage() {
   const [editingTooltip, setEditingTooltip] = useState<string | null>(null);
   const [tooltipText, setTooltipText] = useState("");
   const imageRef = useRef<HTMLDivElement>(null);
-  // Helper: compute rendered image rect within container for object-contain
   const computeRenderRect = (containerW: number, containerH: number, naturalW: number, naturalH: number) => {
     if (naturalW <= 0 || naturalH <= 0 || containerW <= 0 || containerH <= 0) {
       return { x: 0, y: 0, w: containerW, h: containerH };
@@ -71,11 +74,9 @@ export function DemoEditorPage() {
     const y = (containerH - h) / 2;
     return { x, y, w, h };
   };
-  // Single source of truth: when true we're previewing, when false we're annotating
   const [isPreviewing, setIsPreviewing] = useState<boolean>(false);
   const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
   const [imageLoading, setImageLoading] = useState<boolean>(false);
-  // Track container size so we re-render hotspots on resize
   const [, setContainerSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
 
   const currentStepId = steps[selectedStepIndex]?.id;
@@ -85,14 +86,12 @@ export function DemoEditorPage() {
     console.log("[Editor] mounted", { demoIdParam, isAuthenticated });
   }, [demoIdParam, isAuthenticated]);
 
-  // Load natural dimensions of the current screenshot so the container can match it
   useEffect(() => {
     const url = steps[selectedStepIndex]?.screenshotUrl;
     if (!url) {
       setNaturalSize(null);
       return;
     }
-    // Reset before loading the new image so the spinner can show while fetching
     setNaturalSize(null);
     setImageLoading(true);
     const img = new Image();
@@ -108,14 +107,12 @@ export function DemoEditorPage() {
   }, [steps, selectedStepIndex]);
 
   useEffect(() => {
-    // If a demoId is provided, load saved steps from backend
     const loadFromBackend = async (demoId: string) => {
       try {
         setLoadingSteps(true);
         console.log("[Editor] Loading demo from backend", { demoId });
         const items = await listDemoItems(demoId);
         console.log("[Editor] listDemoItems returned", { count: items?.length, items });
-        // Extract metadata
         const meta = (items || []).find((it: any) => String(it.itemSK) === "METADATA");
         if (meta) {
           setDemoName(meta.name || "");
@@ -132,13 +129,38 @@ export function DemoEditorPage() {
         const hotspotsMap: Record<string, Hotspot[]> = {};
         for (const si of stepItems) {
           try {
-            const path: string | undefined = si.s3Key;
-            if (!path) continue;
-            const { url } = await getUrl({ path });
+            const raw: string | undefined = si.s3Key;
+            if (!raw) continue;
+            const isUrl = /^(https?:)?\/\//i.test(raw);
+            let screenshotUrl: string | undefined;
+            if (isUrl) {
+              screenshotUrl = raw;
+            } else {
+              const s = String(raw);
+              let access: "guest" | "protected" | "private" = "guest";
+              let keyForStorage = s;
+              if (s.startsWith("public/")) {
+                access = "guest";
+                keyForStorage = s.replace(/^public\//, "");
+              } else if (s.startsWith("protected/")) {
+                access = "protected";
+                keyForStorage = s.replace(/^protected\/[^/]+\//, "");
+              } else if (s.startsWith("private/")) {
+                access = "private";
+                keyForStorage = s.replace(/^private\/[^/]+\//, "");
+              }
+              try {
+                const { url } = await getUrl({ key: keyForStorage, options: { accessLevel: access as any } } as any);
+                screenshotUrl = url.toString();
+              } catch (err) {
+                console.warn("[Editor] Storage.getUrl failed", { raw, keyForStorage, access }, err);
+              }
+            }
+            if (!screenshotUrl) continue;
             urls.push({
               id: String(si.itemSK).slice("STEP#".length),
               pageUrl: si.pageUrl || "",
-              screenshotUrl: url.toString(),
+              screenshotUrl,
             });
             if (si.hotspots) {
               try {
@@ -160,7 +182,6 @@ export function DemoEditorPage() {
       }
     };
 
-    // If not loading existing demo, and not authenticated, attempt to load anonymous captures from extension
     const loadFromExtension = async () => {
       try {
         setLoadingSteps(true);
@@ -171,7 +192,6 @@ export function DemoEditorPage() {
           });
           console.log("[Editor] GET_CAPTURE_SESSION response:", response);
           if (response?.success && Array.isArray(response.data)) {
-            // Sort by stepOrder then timestamp for stable order
             const sorted = [...response.data].sort((a: any, b: any) => {
               const so = (a.stepOrder ?? 0) - (b.stepOrder ?? 0);
               return so !== 0 ? so : (a.timestamp ?? 0) - (b.timestamp ?? 0);
@@ -190,7 +210,6 @@ export function DemoEditorPage() {
             }> = [];
             for (const d of sorted) {
               try {
-                // Prefer data URL from extension serialization; fallback to Blob
                 let url = d.screenshotDataUrl as string | undefined;
                 if (!url && d.screenshotBlob) {
                   const blob: Blob = d.screenshotBlob as Blob;
@@ -208,19 +227,14 @@ export function DemoEditorPage() {
                   viewportWidth: (d as any).viewportWidth,
                   viewportHeight: (d as any).viewportHeight,
                 });
-              } catch (_e) {
-                // Skip any entries that fail to convert
-              }
+              } catch (_e) {}
             }
             setSteps(urls);
             setSelectedStepIndex(0);
-
-            // Pre-place a default hotspot for each step at captured coordinates
-            // Store normalized coordinates so they render correctly at any size
             (async () => {
               try {
-                const DEFAULT_W = 12; // tiny dot width
-                const DEFAULT_H = 12; // tiny dot height
+                const DEFAULT_W = 12;
+                const DEFAULT_H = 12;
 
                 const initial: Record<string, Hotspot[]> = {};
 
@@ -230,7 +244,6 @@ export function DemoEditorPage() {
                       new Promise<void>((resolve) => {
                         const img = new Image();
                         img.onload = () => {
-                          // Determine normalized coords
                           let xNorm: number | undefined = typeof s.xNorm === "number" ? s.xNorm : undefined;
                           let yNorm: number | undefined = typeof s.yNorm === "number" ? s.yNorm : undefined;
                           if (
@@ -288,7 +301,6 @@ export function DemoEditorPage() {
       loadFromExtension();
     }
 
-    // Cleanup created object URLs on unmount
     return () => {
       try {
         steps.forEach((s) => URL.revokeObjectURL(s.screenshotUrl));
@@ -296,7 +308,6 @@ export function DemoEditorPage() {
     };
   }, [demoIdParam]);
 
-  // Recompute container metrics on element or window resize to keep tooltip positions in sync
   useEffect(() => {
     const el = imageRef.current;
     if (!el) return;
@@ -309,9 +320,7 @@ export function DemoEditorPage() {
     try {
       ro = new ResizeObserver(() => measure());
       ro.observe(el);
-    } catch {
-      // ResizeObserver might be unavailable in some environments
-    }
+    } catch {}
     window.addEventListener("resize", measure);
     return () => {
       window.removeEventListener("resize", measure);
@@ -321,7 +330,6 @@ export function DemoEditorPage() {
     };
   }, [selectedStepIndex, naturalSize]);
 
-  // Allow user to exit preview or editing tooltip with Escape
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -335,7 +343,6 @@ export function DemoEditorPage() {
   }, []);
 
   const handleSave = async () => {
-    // Build EditedDraft from current editor state
     const draft: EditedDraft = {
       draftId: (crypto as any).randomUUID ? (crypto as any).randomUUID() : `${Date.now()}`,
       createdAt: new Date().toISOString(),
@@ -345,7 +352,6 @@ export function DemoEditorPage() {
     };
 
     if (!isAuthenticated) {
-      // Persist a small JSON draft locally and prompt for sign-up
       try {
         localStorage.setItem(`demoEditedDraft:${draft.draftId}`, JSON.stringify(draft));
         localStorage.setItem("pendingDraftId", draft.draftId);
@@ -356,19 +362,30 @@ export function DemoEditorPage() {
       return;
     }
 
-    // Authenticated: run sync immediately using inline draft
     try {
       setSavingDemo(true);
-      const { demoId, stepCount } = await syncAnonymousDemo({ inlineDraft: draft });
-      console.log("Saved demo", demoId, "with steps:", stepCount);
-      // Stay on editor page and attach demoId as query param
-      try {
-        const url = new URL(window.location.href);
-        url.searchParams.set("demoId", demoId);
-        window.location.href = `${url.pathname}?${url.searchParams.toString()}`;
-      } catch {
-        // Fallback to simple pathname
-        window.location.href = `${window.location.pathname}?demoId=${demoId}`;
+      if (demoIdParam) {
+        const updates = steps.map(async (s) => {
+          const hs = hotspotsByStep[s.id] ?? [];
+          await updateDemoStepHotspots({ demoId: demoIdParam, stepId: s.id, hotspots: hs as any });
+        });
+        await Promise.all(updates);
+        try {
+          await mirrorDemoToPublic(demoIdParam);
+        } catch (mirrorErr) {
+          console.warn("Mirror to public failed (will still keep private saved).", mirrorErr);
+        }
+        toast.success("Saved annotations");
+      } else {
+        const { demoId, stepCount } = await syncAnonymousDemo({ inlineDraft: draft });
+        console.log("Saved demo", demoId, "with steps:", stepCount);
+        try {
+          const url = new URL(window.location.href);
+          url.searchParams.set("demoId", demoId);
+          window.location.href = `${url.pathname}?${url.searchParams.toString()}`;
+        } catch {
+          window.location.href = `${window.location.pathname}?demoId=${demoId}`;
+        }
       }
     } catch (e) {
       console.error("Failed to save demo:", e);
@@ -380,12 +397,9 @@ export function DemoEditorPage() {
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!imageRef.current) return;
-    // Only draw when not previewing and we're not editing a tooltip
     if (isPreviewing || editingTooltip) return;
     if (!currentStepId) return;
-    // Enforce max 1 tooltip per step
     if (currentHotspots.length >= 1) {
-      // Optionally open existing tooltip for edit
       const existing = currentHotspots[0];
       setEditingTooltip(existing.id);
       setTooltipText(existing.tooltip ?? "");
@@ -418,7 +432,6 @@ export function DemoEditorPage() {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    // Convert to normalized within the rendered image rect when possible
     let xNorm: number | undefined;
     let yNorm: number | undefined;
     try {
@@ -428,7 +441,6 @@ export function DemoEditorPage() {
         if (rr.w > 0 && rr.h > 0) {
           xNorm = (x - rr.x) / rr.w;
           yNorm = (y - rr.y) / rr.h;
-          // Clamp
           xNorm = Math.max(0, Math.min(1, xNorm));
           yNorm = Math.max(0, Math.min(1, yNorm));
         }
@@ -437,7 +449,6 @@ export function DemoEditorPage() {
 
     const newHotspot: Hotspot = {
       id: Math.random().toString(36).substring(7),
-      // Keep absolute dimensions for now; dot rendering uses normalized center
       x: Math.min(startPos.x, x),
       y: Math.min(startPos.y, y),
       width: Math.abs(x - startPos.x),
@@ -471,20 +482,16 @@ export function DemoEditorPage() {
     handleTooltipChange(id, tooltipText);
     setEditingTooltip(null);
     setTooltipText("");
-    // Keep annotation mode ON; user can press Esc to exit
-    // Auto-advance to next step if available
     setSelectedStepIndex((idx) => {
       const next = idx + 1;
       return next < steps.length ? next : idx;
     });
   };
 
-  // Preview-mode helpers
   const annotatedIndices = steps.map((s, idx) => (hotspotsByStep[s.id]?.length ? idx : -1)).filter((v) => v >= 0);
 
   const enterPreview = () => {
     setIsPreviewing(true);
-    // If current step isn't annotated, jump to first annotated
     if (currentStepId && !(hotspotsByStep[currentStepId]?.length > 0)) {
       if (annotatedIndices.length > 0) setSelectedStepIndex(annotatedIndices[0]);
     }
@@ -647,7 +654,6 @@ export function DemoEditorPage() {
           style={
             naturalSize
               ? {
-                  // Match the screenshot aspect ratio and avoid upscaling beyond its natural width
                   aspectRatio: `${naturalSize.w} / ${naturalSize.h}`,
                   width: "100%",
                   maxWidth: `${naturalSize.w}px`,
@@ -658,7 +664,6 @@ export function DemoEditorPage() {
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
         >
-          {/* Loading spinner while steps/images/tooltips prepare */}
           {(loadingSteps || imageLoading || (steps.length > 0 && !naturalSize)) && (
             <div className="absolute inset-0 flex items-center justify-center bg-white/80 z-20 pointer-events-none">
               <div className="flex items-center gap-2 text-gray-700">
@@ -706,7 +711,6 @@ export function DemoEditorPage() {
           ) : null}
 
           {currentHotspots.map((hotspot) => {
-            // Compute dot position. Prefer normalized coords relative to current image render rect.
             const containerRect = imageRef.current?.getBoundingClientRect();
             let centerX = 0;
             let centerY = 0;
@@ -715,11 +719,10 @@ export function DemoEditorPage() {
               centerX = rr.x + hotspot.xNorm * rr.w;
               centerY = rr.y + hotspot.yNorm * rr.h;
             } else if (typeof hotspot.x === "number" && typeof hotspot.y === "number") {
-              // Fallback to absolute stored coords
               centerX = hotspot.x + (hotspot.width || 0) / 2;
               centerY = hotspot.y + (hotspot.height || 0) / 2;
             }
-            const dotSize = 10; // visual size of the marker
+            const dotSize = 10;
             const tooltipLeft = centerX + dotSize + 6;
             const tooltipTop = centerY - 8;
             return (

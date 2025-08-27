@@ -24,6 +24,26 @@ const schema = a.schema({
       allow.publicApiKey().to(["read"]),
     ]),
 
+  PublicDemo: a
+    .model({
+      demoId: a.string().required(),
+      itemSK: a.string().required(),
+      ownerId: a.string(),
+      name: a.string(),
+      createdAt: a.datetime(),
+      updatedAt: a.datetime(),
+      order: a.integer(),
+      s3Key: a.string(),
+      thumbnailS3Key: a.string(),
+      pageUrl: a.string(),
+      hotspots: a.json(),
+    })
+    .identifier(["demoId", "itemSK"])
+    .authorization((allow) => [
+      allow.publicApiKey().to(["read"]),
+      allow.ownerDefinedIn("ownerId").to(["create", "update", "delete"]),
+    ]),
+
   Waitlist: a
     .model({
       source: a.string().required(),

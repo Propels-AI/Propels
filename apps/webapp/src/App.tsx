@@ -5,6 +5,7 @@ import SignUpPage from "@/pages/SignUpPage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import DemoEditorPage from "@/pages/DemoEditorPage";
 import DemoPlayer from "@/pages/DemoPlayer";
+import PublicDemoPlayer from "@/pages/PublicDemoPlayer";
 import { AuthProvider } from "@/lib/providers/AuthProvider";
 import { Toaster } from "sonner";
 
@@ -21,6 +22,7 @@ function App() {
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/editor" element={<DemoEditorPage />} />
             <Route path="/demo-player" element={<DemoPlayer />} />
+            <Route path="/p/:demoId" element={<PublicDemoPlayer />} />
             <Route path="/" element={<SignInPage />} />
           </Routes>
         </Router>
