@@ -17,7 +17,7 @@ export function DemoListView() {
     refetch,
     status,
   } = useQuery({
-    queryKey: ["demos"],
+    queryKey: ["demos", user?.userId],
     queryFn: () => listMyDemos(),
     enabled: isAuthenticated,
   });
