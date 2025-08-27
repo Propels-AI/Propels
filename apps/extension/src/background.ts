@@ -26,7 +26,7 @@ const ALLOWED_ORIGINS = new Set<string>(["http://localhost:5173", "https://app.p
 // Immediate activation and aggressive keepalive
 console.log("🚀 Background: Service worker initializing...");
 
-// Force immediate activation
+// Force immediate activation and clear any badge
 try {
   chrome.action.setBadgeText({ text: "" });
 } catch (_err) {
@@ -72,11 +72,83 @@ let currentCaptureSession: DemoCapture[] = [];
 let stepCount = 0;
 let isRecording = false;
 
+// Render dynamic action icon (red dot + step count when recording; neutral when idle)
+async function updateActionIcon(options?: { recording?: boolean; count?: number }) {
+  const rec = options?.recording ?? isRecording;
+  const count = options?.count ?? stepCount;
+
+  // Helper: create ImageData for a given size
+  const make = (size: number): ImageData => {
+    // OffscreenCanvas is available in MV3 service worker
+    // Fallback types to any to avoid TS lib issues
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const canvas: any = new (globalThis as any).OffscreenCanvas(size, size);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      // As a fallback, return transparent ImageData
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return new (globalThis as any).ImageData(size, size);
+    }
+
+    // Clear
+    ctx.clearRect(0, 0, size, size);
+
+    // Background transparent (kept clear)
+
+    // Draw icon
+    const radius = Math.floor(size * 0.48);
+    const cx = Math.floor(size / 2);
+    const cy = Math.floor(size / 2);
+    if (rec) {
+      // Solid red dot when recording
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.fillStyle = "#dc2626"; // red-600
+      ctx.fill();
+    } else {
+      // Idle: hollow gray ring for clearer distinction
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.lineWidth = Math.max(2, Math.floor(size * 0.18));
+      ctx.strokeStyle = "#94a3b8"; // slate-400 ring
+      ctx.stroke();
+    }
+
+    // No text overlay; just the status dot/ring
+
+    return ctx.getImageData(0, 0, size, size);
+  };
+
+  try {
+    await chrome.action.setIcon({
+      imageData: {
+        16: make(16),
+        32: make(32),
+        48: make(48),
+        128: make(128),
+      } as any,
+    });
+  } catch (e) {
+    // Ignore icon failures silently
+  }
+}
+
 // Handle extension installation
-chrome.runtime.onInstalled.addListener(() => {
-  console.log("Demo Builder Extension installed");
+chrome.runtime.onInstalled.addListener((details) => {
+  console.log("Demo Builder Extension installed", details);
   console.log("🚀 Background: Service worker started via onInstalled");
   keepAlive();
+  try {
+    // Open instruction page on first install
+    if (details.reason === "install") {
+      const onboardingUrl = chrome.runtime.getURL("onboarding.html");
+      chrome.tabs.create({ url: onboardingUrl });
+    }
+  } catch (e) {
+    console.warn("Failed to open instruction page on install", e);
+  }
 });
 
 // Handle tab updates to inject content script when recording is active
@@ -131,12 +203,15 @@ async function initializeRecordingState() {
 
     if (isRecording) {
       console.log("Restored recording state:", { isRecording, stepCount });
-      // Update badge to show current step count
-      chrome.action.setBadgeText({ text: stepCount.toString() });
-      chrome.action.setBadgeBackgroundColor({ color: "#4F46E5" });
+      // Keep badge as red dot while recording
+      chrome.action.setBadgeText({ text: "" });
+      chrome.action.setTitle({ title: "Recording… Click to stop" });
+      updateActionIcon({ recording: true, count: stepCount });
     } else {
       // Clear badge if not recording
       chrome.action.setBadgeText({ text: "" });
+      chrome.action.setTitle({ title: "Demo Builder" });
+      updateActionIcon({ recording: false, count: 0 });
     }
   } catch (error) {
     console.error("Error initializing recording state:", error);
@@ -235,6 +310,12 @@ async function handleStartCapture() {
   chrome.storage.local.set(storageData, () => {
     console.log("✅ Background: Recording state saved to storage");
   });
+
+  // Update extension icon to red dot while recording
+  try {
+    chrome.action.setTitle({ title: "Recording… Click to stop" });
+    updateActionIcon({ recording: true, count: stepCount });
+  } catch (_e) {}
 }
 
 function handleStopCapture() {
@@ -266,6 +347,13 @@ function handleStopCapture() {
       triggerAuthenticatedUpload();
     }
   });
+
+  // Clear badge/icon when not recording
+  try {
+    chrome.action.setBadgeText({ text: "" });
+    chrome.action.setTitle({ title: "Demo Builder" });
+    updateActionIcon({ recording: false, count: 0 });
+  } catch (_e) {}
 }
 
 function handleSaveCaptureSession(data: DemoCapture[]) {
@@ -273,9 +361,12 @@ function handleSaveCaptureSession(data: DemoCapture[]) {
   currentCaptureSession = data;
   stepCount = data.length;
 
-  // Update extension icon badge with step count
-  chrome.action.setBadgeText({ text: stepCount.toString() });
-  chrome.action.setBadgeBackgroundColor({ color: "#4F46E5" });
+  // Update dynamic icon with new step count while recording
+  if (isRecording) {
+    try {
+      updateActionIcon({ recording: true, count: stepCount });
+    } catch {}
+  }
 }
 
 async function handleGetCaptureSession(sendResponse: (response: CaptureSessionResponse) => void) {
@@ -352,9 +443,11 @@ async function handleCaptureScreenshot(captureData: DemoCapture, sendResponse: (
       console.log("✅ Background: Step count updated in storage");
     });
 
-    // Update extension badge
-    chrome.action.setBadgeText({ text: stepCount.toString() });
-    chrome.action.setBadgeBackgroundColor({ color: "#4F46E5" });
+    // Keep red dot badge while recording
+    if (isRecording) {
+      chrome.action.setBadgeText({ text: "●" });
+      chrome.action.setBadgeBackgroundColor({ color: "#dc2626" });
+    }
 
     console.log("Screenshot captured and saved:", updatedCapture);
     sendResponse({ success: true, data: updatedCapture });
