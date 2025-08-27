@@ -13,12 +13,35 @@ const schema = a.schema({
       statusUpdatedAt: a.string().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
       s3Key: a.string().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
       hotspots: a.json().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
+      order: a.integer().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
+      pageUrl: a.string().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
+      thumbnailS3Key: a.string().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
     })
     .identifier(["demoId", "itemSK"])
     .secondaryIndexes((index) => [index("ownerId").sortKeys(["statusUpdatedAt"]).name("byOwnerStatus")])
     .authorization((allow) => [
       allow.ownerDefinedIn("ownerId").to(["create", "read", "update", "delete"]),
       allow.publicApiKey().to(["read"]),
+    ]),
+
+  PublicDemo: a
+    .model({
+      demoId: a.string().required(),
+      itemSK: a.string().required(),
+      ownerId: a.string(),
+      name: a.string(),
+      createdAt: a.datetime(),
+      updatedAt: a.datetime(),
+      order: a.integer(),
+      s3Key: a.string(),
+      thumbnailS3Key: a.string(),
+      pageUrl: a.string(),
+      hotspots: a.json(),
+    })
+    .identifier(["demoId", "itemSK"])
+    .authorization((allow) => [
+      allow.publicApiKey().to(["read"]),
+      allow.ownerDefinedIn("ownerId").to(["create", "update", "delete"]),
     ]),
 
   Waitlist: a

@@ -13,6 +13,13 @@ interface DemoCapture {
   devicePixelRatio?: number;
   xNorm?: number;
   yNorm?: number;
+  // Added for robustness with responsive editor container
+  clickXCss?: number;
+  clickYCss?: number;
+  clickXDpr?: number;
+  clickYDpr?: number;
+  screenshotCssWidth?: number;
+  screenshotCssHeight?: number;
 }
 
 class IndexedDBManager {
