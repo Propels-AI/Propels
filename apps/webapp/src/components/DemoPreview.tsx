@@ -10,6 +10,12 @@ export type Hotspot = {
   yNorm?: number;
   tooltip?: any;
   targetStep?: number;
+  // Styling
+  dotSize?: number; // px
+  dotColor?: string; // hex/rgb
+  animation?: "none" | "pulse" | "breathe" | "fade";
+  dotStrokePx?: number; // border width in px
+  dotStrokeColor?: string; // border color
 };
 
 export type DemoPreviewStep = {
@@ -59,6 +65,22 @@ export function DemoPreview(props: {
     };
   }, [step?.imageUrl]);
 
+  // Inject animations used for hotspots if not present
+  useEffect(() => {
+    const id = "propels-tooltip-animations";
+    if (document.getElementById(id)) return;
+    const style = document.createElement("style");
+    style.id = id;
+    style.textContent = `
+@keyframes propels-breathe { 0%, 100% { transform: scale(1); opacity: 0.9; } 50% { transform: scale(1.08); opacity: 1; } }
+@keyframes propels-fade { 0%, 100% { opacity: 0.65; } 50% { opacity: 1; } }
+`;
+    document.head.appendChild(style);
+    return () => {
+      try { document.head.removeChild(style); } catch {}
+    };
+  }, []);
+
   const normalizedHotspots = useMemo(() => step?.hotspots || [], [step]);
 
   const go = (d: number) => {
@@ -100,7 +122,7 @@ export function DemoPreview(props: {
 
         {normalizedHotspots.map((h) => {
           const style: React.CSSProperties = {};
-          const defaultSize = 14;
+          const defaultSize = 12;
           if (box && typeof h.xNorm === "number" && typeof h.yNorm === "number") {
             const widthPx =
               typeof h.width === "number" ? (h.width > 0 && h.width <= 1 ? h.width * box.width : h.width) : defaultSize;
@@ -158,9 +180,26 @@ export function DemoPreview(props: {
           const tooltipText = normalizeTooltip((h as any).tooltip ?? h);
           const hasTooltip = !!tooltipText && tooltipText.trim().length > 0;
 
+          const dotSize = Math.max(6, Math.min(48, Number((h as any).dotSize ?? 12)));
+          const color = (h as any).dotColor || "#2563eb";
+          const anim = (h as any).animation || "none";
+          const animStyle: React.CSSProperties =
+            anim === "pulse"
+              ? {}
+              : anim === "breathe"
+              ? { animation: "propels-breathe 1.8s ease-in-out infinite" }
+              : anim === "fade"
+              ? { animation: "propels-fade 1.4s ease-in-out infinite" }
+              : {};
+
+          const stroke = Math.max(0, Number((h as any).dotStrokePx ?? 2));
+          const strokeColor = (h as any).dotStrokeColor ?? "#ffffff";
           return (
             <div key={h.id} className="absolute group" style={style}>
-              <div className="w-full h-full border-2 border-blue-500 bg-blue-500/20 cursor-pointer group-hover:bg-blue-500/30 transition-all rounded-sm" />
+              <div
+                className={`rounded-full shadow ${anim === "pulse" ? "animate-pulse" : ""}`}
+                style={{ width: dotSize, height: dotSize, backgroundColor: color, borderStyle: "solid", borderWidth: stroke, borderColor: strokeColor, ...animStyle }}
+              />
               {hasTooltip && (
                 <div className="absolute left-1/2 -translate-x-1/2 -top-2 -translate-y-full whitespace-pre px-2 py-1 text-xs text-white bg-blue-600 rounded shadow opacity-100 pointer-events-none">
                   {tooltipText}

@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
+import { useKeyboardShortcut } from "@/hooks/useKeyboardShortcut";
 import { Input } from "@/components/ui/input";
 import { syncAnonymousDemo, type EditedDraft } from "../lib/services/syncAnonymousDemo";
 import { useAuth } from "@/lib/providers/AuthProvider";
@@ -49,6 +50,10 @@ export function DemoEditorPage() {
 
   const [isDrawing, setIsDrawing] = useState(false);
   const [startPos, setStartPos] = useState({ x: 0, y: 0 });
+  // Drag state for moving existing hotspot (tooltip dot)
+  const [isDraggingHotspot, setIsDraggingHotspot] = useState(false);
+  const [dragHotspotId, setDragHotspotId] = useState<string | null>(null);
+  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
   type Hotspot = {
     id: string;
     x?: number;
@@ -58,10 +63,26 @@ export function DemoEditorPage() {
     xNorm?: number;
     yNorm?: number;
     tooltip?: string;
+    // Styling fields
+    dotSize?: number; // px
+    dotColor?: string; // e.g., #2563eb
+    animation?: "none" | "pulse" | "breathe" | "fade";
+    dotStrokePx?: number; // border width in px
+    dotStrokeColor?: string; // border color
   };
+
   const [hotspotsByStep, setHotspotsByStep] = useState<Record<string, Hotspot[]>>({});
   const [editingTooltip, setEditingTooltip] = useState<string | null>(null);
   const [tooltipText, setTooltipText] = useState("");
+  const [inspectorTab, setInspectorTab] = useState<'fill' | 'stroke'>("fill");
+  // Global tooltip style for consistency across all steps
+  const [tooltipStyle, setTooltipStyle] = useState<{ dotSize: number; dotColor: string; dotStrokePx: number; dotStrokeColor: string; animation: "none" | "pulse" | "breathe" | "fade" }>({
+    dotSize: 12,
+    dotColor: "#2563eb",
+    dotStrokePx: 2,
+    dotStrokeColor: "#ffffff",
+    animation: "none",
+  });
   const imageRef = useRef<HTMLDivElement>(null);
   const computeRenderRect = (containerW: number, containerH: number, naturalW: number, naturalH: number) => {
     if (naturalW <= 0 || naturalH <= 0 || containerW <= 0 || containerH <= 0) {
@@ -271,6 +292,11 @@ export function DemoEditorPage() {
                             width: DEFAULT_W,
                             height: DEFAULT_H,
                             tooltip: "",
+                            dotSize: tooltipStyle.dotSize,
+                            dotColor: tooltipStyle.dotColor,
+                            dotStrokePx: tooltipStyle.dotStrokePx,
+                            dotStrokeColor: tooltipStyle.dotStrokeColor,
+                            animation: tooltipStyle.animation,
                           };
                           initial[s.id] = [hotspot];
                           resolve();
@@ -342,6 +368,41 @@ export function DemoEditorPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Apply global style changes to all hotspots across all steps
+  const applyGlobalStyle = (patch: Partial<{ dotSize: number; dotColor: string; dotStrokePx: number; dotStrokeColor: string; animation: "none" | "pulse" | "breathe" | "fade" }>) => {
+    setTooltipStyle((prev) => ({ ...prev, ...patch }));
+    setHotspotsByStep((prev) => {
+      const next: typeof prev = {} as any;
+      for (const [stepId, list] of Object.entries(prev)) {
+        next[stepId] = (list || []).map((h) => ({
+          ...h,
+          dotSize: typeof patch.dotSize === "number" ? patch.dotSize : (h.dotSize ?? tooltipStyle.dotSize),
+          dotColor: typeof patch.dotColor === "string" ? patch.dotColor : (h.dotColor ?? tooltipStyle.dotColor),
+          dotStrokePx: typeof patch.dotStrokePx === "number" ? patch.dotStrokePx : (h.dotStrokePx ?? tooltipStyle.dotStrokePx),
+          dotStrokeColor: typeof patch.dotStrokeColor === "string" ? patch.dotStrokeColor : (h.dotStrokeColor ?? tooltipStyle.dotStrokeColor),
+          animation: typeof patch.animation !== "undefined" ? patch.animation : (h.animation ?? tooltipStyle.animation),
+        }));
+      }
+      return next;
+    });
+  };
+
+  // Inject simple keyframes for optional animations used by tooltips
+  useEffect(() => {
+    const id = "propels-tooltip-animations";
+    if (document.getElementById(id)) return;
+    const style = document.createElement("style");
+    style.id = id;
+    style.textContent = `
+@keyframes propels-breathe { 0%, 100% { transform: scale(1); opacity: 0.9; } 50% { transform: scale(1.08); opacity: 1; } }
+@keyframes propels-fade { 0%, 100% { opacity: 0.65; } 50% { opacity: 1; } }
+`;
+    document.head.appendChild(style);
+    return () => {
+      try { document.head.removeChild(style); } catch {}
+    };
+  }, []);
+
   const handleSave = async () => {
     const draft: EditedDraft = {
       draftId: (crypto as any).randomUUID ? (crypto as any).randomUUID() : `${Date.now()}`,
@@ -399,10 +460,31 @@ export function DemoEditorPage() {
     if (!imageRef.current) return;
     if (isPreviewing || editingTooltip) return;
     if (!currentStepId) return;
+    // If there is an existing hotspot, only start editing/dragging when clicking the dot region
     if (currentHotspots.length >= 1) {
       const existing = currentHotspots[0];
-      setEditingTooltip(existing.id);
-      setTooltipText(existing.tooltip ?? "");
+      const rect = imageRef.current.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      // compute rendered center of dot from normalized coords
+      if (existing.xNorm !== undefined && existing.yNorm !== undefined && naturalSize) {
+        const rr = computeRenderRect(rect.width, rect.height, naturalSize.w, naturalSize.h);
+        const centerX = rr.x + existing.xNorm * rr.w;
+        const centerY = rr.y + existing.yNorm * rr.h;
+        const dotSize = Math.max(6, Math.min(48, Number(existing.dotSize ?? 12)));
+        const radius = dotSize / 2;
+        const dx = x - centerX;
+        const dy = y - centerY;
+        const inside = dx * dx + dy * dy <= radius * radius;
+        if (inside) {
+          // Begin potential drag; decide click vs drag on mouseup by movement threshold
+          setIsDraggingHotspot(true);
+          setDragHotspotId(existing.id);
+          dragStartRef.current = { x: e.clientX, y: e.clientY };
+          return;
+        }
+      }
+      // Click not on the dot: do nothing (do not open editor)
       return;
     }
 
@@ -415,18 +497,59 @@ export function DemoEditorPage() {
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
+    if (!imageRef.current) return;
+    // Drag to move existing hotspot
+    if (isDraggingHotspot && dragHotspotId && currentStepId && naturalSize) {
+      const rect = imageRef.current.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const rr = computeRenderRect(rect.width, rect.height, naturalSize.w, naturalSize.h);
+      if (rr.w <= 0 || rr.h <= 0) return;
+      let xNorm = (x - rr.x) / rr.w;
+      let yNorm = (y - rr.y) / rr.h;
+      xNorm = Math.max(0, Math.min(1, xNorm));
+      yNorm = Math.max(0, Math.min(1, yNorm));
+      setHotspotsByStep((prev) => {
+        const list = prev[currentStepId] ?? [];
+        return {
+          ...prev,
+          [currentStepId]: list.map((h) => (h.id === dragHotspotId ? { ...h, xNorm, yNorm } : h)),
+        };
+      });
+      return;
+    }
+
+    // Drawing a new hotspot
     if (!isDrawing || !imageRef.current) return;
-
-    const rect = imageRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    console.log(`Drawing from (${startPos.x}, ${startPos.y}) to (${x}, ${y})`);
+    // Optionally, we could preview the rectangle; currently unused.
   };
 
   const handleMouseUp = (e: React.MouseEvent) => {
-    if (!isDrawing || !imageRef.current) return;
+    if (!imageRef.current) return;
     if (!currentStepId) return;
+
+    // Finish dragging existing hotspot
+    if (isDraggingHotspot) {
+      const start = dragStartRef.current;
+      setIsDraggingHotspot(false);
+      const id = dragHotspotId;
+      setDragHotspotId(null);
+      dragStartRef.current = null;
+      // If it was a simple click (no movement), open editor for that hotspot
+      if (start && id) {
+        const moved = Math.hypot(e.clientX - start.x, e.clientY - start.y);
+        if (moved < 3) {
+          const existing = (hotspotsByStep[currentStepId] ?? []).find((h) => h.id === id);
+          if (existing) {
+            setEditingTooltip(existing.id);
+            setTooltipText(existing.tooltip ?? "");
+          }
+        }
+      }
+      return;
+    }
+
+    if (!isDrawing) return;
 
     const rect = imageRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -447,6 +570,28 @@ export function DemoEditorPage() {
       }
     } catch (_e) {}
 
+    // Enforce single hotspot per step: update existing if present; else create new
+    if (currentHotspots.length >= 1) {
+      const existing = currentHotspots[0];
+      const updated: Hotspot = {
+        ...existing,
+        x: Math.min(startPos.x, x),
+        y: Math.min(startPos.y, y),
+        width: Math.abs(x - startPos.x),
+        height: Math.abs(y - startPos.y),
+        xNorm,
+        yNorm,
+      };
+      setHotspotsByStep((prev) => ({
+        ...prev,
+        [currentStepId]: [updated],
+      }));
+      setIsDrawing(false);
+      setEditingTooltip(existing.id);
+      setTooltipText(existing.tooltip ?? "");
+      return;
+    }
+
     const newHotspot: Hotspot = {
       id: Math.random().toString(36).substring(7),
       x: Math.min(startPos.x, x),
@@ -455,11 +600,16 @@ export function DemoEditorPage() {
       height: Math.abs(y - startPos.y),
       xNorm,
       yNorm,
+      dotSize: tooltipStyle.dotSize,
+      dotColor: tooltipStyle.dotColor,
+      dotStrokePx: tooltipStyle.dotStrokePx,
+      dotStrokeColor: tooltipStyle.dotStrokeColor,
+      animation: tooltipStyle.animation,
     };
 
     setHotspotsByStep((prev) => ({
       ...prev,
-      [currentStepId]: [...(prev[currentStepId] ?? []), newHotspot],
+      [currentStepId]: [newHotspot],
     }));
     setIsDrawing(false);
 
@@ -487,6 +637,31 @@ export function DemoEditorPage() {
       return next < steps.length ? next : idx;
     });
   };
+
+  // Keyboard shortcuts for inline tooltip editor (Enter=save, Escape=cancel)
+  useKeyboardShortcut(
+    [
+      {
+        key: "Enter",
+        handler: (e) => {
+          if (!editingTooltip) return;
+          e.preventDefault();
+          handleTooltipSubmit(editingTooltip);
+        },
+        preventDefault: true,
+      },
+      {
+        key: "Escape",
+        handler: () => {
+          if (!editingTooltip) return;
+          setEditingTooltip(null);
+          setTooltipText("");
+        },
+        preventDefault: true,
+      },
+    ],
+    { enabled: !!editingTooltip }
+  );
 
   const annotatedIndices = steps.map((s, idx) => (hotspotsByStep[s.id]?.length ? idx : -1)).filter((v) => v >= 0);
 
@@ -722,18 +897,33 @@ export function DemoEditorPage() {
               centerX = hotspot.x + (hotspot.width || 0) / 2;
               centerY = hotspot.y + (hotspot.height || 0) / 2;
             }
-            const dotSize = 10;
+            const dotSize = Math.max(6, Math.min(48, Number(hotspot.dotSize ?? 12)));
             const tooltipLeft = centerX + dotSize + 6;
             const tooltipTop = centerY - 8;
+            const color = hotspot.dotColor || "#2563eb";
+            const anim = hotspot.animation || "none";
+            const animStyle: React.CSSProperties =
+              anim === "pulse"
+                ? { } // Tailwind's animate-pulse class below
+                : anim === "breathe"
+                ? { animation: "propels-breathe 1.8s ease-in-out infinite" }
+                : anim === "fade"
+                ? { animation: "propels-fade 1.4s ease-in-out infinite" }
+                : {};
             return (
               <div key={hotspot.id}>
                 <div
-                  className="absolute rounded-full bg-blue-600 border-2 border-white shadow"
+                  className={`absolute rounded-full shadow ${anim === "pulse" ? "animate-pulse" : ""}`}
                   style={{
                     left: `${centerX - dotSize / 2}px`,
                     top: `${centerY - dotSize / 2}px`,
                     width: `${dotSize}px`,
                     height: `${dotSize}px`,
+                    backgroundColor: color,
+                    borderStyle: "solid",
+                    borderWidth: `${Math.max(0, Number(hotspot.dotStrokePx ?? tooltipStyle.dotStrokePx))}px`,
+                    borderColor: String(hotspot.dotStrokeColor ?? tooltipStyle.dotStrokeColor),
+                    ...animStyle,
                   }}
                 />
 
@@ -741,12 +931,23 @@ export function DemoEditorPage() {
                   <div
                     className="absolute bg-white border rounded p-2 shadow-lg"
                     style={{ left: `${tooltipLeft}px`, top: `${tooltipTop}px` }}
+                    onMouseDown={(e) => e.stopPropagation()}
                   >
                     <Input
                       type="text"
                       placeholder="Add tooltip text"
                       value={tooltipText}
                       onChange={(e) => setTooltipText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleTooltipSubmit(hotspot.id);
+                        } else if (e.key === "Escape") {
+                          e.preventDefault();
+                          setEditingTooltip(null);
+                          setTooltipText("");
+                        }
+                      }}
                       className="mb-2"
                       autoFocus
                     />
@@ -772,7 +973,7 @@ export function DemoEditorPage() {
           })}
         </div>
       </div>
-      <div className="w-80 bg-gray-100 p-4 border-l">
+      <div className="w-80 bg-gray-100 p-4 border-l space-y-6">
         <h2 className="text-xl font-semibold mb-4">Steps</h2>
         <div className="space-y-2">
           {steps.length === 0 && !loadingSteps && (
@@ -808,6 +1009,122 @@ export function DemoEditorPage() {
               </div>
             </button>
           ))}
+        </div>
+
+        {/* Tooltip Inspector */}
+        <div className="pt-4 border-t mt-6">
+          <h3 className="text-lg font-semibold mb-3">Tooltip Inspector</h3>
+          {currentHotspots.length === 0 ? (
+            <div className="text-xs text-gray-600">No tooltip on this step. Click on the image to add one.</div>
+          ) : (
+            (() => {
+              return (
+                <div className="space-y-3 text-sm">
+                  {/* Tabs */}
+                  <div className="flex gap-2 text-xs">
+                    <button
+                      className={`px-2 py-1 rounded border ${inspectorTab === 'fill' ? 'bg-white border-blue-500 text-blue-700' : 'bg-gray-50 border-transparent'}`}
+                      onClick={() => setInspectorTab('fill')}
+                    >
+                      Fill
+                    </button>
+                    <button
+                      className={`px-2 py-1 rounded border ${inspectorTab === 'stroke' ? 'bg-white border-blue-500 text-blue-700' : 'bg-gray-50 border-transparent'}`}
+                      onClick={() => setInspectorTab('stroke')}
+                    >
+                      Stroke
+                    </button>
+                  </div>
+
+                  {inspectorTab === 'fill' ? (
+                    <>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Size (px)</label>
+                        <input
+                          type="range"
+                          min={6}
+                          max={48}
+                          step={1}
+                          value={Number(tooltipStyle.dotSize)}
+                          onChange={(e) => applyGlobalStyle({ dotSize: Number(e.target.value) })}
+                          className="w-full"
+                        />
+                        <div className="text-[10px] text-gray-500 mt-0.5">{Number(tooltipStyle.dotSize)} px</div>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Color</label>
+                        <input
+                          type="color"
+                          value={tooltipStyle.dotColor}
+                          onChange={(e) => applyGlobalStyle({ dotColor: e.target.value })}
+                          className="w-10 h-8 p-0 border rounded"
+                          title="Choose color"
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Width (px)</label>
+                        <input
+                          type="range"
+                          min={0}
+                          max={8}
+                          step={1}
+                          value={Number(tooltipStyle.dotStrokePx)}
+                          onChange={(e) => applyGlobalStyle({ dotStrokePx: Number(e.target.value) })}
+                          className="w-full"
+                        />
+                        <div className="text-[10px] text-gray-500 mt-0.5">{Number(tooltipStyle.dotStrokePx)} px</div>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Color</label>
+                        <input
+                          type="color"
+                          value={tooltipStyle.dotStrokeColor}
+                          onChange={(e) => applyGlobalStyle({ dotStrokeColor: e.target.value })}
+                          className="w-10 h-8 p-0 border rounded"
+                          title="Choose stroke color"
+                        />
+                      </div>
+                    </>
+                  )}
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Animation (applies to all steps)</label>
+                    <select
+                      value={tooltipStyle.animation}
+                      onChange={(e) => applyGlobalStyle({ animation: e.target.value as any })}
+                      className="w-full border rounded p-1 bg-white"
+                    >
+                      <option value="none">None</option>
+                      <option value="pulse">Pulse</option>
+                      <option value="breathe">Breathe</option>
+                      <option value="fade">Fade</option>
+                    </select>
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      onClick={handleSave}
+                      className="text-xs px-2 py-1 rounded border bg-blue-600 text-white hover:bg-blue-700"
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (!currentStepId) return;
+                        setHotspotsByStep((prev) => ({ ...prev, [currentStepId]: [] }));
+                        setEditingTooltip(null);
+                        setTooltipText("");
+                      }}
+                      className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50"
+                    >
+                      Delete Tooltip
+                    </button>
+                  </div>
+                </div>
+              );
+            })()
+          )}
         </div>
       </div>
       <Dialog
