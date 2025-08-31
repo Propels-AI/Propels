@@ -21,6 +21,12 @@ import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import LeadCaptureOverlay from "@/components/LeadCaptureOverlay";
 import HotspotOverlay from "@/components/HotspotOverlay";
+import {
+  deriveTooltipStyleFromHotspots,
+  type HotspotsMap,
+  type TooltipStyle,
+} from "@/lib/editor/deriveTooltipStyleFromHotspots";
+import { applyGlobalStyleToHotspots } from "@/lib/editor/applyGlobalStyleToHotspots";
 
 export function DemoEditorPage() {
   const { user } = useAuth();
@@ -273,24 +279,20 @@ export function DemoEditorPage() {
           setTimeout(() => loadFromBackend(demoId), delayMs);
           return;
         }
-        // If metadata did not include hotspotStyle, derive defaults from first hotspot present
+        // If metadata did not include hotspotStyle, derive defaults from first hotspot present using helper
         try {
           const hasMetaStyle = Boolean((meta as any)?.hotspotStyle);
           if (!hasMetaStyle) {
-            let derived: any = null;
-            for (const list of Object.values(hotspotsMap)) {
-              if (Array.isArray(list) && list.length > 0) {
-                const h = list[0] as any;
-                derived = {
-                  dotSize: Number(h?.dotSize ?? 12),
-                  dotColor: String(h?.dotColor ?? "#2563eb"),
-                  dotStrokePx: Number(h?.dotStrokePx ?? 2),
-                  dotStrokeColor: String(h?.dotStrokeColor ?? "#ffffff"),
-                  animation: (h?.animation ?? "none") as any,
-                };
-                break;
-              }
-            }
+            const derived = deriveTooltipStyleFromHotspots(
+              hotspotsMap as HotspotsMap,
+              {
+                dotSize: 12,
+                dotColor: "#2563eb",
+                dotStrokePx: 2,
+                dotStrokeColor: "#ffffff",
+                animation: "none",
+              } as TooltipStyle
+            );
             if (derived) {
               setTooltipStyle((prev) => ({
                 dotSize: Number(derived.dotSize ?? prev.dotSize ?? 12),
@@ -498,20 +500,7 @@ export function DemoEditorPage() {
   // Apply global style changes to all hotspots across all steps
   const applyGlobalStyle = (patch: Partial<{ dotSize: number; dotColor: string; dotStrokePx: number; dotStrokeColor: string; animation: "none" | "pulse" | "breathe" | "fade" }>) => {
     setTooltipStyle((prev) => ({ ...prev, ...patch }));
-    setHotspotsByStep((prev) => {
-      const next: typeof prev = {} as any;
-      for (const [stepId, list] of Object.entries(prev)) {
-        next[stepId] = (list || []).map((h) => ({
-          ...h,
-          dotSize: typeof patch.dotSize === "number" ? patch.dotSize : (h.dotSize ?? tooltipStyle.dotSize),
-          dotColor: typeof patch.dotColor === "string" ? patch.dotColor : (h.dotColor ?? tooltipStyle.dotColor),
-          dotStrokePx: typeof patch.dotStrokePx === "number" ? patch.dotStrokePx : (h.dotStrokePx ?? tooltipStyle.dotStrokePx),
-          dotStrokeColor: typeof patch.dotStrokeColor === "string" ? patch.dotStrokeColor : (h.dotStrokeColor ?? tooltipStyle.dotStrokeColor),
-          animation: typeof patch.animation !== "undefined" ? patch.animation : (h.animation ?? tooltipStyle.animation),
-        }));
-      }
-      return next;
-    });
+    setHotspotsByStep((prev) => applyGlobalStyleToHotspots(prev as HotspotsMap, tooltipStyle as TooltipStyle, patch as Partial<TooltipStyle>) as any);
   };
 
   // Inject simple keyframes for optional animations used by tooltips
