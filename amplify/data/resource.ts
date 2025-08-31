@@ -16,6 +16,11 @@ const schema = a.schema({
       order: a.integer().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
       pageUrl: a.string().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
       thumbnailS3Key: a.string().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
+      // Lead capture (demo-level virtual step)
+      leadStepIndex: a.integer().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
+      // Future-proof flexible lead configuration (style, colors, blur, etc.)
+      // Example: { style: "solid" | "blur" | "dim", bg: "white" | "black" | "#RRGGBB", opacity: 0.0-1.0 }
+      leadConfig: a.json().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
     })
     .identifier(["demoId", "itemSK"])
     .secondaryIndexes((index) => [index("ownerId").sortKeys(["statusUpdatedAt"]).name("byOwnerStatus")])
@@ -37,6 +42,10 @@ const schema = a.schema({
       thumbnailS3Key: a.string(),
       pageUrl: a.string(),
       hotspots: a.json(),
+      // Public mirror of lead config (demo-level)
+      leadStepIndex: a.integer(),
+      // Public mirror of flexible config
+      leadConfig: a.json(),
     })
     .identifier(["demoId", "itemSK"])
     .authorization((allow) => [

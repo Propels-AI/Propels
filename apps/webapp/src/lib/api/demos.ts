@@ -1,5 +1,5 @@
 import { generateClient } from "aws-amplify/data";
-import { getCurrentUser } from "aws-amplify/auth";
+import { getCurrentUser, fetchAuthSession } from "aws-amplify/auth";
 
 function getModels() {
   console.debug("[api/demos] creating data client via generateClient()...");
@@ -10,6 +10,35 @@ function getModels() {
   }
 
   return models;
+}
+
+export async function updateDemoLeadConfig(params: {
+  demoId: string;
+  leadStepIndex: number | null;
+  leadConfig?: any;
+}): Promise<void> {
+  const { demoId, leadStepIndex, leadConfig } = params;
+  const models = getModels();
+  const payload: any = {
+    demoId,
+    itemSK: "METADATA",
+    leadStepIndex,
+  };
+  if (leadConfig !== undefined) {
+    try {
+      payload.leadConfig =
+        typeof leadConfig === "string" ? leadConfig : JSON.stringify(leadConfig);
+    } catch (e) {
+      console.warn("[api/demos] Failed to stringify leadConfig; omitting", e);
+    }
+  }
+  const res = await models.Demo.update(payload);
+  console.log("[api/demos] updateDemoLeadConfig res", res);
+  if (!res?.data || (res as any)?.errors?.length) {
+    throw new Error(
+      `updateDemoLeadConfig failed: ${(res as any)?.errors?.map((e: any) => e?.message).join(", ") || "no data returned"}`
+    );
+  }
 }
 
 function getPublicModels() {
@@ -30,6 +59,8 @@ export async function createPublicDemoMetadata(params: {
   name?: string;
   createdAt?: string;
   updatedAt?: string;
+  leadStepIndex?: number | null;
+  leadConfig?: any;
 }): Promise<void> {
   const models = getModels();
   if (!models.PublicDemo) {
@@ -53,11 +84,34 @@ export async function createPublicDemoMetadata(params: {
     updatedAt: params.updatedAt ?? new Date().toISOString(),
   };
   Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
+  // Attach lead fields when provided
+  if (params.leadStepIndex !== undefined) payload.leadStepIndex = params.leadStepIndex;
+  if (params.leadConfig !== undefined) {
+    try {
+      payload.leadConfig =
+        typeof params.leadConfig === "string" ? params.leadConfig : JSON.stringify(params.leadConfig);
+    } catch (e) {
+      console.warn("[api/demos] Failed to stringify public leadConfig; omitting", e);
+    }
+  }
+
   const res = await models.PublicDemo.create(payload);
-  if (!res?.data || (res as any)?.errors?.length) {
-    throw new Error(
-      `createPublicDemoMetadata failed: ${(res as any)?.errors?.map((e: any) => e?.message).join(", ") || "no data returned"}`
-    );
+  const errs = (res as any)?.errors as any[] | undefined;
+  if (!res?.data || (errs && errs.length)) {
+    const message = errs?.map((e: any) => e?.message).join(", ") || "no data returned";
+    // If item already exists (ConditionalCheckFailed), fallback to update to be idempotent
+    if (/ConditionalCheckFailed/i.test(message)) {
+      const upd = await models.PublicDemo.update(payload);
+      if (!upd?.data || (upd as any)?.errors?.length) {
+        throw new Error(
+          `createPublicDemoMetadata->update fallback failed: ${(upd as any)?.errors
+            ?.map((e: any) => e?.message)
+            .join(", ") || "no data returned"}`
+        );
+      }
+      return;
+    }
+    throw new Error(`createPublicDemoMetadata failed: ${message}`);
   }
 }
 
@@ -153,6 +207,8 @@ export async function mirrorDemoToPublic(demoId: string): Promise<void> {
       name: meta.name,
       createdAt: meta.createdAt,
       updatedAt: now,
+      leadStepIndex: meta.leadStepIndex ?? null,
+      leadConfig: meta.leadConfig ?? undefined,
     });
   } else {
     console.warn("[api/demos] mirrorDemoToPublic: METADATA missing");
@@ -230,6 +286,8 @@ export async function setDemoStatus(demoId: string, status: "DRAFT" | "PUBLISHED
           name: metadata.name,
           createdAt: metadata.createdAt,
           updatedAt: now,
+          leadStepIndex: metadata.leadStepIndex ?? null,
+          leadConfig: metadata.leadConfig ?? undefined,
         });
       }
       const steps = items.filter((it: any) => typeof it.itemSK === "string" && it.itemSK.startsWith("STEP#"));
@@ -387,12 +445,24 @@ export async function updateDemoStepHotspots(params: {
 export async function listDemoItems(demoId: string) {
   console.debug("[api/demos] listDemoItems ->", { demoId });
   try {
-    const models = getModels();
-    const res = await models.Demo.list({
-      filter: { demoId: { eq: demoId } },
-    });
-    console.debug("[api/demos] listDemoItems res:", res);
-    return res.data;
+    // Ensure auth session is ready so userPool reads return full fields
+    try {
+      await fetchAuthSession();
+    } catch (e) {
+      console.warn("[api/demos] fetchAuthSession failed; will attempt public read", e);
+    }
+    try {
+      const models = getModels();
+      const res = await models.Demo.list({ filter: { demoId: { eq: demoId } } });
+      console.debug("[api/demos] listDemoItems res (userPool):", res);
+      return res.data;
+    } catch (userErr) {
+      console.warn("[api/demos] userPool read failed; trying public apiKey", userErr);
+      const publicModels = getPublicModels();
+      const res = await publicModels.Demo.list({ filter: { demoId: { eq: demoId } } });
+      console.debug("[api/demos] listDemoItems res (public):", res);
+      return res.data;
+    }
   } catch (e) {
     console.error("[api/demos] listDemoItems error", e);
     throw e;

@@ -4,40 +4,50 @@ import { Input } from "@/components/ui/input";
 import { syncAnonymousDemo, type EditedDraft } from "../lib/services/syncAnonymousDemo";
 import { useAuth } from "@/lib/providers/AuthProvider";
 import { useSearchParams } from "react-router-dom";
-import {
+import { 
   listDemoItems,
   renameDemo,
   setDemoStatus as setDemoStatusApi,
   deleteDemo,
   updateDemoStepHotspots,
   mirrorDemoToPublic,
+  updateDemoLeadConfig,
 } from "@/lib/api/demos";
 import { getUrl } from "aws-amplify/storage";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { PasswordlessAuth } from "@/components/auth/PasswordlessAuth";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+import LeadCaptureOverlay from "@/components/LeadCaptureOverlay";
+import HotspotOverlay from "@/components/HotspotOverlay";
 
 export function DemoEditorPage() {
   const { user } = useAuth();
   const isAuthenticated = !!user?.userId || !!user?.username;
   const [searchParams] = useSearchParams();
-  const demoIdParam = searchParams.get("demoId") || undefined;
+  const demoIdParam = searchParams.get("demoId") || searchParams.get("demoid") || undefined;
   const [loadingSteps, setLoadingSteps] = useState<boolean>(false);
   const [steps, setSteps] = useState<
     Array<{
       id: string;
       pageUrl: string;
-      screenshotUrl: string;
+      screenshotUrl?: string;
       xNorm?: number;
       yNorm?: number;
       clickX?: number;
       clickY?: number;
       viewportWidth?: number;
       viewportHeight?: number;
+      // Lead capture step flags
+      isLeadCapture?: boolean;
+      leadBg?: "white" | "black";
     }>
   >([]);
   const [selectedStepIndex, setSelectedStepIndex] = useState<number>(0);
+  // Lead step quick-insert MVP controls
+  const [leadUiOpen, setLeadUiOpen] = useState(false);
+  const [leadInsertPos, setLeadInsertPos] = useState<"before" | "after">("after");
+  const [leadInsertAnchor, setLeadInsertAnchor] = useState<number>(1); // 1-based for UI
   const [authOpen, setAuthOpen] = useState(false);
   const pendingDraftRef = useRef<EditedDraft | null>(null);
   // Metadata for saved demo (when demoId exists)
@@ -47,6 +57,8 @@ export function DemoEditorPage() {
   const [togglingStatus, setTogglingStatus] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [savingDemo, setSavingDemo] = useState(false);
+  // Retry counter for backend load (handle eventual consistency right after creation)
+  const loadAttemptsRef = useRef<number>(0);
 
   const [isDrawing, setIsDrawing] = useState(false);
   const [startPos, setStartPos] = useState({ x: 0, y: 0 });
@@ -99,6 +111,9 @@ export function DemoEditorPage() {
   const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
   const [imageLoading, setImageLoading] = useState<boolean>(false);
   const [, setContainerSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+  const isCurrentLeadStep = Boolean(steps[selectedStepIndex]?.isLeadCapture);
+  // Keep canvas size consistent on lead steps: use last known naturalSize or a sane default
+  const effectiveNaturalSize = isCurrentLeadStep && !naturalSize ? { w: 1280, h: 800 } : naturalSize;
 
   const currentStepId = steps[selectedStepIndex]?.id;
   const currentHotspots: Hotspot[] = currentStepId ? (hotspotsByStep[currentStepId] ?? []) : [];
@@ -130,8 +145,16 @@ export function DemoEditorPage() {
   useEffect(() => {
     const loadFromBackend = async (demoId: string) => {
       try {
+        // Keep loading state true across retries to avoid flashing 0 steps UI
         setLoadingSteps(true);
         console.log("[Editor] Loading demo from backend", { demoId });
+        // Ensure auth session is ready so Data and Storage calls have credentials
+        try {
+          const { fetchAuthSession } = await import("aws-amplify/auth");
+          await fetchAuthSession();
+        } catch (e) {
+          console.warn("[Editor] fetchAuthSession failed (continuing)", e);
+        }
         const items = await listDemoItems(demoId);
         console.log("[Editor] listDemoItems returned", { count: items?.length, items });
         const meta = (items || []).find((it: any) => String(it.itemSK) === "METADATA");
@@ -142,6 +165,32 @@ export function DemoEditorPage() {
         const stepItems = (items || []).filter((it: any) => String(it.itemSK || "").startsWith("STEP#"));
         stepItems.sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0));
         console.log("[Editor] stepItems", { count: stepItems.length, stepItems });
+        // If no steps yet, retry a few times (eventual consistency after creation)
+        if (!stepItems.length && loadAttemptsRef.current < 10) {
+          loadAttemptsRef.current += 1;
+          const delayMs = 300 + loadAttemptsRef.current * 300; // ~0.6s..3.3s
+          console.log("[Editor] No steps found; retrying load in", delayMs, "ms (attempt", loadAttemptsRef.current, ")");
+          setTimeout(() => {
+            // fire and forget; effect guard handles demoId match
+            loadFromBackend(demoId);
+          }, delayMs);
+          return; // don't proceed to set empty state yet
+        }
+        // If steps exist but required fields like s3Key are null (likely due to public read without owner auth), retry
+        const haveAnyS3 = stepItems.some((it: any) => !!it?.s3Key);
+        if (stepItems.length > 0 && !haveAnyS3 && loadAttemptsRef.current < 10) {
+          loadAttemptsRef.current += 1;
+          const delayMs = 400 + loadAttemptsRef.current * 400; // ~0.8s..4.4s
+          console.log(
+            "[Editor] Steps found but fields are null (awaiting auth/consistency); retrying in",
+            delayMs,
+            "ms (attempt",
+            loadAttemptsRef.current,
+            ")"
+          );
+          setTimeout(() => loadFromBackend(demoId), delayMs);
+          return;
+        }
         const urls: Array<{
           id: string;
           pageUrl: string;
@@ -193,12 +242,49 @@ export function DemoEditorPage() {
             console.error("[Editor] Failed to resolve S3 URL", { itemSK: si?.itemSK, s3Key: si?.s3Key }, e);
           }
         }
+        // If steps exist but we couldn't resolve any screenshot URLs yet, retry
+        if (stepItems.length > 0 && urls.length === 0 && loadAttemptsRef.current < 10) {
+          loadAttemptsRef.current += 1;
+          const delayMs = 500 + loadAttemptsRef.current * 400;
+          console.log(
+            "[Editor] Steps present but screenshots unresolved; retrying in",
+            delayMs,
+            "ms (attempt",
+            loadAttemptsRef.current,
+            ")"
+          );
+          setTimeout(() => loadFromBackend(demoId), delayMs);
+          return;
+        }
+        // Insert saved lead-capture step from METADATA if present
+        try {
+          let leadIdxSaved: number | null | undefined = (meta as any)?.leadStepIndex;
+          let leadBgSaved: 'white' | 'black' = 'white';
+          if ((meta as any)?.leadConfig) {
+            try {
+              const cfg = typeof (meta as any).leadConfig === 'string' ? JSON.parse((meta as any).leadConfig) : (meta as any).leadConfig;
+              if (cfg && (cfg.bg === 'white' || cfg.bg === 'black')) leadBgSaved = cfg.bg;
+            } catch {}
+          }
+          if (typeof leadIdxSaved === 'number' && leadIdxSaved >= 0 && leadIdxSaved <= urls.length) {
+            const leadStep = {
+              id: 'LEAD-SAVED',
+              pageUrl: '',
+              screenshotUrl: undefined as unknown as string,
+              isLeadCapture: true as const,
+              leadBg: leadBgSaved,
+            } as any;
+            urls.splice(leadIdxSaved, 0, leadStep);
+          }
+        } catch {}
+
         setSteps(urls);
         setHotspotsByStep(hotspotsMap);
         setSelectedStepIndex(0);
       } catch (e) {
         console.error("[Editor] Failed to load demo from backend", e);
       } finally {
+        // We only reach finally when not returning early (i.e., not retrying). Clear loading.
         setLoadingSteps(false);
       }
     };
@@ -316,22 +402,16 @@ export function DemoEditorPage() {
         }
       } catch (err) {
         console.log("No extension data available", err);
-      } finally {
-        setLoadingSteps(false);
       }
     };
 
+    // Reset attempts when demoId changes
+    loadAttemptsRef.current = 0;
     if (demoIdParam) {
       loadFromBackend(demoIdParam);
     } else {
       loadFromExtension();
     }
-
-    return () => {
-      try {
-        steps.forEach((s) => URL.revokeObjectURL(s.screenshotUrl));
-      } catch (_e) {}
-    };
   }, [demoIdParam]);
 
   useEffect(() => {
@@ -427,10 +507,25 @@ export function DemoEditorPage() {
       setSavingDemo(true);
       if (demoIdParam) {
         const updates = steps.map(async (s) => {
+          // Skip lead-capture pseudo steps; they are not persisted backend steps
+          if (s.isLeadCapture) return;
           const hs = hotspotsByStep[s.id] ?? [];
           await updateDemoStepHotspots({ demoId: demoIdParam, stepId: s.id, hotspots: hs as any });
         });
         await Promise.all(updates);
+        // Persist lead configuration (index/bg/config) on METADATA
+        try {
+          const leadIdx = steps.findIndex((s) => Boolean(s.isLeadCapture));
+          if (leadIdx >= 0) {
+            const bg = steps[leadIdx]?.leadBg === "black" ? "black" : "white";
+            const leadConfig = { style: "solid", bg } as any; // future-proof config container
+            await updateDemoLeadConfig({ demoId: demoIdParam, leadStepIndex: leadIdx, leadConfig });
+          } else {
+            await updateDemoLeadConfig({ demoId: demoIdParam, leadStepIndex: null });
+          }
+        } catch (e) {
+          console.warn("Failed to persist lead config (non-fatal)", e);
+        }
         try {
           await mirrorDemoToPublic(demoIdParam);
         } catch (mirrorErr) {
@@ -458,6 +553,7 @@ export function DemoEditorPage() {
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!imageRef.current) return;
+    if (isCurrentLeadStep) return; // disable hotspot interactions on lead steps
     if (isPreviewing || editingTooltip) return;
     if (!currentStepId) return;
     // If there is an existing hotspot, only start editing/dragging when clicking the dot region
@@ -498,6 +594,7 @@ export function DemoEditorPage() {
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!imageRef.current) return;
+    if (isCurrentLeadStep) return;
     // Drag to move existing hotspot
     if (isDraggingHotspot && dragHotspotId && currentStepId && naturalSize) {
       const rect = imageRef.current.getBoundingClientRect();
@@ -526,6 +623,7 @@ export function DemoEditorPage() {
 
   const handleMouseUp = (e: React.MouseEvent) => {
     if (!imageRef.current) return;
+    if (isCurrentLeadStep) return;
     if (!currentStepId) return;
 
     // Finish dragging existing hotspot
@@ -663,12 +761,15 @@ export function DemoEditorPage() {
     { enabled: !!editingTooltip }
   );
 
-  const annotatedIndices = steps.map((s, idx) => (hotspotsByStep[s.id]?.length ? idx : -1)).filter((v) => v >= 0);
+  // Steps to include in preview: any with a hotspot OR the lead-capture step
+  const previewableIndices = steps
+    .map((s, idx) => (s.isLeadCapture || (hotspotsByStep[s.id]?.length ? true : false) ? idx : -1))
+    .filter((v) => v >= 0);
 
   const enterPreview = () => {
     setIsPreviewing(true);
-    if (currentStepId && !(hotspotsByStep[currentStepId]?.length > 0)) {
-      if (annotatedIndices.length > 0) setSelectedStepIndex(annotatedIndices[0]);
+    if (currentStepId && !(hotspotsByStep[currentStepId]?.length > 0) && !isCurrentLeadStep) {
+      if (previewableIndices.length > 0) setSelectedStepIndex(previewableIndices[0]);
     }
   };
 
@@ -677,17 +778,17 @@ export function DemoEditorPage() {
   };
 
   const gotoPrevAnnotated = () => {
-    if (annotatedIndices.length === 0) return;
-    const pos = annotatedIndices.indexOf(selectedStepIndex);
+    if (previewableIndices.length === 0) return;
+    const pos = previewableIndices.indexOf(selectedStepIndex);
     const prevPos = pos > 0 ? pos - 1 : 0;
-    setSelectedStepIndex(annotatedIndices[prevPos]);
+    setSelectedStepIndex(previewableIndices[prevPos]);
   };
 
   const gotoNextAnnotated = () => {
-    if (annotatedIndices.length === 0) return;
-    const pos = annotatedIndices.indexOf(selectedStepIndex);
-    const nextPos = pos >= 0 && pos < annotatedIndices.length - 1 ? pos + 1 : pos;
-    if (nextPos >= 0) setSelectedStepIndex(annotatedIndices[nextPos]);
+    if (previewableIndices.length === 0) return;
+    const pos = previewableIndices.indexOf(selectedStepIndex);
+    const nextPos = pos >= 0 && pos < previewableIndices.length - 1 ? pos + 1 : pos;
+    if (nextPos >= 0) setSelectedStepIndex(previewableIndices[nextPos]);
   };
 
   return (
@@ -813,8 +914,8 @@ export function DemoEditorPage() {
                 Prev
               </button>
               <span className="text-xs text-gray-600">
-                {annotatedIndices.length > 0
-                  ? `${annotatedIndices.indexOf(selectedStepIndex) + 1} / ${annotatedIndices.length}`
+                {previewableIndices.length > 0
+                  ? `${previewableIndices.indexOf(selectedStepIndex) + 1} / ${previewableIndices.length}`
                   : "0 / 0"}
               </span>
               <button onClick={gotoNextAnnotated} className="text-sm py-1 px-2 rounded border bg-white border-gray-300">
@@ -827,11 +928,11 @@ export function DemoEditorPage() {
           ref={imageRef}
           className="bg-gray-200 border rounded-xl w-full min-h-[320px] flex items-center justify-center relative overflow-hidden"
           style={
-            naturalSize
+            effectiveNaturalSize
               ? {
-                  aspectRatio: `${naturalSize.w} / ${naturalSize.h}`,
+                  aspectRatio: `${effectiveNaturalSize.w} / ${effectiveNaturalSize.h}`,
                   width: "100%",
-                  maxWidth: `${naturalSize.w}px`,
+                  maxWidth: `${effectiveNaturalSize.w}px`,
                 }
               : undefined
           }
@@ -839,7 +940,7 @@ export function DemoEditorPage() {
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
         >
-          {(loadingSteps || imageLoading || (steps.length > 0 && !naturalSize)) && (
+          {!isCurrentLeadStep && loadingSteps && steps.length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center bg-white/80 z-20 pointer-events-none">
               <div className="flex items-center gap-2 text-gray-700">
                 <Loader2 className="h-5 w-5 animate-spin" />
@@ -848,15 +949,27 @@ export function DemoEditorPage() {
             </div>
           )}
           {steps.length > 0 ? (
-            <img
-              src={steps[selectedStepIndex]?.screenshotUrl}
-              alt={`Step ${selectedStepIndex + 1}`}
-              onLoad={() => setImageLoading(false)}
-              onError={() => setImageLoading(false)}
-              className={`absolute inset-0 w-full h-full object-contain ${
-                loadingSteps || imageLoading || (steps.length > 0 && !naturalSize) ? "opacity-50" : "opacity-100"
-              }`}
-            />
+            isCurrentLeadStep ? (
+              <LeadCaptureOverlay
+                bg={steps[selectedStepIndex]?.leadBg === "black" ? "black" : "white"}
+              />
+            ) : isPreviewing ? (
+              <HotspotOverlay
+                className="absolute inset-0 w-full h-full"
+                imageUrl={steps[selectedStepIndex]?.screenshotUrl}
+                hotspots={currentHotspots as any}
+              />
+            ) : (
+              <img
+                src={steps[selectedStepIndex]?.screenshotUrl}
+                alt={`Step ${selectedStepIndex + 1}`}
+                onLoad={() => setImageLoading(false)}
+                onError={() => setImageLoading(false)}
+                className={`absolute inset-0 w-full h-full object-contain ${
+                  imageLoading ? "opacity-50" : "opacity-100"
+                }`}
+              />
+            )
           ) : demoIdParam && !loadingSteps ? (
             <span className="text-gray-500 text-sm">No steps found for this demo or unable to load images.</span>
           ) : !loadingSteps ? (
@@ -885,7 +998,7 @@ export function DemoEditorPage() {
             </div>
           ) : null}
 
-          {currentHotspots.map((hotspot) => {
+          {!isPreviewing && !isCurrentLeadStep && currentHotspots.map((hotspot) => {
             const containerRect = imageRef.current?.getBoundingClientRect();
             let centerX = 0;
             let centerY = 0;
@@ -974,7 +1087,93 @@ export function DemoEditorPage() {
         </div>
       </div>
       <div className="w-80 bg-gray-100 p-4 border-l space-y-6">
-        <h2 className="text-xl font-semibold mb-4">Steps</h2>
+        <h2 className="text-xl font-semibold mb-2 flex items-center justify-between">
+          <span>Steps</span>
+          <button
+            title="Add lead generation step"
+            className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50"
+            onClick={() => {
+              setLeadUiOpen((v) => !v);
+              const safeLen = Math.max(1, steps.length);
+              const suggested = Math.min(safeLen, selectedStepIndex + 1);
+              setLeadInsertAnchor(suggested);
+              setLeadInsertPos("after");
+            }}
+          >
+            + Lead
+          </button>
+        </h2>
+        {leadUiOpen && (
+          <div className="mb-3 p-3 bg-white border rounded-lg shadow-sm text-xs text-gray-700">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium">Add lead form</span>
+              <label className="inline-flex items-center gap-1">
+                <input
+                  type="radio"
+                  name="leadpos"
+                  className="accent-blue-600"
+                  checked={leadInsertPos === "before"}
+                  onChange={() => setLeadInsertPos("before")}
+                />
+                <span>before</span>
+              </label>
+              <label className="inline-flex items-center gap-1">
+                <input
+                  type="radio"
+                  name="leadpos"
+                  className="accent-blue-600"
+                  checked={leadInsertPos === "after"}
+                  onChange={() => setLeadInsertPos("after")}
+                />
+                <span>after</span>
+              </label>
+              <span>step</span>
+              <select
+                value={leadInsertAnchor}
+                onChange={(e) => setLeadInsertAnchor(Math.max(1, Math.min(Math.max(1, steps.length), parseInt(e.target.value || "1", 10))))}
+                className="border rounded px-2 py-1 text-xs bg-white"
+              >
+                {Array.from({ length: Math.max(1, steps.length) }, (_, i) => i + 1).map((n) => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  className="text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
+                  onClick={() => {
+                    const anchor0 = Math.max(1, Math.min(Math.max(1, steps.length), leadInsertAnchor)) - 1; // 0-based
+                    const insertIndex = leadInsertPos === "before" ? anchor0 : anchor0 + 1;
+                    const newStep = {
+                      id: `LEAD-${Math.random().toString(36).slice(2,9)}`,
+                      pageUrl: "",
+                      screenshotUrl: undefined,
+                      isLeadCapture: true as const,
+                      leadBg: "white" as const,
+                    };
+                    setSteps((prev) => {
+                      const next = [...prev];
+                      const idx = Math.max(0, Math.min(next.length, insertIndex));
+                      next.splice(idx, 0, newStep);
+                      return next;
+                    });
+                    setHotspotsByStep((prev) => ({ ...prev }));
+                    const nextIndex = Math.max(0, Math.min(steps.length, insertIndex));
+                    setSelectedStepIndex(nextIndex);
+                    setLeadUiOpen(false);
+                  }}
+                >
+                  Insert
+                </button>
+                <button
+                  className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50"
+                  onClick={() => setLeadUiOpen(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         <div className="space-y-2">
           {steps.length === 0 && !loadingSteps && (
             <div className="text-xs text-gray-600">
@@ -1002,10 +1201,16 @@ export function DemoEditorPage() {
                 idx === selectedStepIndex ? "border-blue-600" : "border-transparent"
               }`}
             >
-              <img src={s.screenshotUrl} alt="thumb" className="w-16 h-12 object-cover rounded" />
+              {s.isLeadCapture ? (
+                <div className={`w-16 h-12 rounded flex items-center justify-center text-[10px] border ${s.leadBg === 'black' ? 'bg-black text-white' : 'bg-white text-gray-700'}`}>
+                  LEAD
+                </div>
+              ) : (
+                <img src={s.screenshotUrl} alt="thumb" className="w-16 h-12 object-cover rounded" />
+              )}
               <div className="flex-1">
                 <p className="text-sm font-medium">Step {idx + 1}</p>
-                <p className="text-[10px] text-gray-500 truncate">{s.pageUrl}</p>
+                <p className="text-[10px] text-gray-500 truncate">{s.isLeadCapture ? 'Lead capture' : s.pageUrl}</p>
               </div>
             </button>
           ))}
@@ -1014,7 +1219,9 @@ export function DemoEditorPage() {
         {/* Tooltip Inspector */}
         <div className="pt-4 border-t mt-6">
           <h3 className="text-lg font-semibold mb-3">Tooltip Inspector</h3>
-          {currentHotspots.length === 0 ? (
+          {isCurrentLeadStep ? (
+            <div className="text-xs text-gray-600">Lead capture step has no hotspots.</div>
+          ) : currentHotspots.length === 0 ? (
             <div className="text-xs text-gray-600">No tooltip on this step. Click on the image to add one.</div>
           ) : (
             (() => {
