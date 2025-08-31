@@ -4,14 +4,15 @@ import { Input } from "@/components/ui/input";
 import { syncAnonymousDemo, type EditedDraft } from "../lib/services/syncAnonymousDemo";
 import { useAuth } from "@/lib/providers/AuthProvider";
 import { useSearchParams } from "react-router-dom";
-import { 
+import {
+  deleteDemo,
   listDemoItems,
   renameDemo,
-  setDemoStatus as setDemoStatusApi,
-  deleteDemo,
+  setDemoStatus,
   updateDemoStepHotspots,
   mirrorDemoToPublic,
   updateDemoLeadConfig,
+  updateDemoStyleConfig,
 } from "@/lib/api/demos";
 import { getUrl } from "aws-amplify/storage";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -161,6 +162,22 @@ export function DemoEditorPage() {
         if (meta) {
           setDemoName(meta.name || "");
           setDemoStatusLocal((meta.status as any) === "PUBLISHED" ? "PUBLISHED" : "DRAFT");
+          // Restore saved hotspot styling if present
+          try {
+            const raw = (meta as any).hotspotStyle;
+            if (raw) {
+              const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+              if (parsed && typeof parsed === "object") {
+                setTooltipStyle((prev) => ({
+                  dotSize: Number(parsed.dotSize ?? prev.dotSize ?? 12),
+                  dotColor: String(parsed.dotColor ?? prev.dotColor ?? "#2563eb"),
+                  dotStrokePx: Number(parsed.dotStrokePx ?? prev.dotStrokePx ?? 2),
+                  dotStrokeColor: String(parsed.dotStrokeColor ?? prev.dotStrokeColor ?? "#ffffff"),
+                  animation: (parsed.animation ?? prev.animation ?? "none") as any,
+                }));
+              }
+            }
+          } catch {}
         }
         const stepItems = (items || []).filter((it: any) => String(it.itemSK || "").startsWith("STEP#"));
         stepItems.sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0));
@@ -256,6 +273,36 @@ export function DemoEditorPage() {
           setTimeout(() => loadFromBackend(demoId), delayMs);
           return;
         }
+        // If metadata did not include hotspotStyle, derive defaults from first hotspot present
+        try {
+          const hasMetaStyle = Boolean((meta as any)?.hotspotStyle);
+          if (!hasMetaStyle) {
+            let derived: any = null;
+            for (const list of Object.values(hotspotsMap)) {
+              if (Array.isArray(list) && list.length > 0) {
+                const h = list[0] as any;
+                derived = {
+                  dotSize: Number(h?.dotSize ?? 12),
+                  dotColor: String(h?.dotColor ?? "#2563eb"),
+                  dotStrokePx: Number(h?.dotStrokePx ?? 2),
+                  dotStrokeColor: String(h?.dotStrokeColor ?? "#ffffff"),
+                  animation: (h?.animation ?? "none") as any,
+                };
+                break;
+              }
+            }
+            if (derived) {
+              setTooltipStyle((prev) => ({
+                dotSize: Number(derived.dotSize ?? prev.dotSize ?? 12),
+                dotColor: String(derived.dotColor ?? prev.dotColor ?? "#2563eb"),
+                dotStrokePx: Number(derived.dotStrokePx ?? prev.dotStrokePx ?? 2),
+                dotStrokeColor: String(derived.dotStrokeColor ?? prev.dotStrokeColor ?? "#ffffff"),
+                animation: (derived.animation ?? prev.animation ?? "none") as any,
+              }));
+            }
+          }
+        } catch {}
+
         // Insert saved lead-capture step from METADATA if present
         try {
           let leadIdxSaved: number | null | undefined = (meta as any)?.leadStepIndex;
@@ -525,6 +572,12 @@ export function DemoEditorPage() {
           }
         } catch (e) {
           console.warn("Failed to persist lead config (non-fatal)", e);
+        }
+        // Persist global hotspot tooltip style so the right panel restores it next visit
+        try {
+          await updateDemoStyleConfig({ demoId: demoIdParam, hotspotStyle: tooltipStyle });
+        } catch (e) {
+          console.warn("Failed to persist hotspot style (non-fatal)", e);
         }
         try {
           await mirrorDemoToPublic(demoIdParam);
@@ -841,7 +894,7 @@ export function DemoEditorPage() {
                     const next = demoStatus === "PUBLISHED" ? "DRAFT" : "PUBLISHED";
                     try {
                       setTogglingStatus(true);
-                      await setDemoStatusApi(demoIdParam, next);
+                      await setDemoStatus(demoIdParam, next);
                       setDemoStatusLocal(next);
                     } catch (e) {
                       console.error("Failed to update status", e);

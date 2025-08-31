@@ -22,6 +22,12 @@ type PublicStep = {
     yNorm?: number;
     tooltip?: string;
     targetStep?: number;
+    // Styling (optional; if absent, we will apply defaults from METADATA.hotspotStyle)
+    dotSize?: number;
+    dotColor?: string;
+    animation?: "none" | "pulse" | "breathe" | "fade";
+    dotStrokePx?: number;
+    dotStrokeColor?: string;
   }>;
 };
 
@@ -37,6 +43,13 @@ export default function PublicDemoPlayer() {
   const [steps, setSteps] = useState<PublicStep[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [itemsRaw, setItemsRaw] = useState<any[]>([]);
+  const [hotspotStyleDefaults, setHotspotStyleDefaults] = useState<{
+    dotSize: number;
+    dotColor: string;
+    dotStrokePx: number;
+    dotStrokeColor: string;
+    animation: "none" | "pulse" | "breathe" | "fade";
+  }>({ dotSize: 12, dotColor: "#2563eb", dotStrokePx: 2, dotStrokeColor: "#ffffff", animation: "none" });
 
   useEffect(() => {
     let cancelled = false;
@@ -75,6 +88,23 @@ export default function PublicDemoPlayer() {
           lBg = metadata?.leadBg === "black" ? "black" : "white";
         }
         setLeadBg(lBg);
+        // Read hotspot style defaults from METADATA
+        try {
+          const rawStyle = metadata?.hotspotStyle;
+          if (rawStyle) {
+            const parsed = typeof rawStyle === "string" ? JSON.parse(rawStyle) : rawStyle;
+            if (parsed && typeof parsed === "object") {
+              setHotspotStyleDefaults({
+                dotSize: Number(parsed.dotSize ?? 12),
+                dotColor: String(parsed.dotColor ?? "#2563eb"),
+                dotStrokePx: Number(parsed.dotStrokePx ?? 2),
+                dotStrokeColor: String(parsed.dotStrokeColor ?? "#ffffff"),
+                animation: (parsed.animation ?? "none") as any,
+              });
+            }
+          }
+        } catch {}
+
         const stepItems: PublicStep[] = items
           .filter((it: any) => typeof it.itemSK === "string" && it.itemSK.startsWith("STEP#"))
           .map((it: any) => ({
@@ -194,10 +224,17 @@ export default function PublicDemoPlayer() {
       steps.map((s, i) => ({
         id: s.itemSK,
         imageUrl: i === currentRealIndex ? resolvedSrc : undefined,
-        hotspots: s.hotspots as any,
+        hotspots: (s.hotspots || []).map((h) => ({
+          ...h,
+          dotSize: h.dotSize ?? hotspotStyleDefaults.dotSize,
+          dotColor: h.dotColor ?? hotspotStyleDefaults.dotColor,
+          dotStrokePx: h.dotStrokePx ?? hotspotStyleDefaults.dotStrokePx,
+          dotStrokeColor: h.dotStrokeColor ?? hotspotStyleDefaults.dotStrokeColor,
+          animation: (h.animation ?? hotspotStyleDefaults.animation) as any,
+        })) as any,
         pageUrl: s.pageUrl,
       })),
-    [steps, currentRealIndex, resolvedSrc]
+    [steps, currentRealIndex, resolvedSrc, hotspotStyleDefaults]
   );
 
   if (!demoId) return <div className="p-6">Missing demoId</div>;

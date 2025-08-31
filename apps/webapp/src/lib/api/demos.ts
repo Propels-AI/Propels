@@ -8,8 +8,37 @@ function getModels() {
   if (!models) {
     throw new Error("Amplify Data models unavailable after generateClient(). Check Amplify.configure outputs.data");
   }
-
   return models;
+}
+
+// Persist editor hotspot styling config to METADATA so the editor can restore it later
+export async function updateDemoStyleConfig(params: {
+  demoId: string;
+  hotspotStyle: {
+    dotSize: number;
+    dotColor: string;
+    dotStrokePx: number;
+    dotStrokeColor: string;
+    animation: "none" | "pulse" | "breathe" | "fade";
+  };
+}): Promise<void> {
+  const { demoId, hotspotStyle } = params;
+  const models = getModels();
+  const payload: any = {
+    demoId,
+    itemSK: "METADATA",
+  };
+  try {
+    payload.hotspotStyle = JSON.stringify(hotspotStyle);
+  } catch (e) {
+    console.warn("[api/demos] Failed to stringify hotspotStyle; omitting", e);
+  }
+  const res = await models.Demo.update(payload);
+  if (!res?.data || (res as any)?.errors?.length) {
+    throw new Error(
+      `updateDemoStyleConfig failed: ${(res as any)?.errors?.map((e: any) => e?.message).join(", ") || "no data returned"}`
+    );
+  }
 }
 
 export async function updateDemoLeadConfig(params: {
