@@ -221,8 +221,11 @@ export async function deletePublicDemoItems(demoId: string) {
   }
 }
 
-export async function mirrorDemoToPublic(demoId: string): Promise<void> {
-  console.log("[api/demos] mirrorDemoToPublic START", { demoId });
+export async function mirrorDemoToPublic(
+  demoId: string,
+  overrides?: { name?: string; leadStepIndex?: number | null; leadConfig?: any }
+): Promise<void> {
+  console.log("[api/demos] mirrorDemoToPublic START", { demoId, overrides });
   const now = new Date().toISOString();
   const items = await listDemoItems(demoId);
   if (!Array.isArray(items) || items.length === 0) {
@@ -233,11 +236,13 @@ export async function mirrorDemoToPublic(demoId: string): Promise<void> {
   if (meta) {
     await createPublicDemoMetadata({
       demoId,
-      name: meta.name,
+      name: overrides?.name ?? meta.name,
       createdAt: meta.createdAt,
       updatedAt: now,
-      leadStepIndex: meta.leadStepIndex ?? null,
-      leadConfig: meta.leadConfig ?? undefined,
+      leadStepIndex:
+        overrides && "leadStepIndex" in overrides ? overrides.leadStepIndex ?? null : (meta.leadStepIndex ?? null),
+      leadConfig:
+        overrides && "leadConfig" in overrides ? overrides.leadConfig ?? undefined : (meta.leadConfig ?? undefined),
     });
   } else {
     console.warn("[api/demos] mirrorDemoToPublic: METADATA missing");
@@ -484,13 +489,24 @@ export async function listDemoItems(demoId: string) {
       const models = getModels();
       const res = await models.Demo.list({ filter: { demoId: { eq: demoId } } });
       console.debug("[api/demos] listDemoItems res (userPool):", res);
-      return res.data;
+      const items = res?.data ?? [];
+      if (Array.isArray(items) && items.length > 0) return items;
+      // Fallback: if userPool returned zero items (e.g., not owner yet), try PublicDemo mirror
+      try {
+        const pubItems = await listPublicDemoItems(demoId);
+        console.debug("[api/demos] listDemoItems res (PublicDemo fallback after empty):", {
+          count: pubItems?.length,
+        });
+        return pubItems;
+      } catch (publicAfterEmptyErr) {
+        console.warn("[api/demos] PublicDemo fallback after empty failed", publicAfterEmptyErr);
+        return items;
+      }
     } catch (userErr) {
-      console.warn("[api/demos] userPool read failed; trying public apiKey", userErr);
-      const publicModels = getPublicModels();
-      const res = await publicModels.Demo.list({ filter: { demoId: { eq: demoId } } });
-      console.debug("[api/demos] listDemoItems res (public):", res);
-      return res.data;
+      console.warn("[api/demos] userPool read failed; trying PublicDemo", userErr);
+      const pubItems = await listPublicDemoItems(demoId);
+      console.debug("[api/demos] listDemoItems res (PublicDemo after error):", { count: pubItems?.length });
+      return pubItems;
     }
   } catch (e) {
     console.error("[api/demos] listDemoItems error", e);

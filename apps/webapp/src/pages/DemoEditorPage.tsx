@@ -11,6 +11,7 @@ import {
   setDemoStatus,
   updateDemoStepHotspots,
   mirrorDemoToPublic,
+  deletePublicDemoItems,
   updateDemoLeadConfig,
   updateDemoStyleConfig,
 } from "@/lib/api/demos";
@@ -520,12 +521,16 @@ export function DemoEditorPage() {
   }, []);
 
   const handleSave = async () => {
+    const leadIdxDraft = steps.findIndex((s) => Boolean(s.isLeadCapture));
+    const leadCfgDraft = leadIdxDraft >= 0 ? { style: "solid", bg: steps[leadIdxDraft]?.leadBg === "black" ? "black" : "white" } : undefined;
     const draft: EditedDraft = {
       draftId: (crypto as any).randomUUID ? (crypto as any).randomUUID() : `${Date.now()}`,
       createdAt: new Date().toISOString(),
       name: undefined,
       steps: steps.map((s, idx) => ({ id: s.id, pageUrl: s.pageUrl, order: idx })),
       hotspotsByStep: hotspotsByStep,
+      leadStepIndex: leadIdxDraft >= 0 ? leadIdxDraft : null,
+      leadConfig: leadCfgDraft,
     };
 
     if (!isAuthenticated) {
@@ -568,10 +573,29 @@ export function DemoEditorPage() {
         } catch (e) {
           console.warn("Failed to persist hotspot style (non-fatal)", e);
         }
-        try {
-          await mirrorDemoToPublic(demoIdParam);
-        } catch (mirrorErr) {
-          console.warn("Mirror to public failed (will still keep private saved).", mirrorErr);
+        // Only mirror to PublicDemo if this demo is published; otherwise ensure no public items remain
+        if (demoStatus === "PUBLISHED") {
+          try {
+            // Prepare overrides to avoid relying on eventual consistency
+            const leadIdxNow = steps.findIndex((s) => Boolean(s.isLeadCapture));
+            const leadCfgNow =
+              leadIdxNow >= 0
+                ? { style: "solid", bg: steps[leadIdxNow]?.leadBg === "black" ? "black" : "white" }
+                : undefined;
+            await mirrorDemoToPublic(demoIdParam, {
+              name: demoName || undefined,
+              leadStepIndex: leadIdxNow >= 0 ? leadIdxNow : null,
+              leadConfig: leadCfgNow,
+            });
+          } catch (mirrorErr) {
+            console.warn("Mirror to public failed (will still keep private saved).", mirrorErr);
+          }
+        } else {
+          try {
+            await deletePublicDemoItems(demoIdParam);
+          } catch (unpubErr) {
+            console.warn("Failed to remove public items for draft (non-fatal)", unpubErr);
+          }
         }
         toast.success("Saved annotations");
       } else {
