@@ -43,9 +43,18 @@ describe("DemoEditorPage Tooltip Inspector", () => {
       {
         itemSK: "STEP#s1",
         s3Key: "https://cdn.example.com/s1.png",
-        pageUrl: "https://ex.com",
+        pageUrl: "https://example.com",
         hotspots: JSON.stringify([
-          { id: "h1", width: 10, height: 10, dotSize: 12, dotColor: "#2563eb", dotStrokePx: 2, dotStrokeColor: "#ffffff", animation: "none" },
+          {
+            id: "h1",
+            width: 10,
+            height: 10,
+            dotSize: 12,
+            dotColor: "#2563eb",
+            dotStrokePx: 2,
+            dotStrokeColor: "#ffffff",
+            animation: "none",
+          },
         ]),
       },
     ]);
@@ -66,7 +75,7 @@ describe("DemoEditorPage Tooltip Inspector", () => {
     await waitFor(() => expect(screen.getByText(/12 px/i)).toBeInTheDocument());
 
     // Change size to 24
-    const sizeInput = (screen.getAllByRole("slider")[0]) as HTMLInputElement;
+    const sizeInput = screen.getAllByRole("slider")[0] as HTMLInputElement;
     fireEvent.change(sizeInput, { target: { value: "24" } });
     await waitFor(() => expect(screen.getByText(/24 px/i)).toBeInTheDocument());
 
@@ -79,7 +88,7 @@ describe("DemoEditorPage Tooltip Inspector", () => {
     fireEvent.click(screen.getByRole("button", { name: /stroke/i }));
 
     // Change stroke width to 3
-    const strokeWidthInput = (screen.getAllByRole("slider")[0]) as HTMLInputElement;
+    const strokeWidthInput = screen.getAllByRole("slider")[0] as HTMLInputElement;
     fireEvent.change(strokeWidthInput, { target: { value: "3" } });
     await waitFor(() => expect(screen.getByText(/3 px/i)).toBeInTheDocument());
 
