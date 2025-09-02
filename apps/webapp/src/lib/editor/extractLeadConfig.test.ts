@@ -16,10 +16,10 @@ describe("extractLeadConfig", () => {
   it("defaults to white bg when leadBg is missing or invalid", () => {
     const steps = [
       { isLeadCapture: false },
-      // @ts-expect-error testing invalid value toleration
       { isLeadCapture: true, leadBg: "purple" },
     ];
-    const res = extractLeadConfig(steps);
+    // Intentionally pass a wider-typed array to simulate invalid input
+    const res = extractLeadConfig(steps as any);
     expect(res.leadStepIndex).toBe(1);
     expect(res.leadConfig).toEqual<LeadConfig>({ style: "solid", bg: "white" });
   });
