@@ -8,6 +8,21 @@ interface DemoCapture {
   pageUrl: string;
   timestamp: number;
   stepOrder: number;
+  clickX?: number;
+  clickY?: number;
+  scrollX?: number;
+  scrollY?: number;
+  viewportWidth?: number;
+  viewportHeight?: number;
+  devicePixelRatio?: number;
+  xNorm?: number;
+  yNorm?: number;
+  clickXCss?: number;
+  clickYCss?: number;
+  clickXDpr?: number;
+  clickYDpr?: number;
+  screenshotCssWidth?: number;
+  screenshotCssHeight?: number;
 }
 
 interface CaptureSessionResponse {
@@ -512,38 +527,21 @@ chrome.runtime.onMessageExternal.addListener((message: any, sender, sendResponse
                 timestamp: c.timestamp,
                 stepOrder: c.stepOrder,
                 screenshotDataUrl,
-                // Pass-through click metadata for editor placement
-                // @ts-ignore
-                clickX: (c as any).clickX,
-                // @ts-ignore
-                clickY: (c as any).clickY,
-                // @ts-ignore
-                scrollX: (c as any).scrollX,
-                // @ts-ignore
-                scrollY: (c as any).scrollY,
-                // @ts-ignore
-                viewportWidth: (c as any).viewportWidth,
-                // @ts-ignore
-                viewportHeight: (c as any).viewportHeight,
-                // @ts-ignore
-                devicePixelRatio: (c as any).devicePixelRatio,
-                // @ts-ignore
-                xNorm: (c as any).xNorm,
-                // @ts-ignore
-                yNorm: (c as any).yNorm,
-                // New DPR-aware and CSS-dimension fields
-                // @ts-ignore
-                clickXCss: (c as any).clickXCss,
-                // @ts-ignore
-                clickYCss: (c as any).clickYCss,
-                // @ts-ignore
-                clickXDpr: (c as any).clickXDpr,
-                // @ts-ignore
-                clickYDpr: (c as any).clickYDpr,
-                // @ts-ignore
-                screenshotCssWidth: (c as any).screenshotCssWidth,
-                // @ts-ignore
-                screenshotCssHeight: (c as any).screenshotCssHeight,
+                clickX: c.clickX,
+                clickY: c.clickY,
+                scrollX: c.scrollX,
+                scrollY: c.scrollY,
+                viewportWidth: c.viewportWidth,
+                viewportHeight: c.viewportHeight,
+                devicePixelRatio: c.devicePixelRatio,
+                xNorm: c.xNorm,
+                yNorm: c.yNorm,
+                clickXCss: c.clickXCss,
+                clickYCss: c.clickYCss,
+                clickXDpr: c.clickXDpr,
+                clickYDpr: c.clickYDpr,
+                screenshotCssWidth: c.screenshotCssWidth,
+                screenshotCssHeight: c.screenshotCssHeight,
               };
             })
           );
