@@ -28,6 +28,7 @@ import {
   type TooltipStyle,
 } from "@/lib/editor/deriveTooltipStyleFromHotspots";
 import { applyGlobalStyleToHotspots } from "@/lib/editor/applyGlobalStyleToHotspots";
+import { extractLeadConfig } from "@/lib/editor/extractLeadConfig";
 
 export function DemoEditorPage() {
   const { user, isLoading } = useAuth();
@@ -562,18 +563,14 @@ export function DemoEditorPage() {
   }, []);
 
   const handleSave = async () => {
-    const leadIdxDraft = steps.findIndex((s) => Boolean(s.isLeadCapture));
-    const leadCfgDraft =
-      leadIdxDraft >= 0
-        ? { style: "solid", bg: steps[leadIdxDraft]?.leadBg === "black" ? "black" : "white" }
-        : undefined;
+    const { leadStepIndex: leadIdxDraft, leadConfig: leadCfgDraft } = extractLeadConfig(steps);
     const draft: EditedDraft = {
       draftId: (crypto as any).randomUUID ? (crypto as any).randomUUID() : `${Date.now()}`,
       createdAt: new Date().toISOString(),
       name: undefined,
       steps: steps.map((s, idx) => ({ id: s.id, pageUrl: s.pageUrl, order: idx })),
       hotspotsByStep: hotspotsByStep,
-      leadStepIndex: leadIdxDraft >= 0 ? leadIdxDraft : null,
+      leadStepIndex: leadIdxDraft,
       leadConfig: leadCfgDraft,
     };
 
@@ -600,11 +597,9 @@ export function DemoEditorPage() {
         await Promise.all(updates);
         // Persist lead configuration (index/bg/config) on METADATA
         try {
-          const leadIdx = steps.findIndex((s) => Boolean(s.isLeadCapture));
-          if (leadIdx >= 0) {
-            const bg = steps[leadIdx]?.leadBg === "black" ? "black" : "white";
-            const leadConfig = { style: "solid", bg } as any; // future-proof config container
-            await updateDemoLeadConfig({ demoId: demoIdParam, leadStepIndex: leadIdx, leadConfig });
+          const { leadStepIndex, leadConfig } = extractLeadConfig(steps);
+          if (leadStepIndex !== null) {
+            await updateDemoLeadConfig({ demoId: demoIdParam, leadStepIndex, leadConfig: leadConfig as any });
           } else {
             await updateDemoLeadConfig({ demoId: demoIdParam, leadStepIndex: null });
           }
@@ -621,14 +616,10 @@ export function DemoEditorPage() {
         if (demoStatus === "PUBLISHED") {
           try {
             // Prepare overrides to avoid relying on eventual consistency
-            const leadIdxNow = steps.findIndex((s) => Boolean(s.isLeadCapture));
-            const leadCfgNow =
-              leadIdxNow >= 0
-                ? { style: "solid", bg: steps[leadIdxNow]?.leadBg === "black" ? "black" : "white" }
-                : undefined;
+            const { leadStepIndex: leadIdxNow, leadConfig: leadCfgNow } = extractLeadConfig(steps);
             await mirrorDemoToPublic(demoIdParam, {
               name: demoName || undefined,
-              leadStepIndex: leadIdxNow >= 0 ? leadIdxNow : null,
+              leadStepIndex: leadIdxNow,
               leadConfig: leadCfgNow,
             });
           } catch (mirrorErr) {
