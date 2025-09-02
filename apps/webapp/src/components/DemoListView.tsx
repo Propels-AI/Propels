@@ -37,12 +37,6 @@ export function DemoListView(props: { statusFilter?: "ALL" | "DRAFT" | "PUBLISHE
     onSuccess: () => refetch(),
   });
 
-  // Debug logs for query lifecycle
-  console.debug("[DemoListView] query status:", status);
-  if (isLoading) console.debug("[DemoListView] loading demos...");
-  if (error) console.error("[DemoListView] error loading demos:", error);
-  if (!isLoading && !error) console.debug("[DemoListView] demos loaded:", demos);
-
   // Auth loading state
   if (authLoading) {
     return <div>Checking authentication…</div>;

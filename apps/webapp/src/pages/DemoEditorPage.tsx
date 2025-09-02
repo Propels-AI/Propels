@@ -134,7 +134,6 @@ export function DemoEditorPage() {
   const [isPreviewing, setIsPreviewing] = useState<boolean>(false);
   const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
   const [imageLoading, setImageLoading] = useState<boolean>(false);
-  const [, setContainerSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
   const isCurrentLeadStep = Boolean(steps[selectedStepIndex]?.isLeadCapture);
   // Keep canvas size consistent on lead steps: use last known naturalSize or a sane default
   const effectiveNaturalSize = isCurrentLeadStep && !naturalSize ? { w: 1280, h: 800 } : naturalSize;
@@ -143,49 +142,14 @@ export function DemoEditorPage() {
   const currentHotspots: Hotspot[] = currentStepId ? (hotspotsByStep[currentStepId] ?? []) : [];
 
   useEffect(() => {
-    console.log("[Editor] mounted", { demoIdParam, isAuthenticated });
-  }, [demoIdParam, isAuthenticated]);
-
-  useEffect(() => {
-    const url = steps[selectedStepIndex]?.screenshotUrl;
-    if (!url) {
-      setNaturalSize(null);
-      return;
-    }
-    setNaturalSize(null);
-    setImageLoading(true);
-    const img = new Image();
-    img.onload = () => {
-      setNaturalSize({ w: img.naturalWidth, h: img.naturalHeight });
-      setImageLoading(false);
-    };
-    img.onerror = () => {
-      setNaturalSize(null);
-      setImageLoading(false);
-    };
-    img.src = url;
-  }, [steps, selectedStepIndex]);
-
-  useEffect(() => {
     const loadFromBackend = async (demoId: string) => {
       try {
-        // Keep loading state true across retries to avoid flashing 0 steps UI
         setLoadingSteps(true);
-        console.log("[Editor] Loading demo from backend", { demoId });
-        // Ensure auth session is ready so Data and Storage calls have credentials
-        try {
-          const { fetchAuthSession } = await import("aws-amplify/auth");
-          await fetchAuthSession();
-        } catch (e) {
-          console.warn("[Editor] fetchAuthSession failed (continuing)", e);
-        }
         const items = await listDemoItems(demoId);
-        console.log("[Editor] listDemoItems returned", { count: items?.length, items });
         const meta = (items || []).find((it: any) => String(it.itemSK) === "METADATA");
         if (meta) {
           setDemoName(meta.name || "");
           setDemoStatusLocal((meta.status as any) === "PUBLISHED" ? "PUBLISHED" : "DRAFT");
-          // Restore saved hotspot styling if present
           try {
             const raw = (meta as any).hotspotStyle;
             if (raw) {
@@ -204,39 +168,6 @@ export function DemoEditorPage() {
         }
         const stepItems = (items || []).filter((it: any) => String(it.itemSK || "").startsWith("STEP#"));
         stepItems.sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0));
-        console.log("[Editor] stepItems", { count: stepItems.length, stepItems });
-        // If no steps yet, retry a few times (eventual consistency after creation)
-        if (!stepItems.length && loadAttemptsRef.current < 10) {
-          loadAttemptsRef.current += 1;
-          const delayMs = 300 + loadAttemptsRef.current * 300; // ~0.6s..3.3s
-          console.log(
-            "[Editor] No steps found; retrying load in",
-            delayMs,
-            "ms (attempt",
-            loadAttemptsRef.current,
-            ")"
-          );
-          setTimeout(() => {
-            // fire and forget; effect guard handles demoId match
-            loadFromBackend(demoId);
-          }, delayMs);
-          return; // don't proceed to set empty state yet
-        }
-        // If steps exist but required fields like s3Key are null (likely due to public read without owner auth), retry
-        const haveAnyS3 = stepItems.some((it: any) => !!it?.s3Key);
-        if (stepItems.length > 0 && !haveAnyS3 && loadAttemptsRef.current < 10) {
-          loadAttemptsRef.current += 1;
-          const delayMs = 400 + loadAttemptsRef.current * 400; // ~0.8s..4.4s
-          console.log(
-            "[Editor] Steps found but fields are null (awaiting auth/consistency); retrying in",
-            delayMs,
-            "ms (attempt",
-            loadAttemptsRef.current,
-            ")"
-          );
-          setTimeout(() => loadFromBackend(demoId), delayMs);
-          return;
-        }
         const urls: Array<{
           id: string;
           pageUrl: string;
@@ -269,7 +200,7 @@ export function DemoEditorPage() {
                 const { url } = await getUrl({ key: keyForStorage, options: { accessLevel: access as any } } as any);
                 screenshotUrl = url.toString();
               } catch (err) {
-                console.warn("[Editor] Storage.getUrl failed", { raw, keyForStorage, access }, err);
+                console.error("[Editor] Storage.getUrl failed", { raw, keyForStorage, access }, err);
               }
             }
             if (!screenshotUrl) continue;
@@ -288,21 +219,20 @@ export function DemoEditorPage() {
             console.error("[Editor] Failed to resolve S3 URL", { itemSK: si?.itemSK, s3Key: si?.s3Key }, e);
           }
         }
-        // If steps exist but we couldn't resolve any screenshot URLs yet, retry
-        if (stepItems.length > 0 && urls.length === 0 && loadAttemptsRef.current < 10) {
+        if (!stepItems.length && loadAttemptsRef.current < 10) {
+          loadAttemptsRef.current += 1;
+          const delayMs = 300 + loadAttemptsRef.current * 300; // ~0.6s..3.3s
+          setTimeout(() => {
+            loadFromBackend(demoId);
+          }, delayMs);
+          return;
+        }
+        if (stepItems.length > 0 && !urls.length && loadAttemptsRef.current < 10) {
           loadAttemptsRef.current += 1;
           const delayMs = 500 + loadAttemptsRef.current * 400;
-          console.log(
-            "[Editor] Steps present but screenshots unresolved; retrying in",
-            delayMs,
-            "ms (attempt",
-            loadAttemptsRef.current,
-            ")"
-          );
           setTimeout(() => loadFromBackend(demoId), delayMs);
           return;
         }
-        // If metadata did not include hotspotStyle, derive defaults from first hotspot present using helper
         try {
           const hasMetaStyle = Boolean((meta as any)?.hotspotStyle);
           if (!hasMetaStyle) {
@@ -327,8 +257,6 @@ export function DemoEditorPage() {
             }
           }
         } catch {}
-
-        // Insert saved lead-capture step from METADATA if present
         try {
           let leadIdxSaved: number | null | undefined = (meta as any)?.leadStepIndex;
           let leadBgSaved: "white" | "black" = "white";
@@ -352,14 +280,12 @@ export function DemoEditorPage() {
             urls.splice(leadIdxSaved, 0, leadStep);
           }
         } catch {}
-
         setSteps(urls);
         setHotspotsByStep(hotspotsMap);
         setSelectedStepIndex(0);
       } catch (e) {
         console.error("[Editor] Failed to load demo from backend", e);
       } finally {
-        // We only reach finally when not returning early (i.e., not retrying). Clear loading.
         setLoadingSteps(false);
       }
     };
@@ -372,7 +298,6 @@ export function DemoEditorPage() {
           const response = await chrome.runtime.sendMessage(extId, {
             type: "GET_CAPTURE_SESSION",
           });
-          console.log("[Editor] GET_CAPTURE_SESSION response:", response);
           if (response?.success && Array.isArray(response.data)) {
             const sorted = [...response.data].sort((a: any, b: any) => {
               const so = (a.stepOrder ?? 0) - (b.stepOrder ?? 0);
@@ -476,11 +401,10 @@ export function DemoEditorPage() {
           }
         }
       } catch (err) {
-        console.log("No extension data available", err);
+        console.error("No extension data available", err);
       }
     };
 
-    // Reset attempts when demoId changes
     loadAttemptsRef.current = 0;
     if (demoIdParam) {
       loadFromBackend(demoIdParam);
@@ -488,28 +412,6 @@ export function DemoEditorPage() {
       loadFromExtension();
     }
   }, [demoIdParam]);
-
-  useEffect(() => {
-    const el = imageRef.current;
-    if (!el) return;
-    const measure = () => {
-      const r = el.getBoundingClientRect();
-      setContainerSize({ w: r.width, h: r.height });
-    };
-    measure();
-    let ro: ResizeObserver | undefined;
-    try {
-      ro = new ResizeObserver(() => measure());
-      ro.observe(el);
-    } catch {}
-    window.addEventListener("resize", measure);
-    return () => {
-      window.removeEventListener("resize", measure);
-      try {
-        ro?.disconnect();
-      } catch {}
-    };
-  }, [selectedStepIndex, naturalSize]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -523,7 +425,6 @@ export function DemoEditorPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Apply global style changes to all hotspots across all steps
   const applyGlobalStyle = (
     patch: Partial<{
       dotSize: number;
@@ -544,7 +445,6 @@ export function DemoEditorPage() {
     );
   };
 
-  // Inject simple keyframes for optional animations used by tooltips
   useEffect(() => {
     const id = "propels-tooltip-animations";
     if (document.getElementById(id)) return;
@@ -589,13 +489,11 @@ export function DemoEditorPage() {
       setSavingDemo(true);
       if (demoIdParam) {
         const updates = steps.map(async (s) => {
-          // Skip lead-capture pseudo steps; they are not persisted backend steps
           if (s.isLeadCapture) return;
           const hs = hotspotsByStep[s.id] ?? [];
           await updateDemoStepHotspots({ demoId: demoIdParam, stepId: s.id, hotspots: hs as any });
         });
         await Promise.all(updates);
-        // Persist lead configuration (index/bg/config) on METADATA
         try {
           const { leadStepIndex, leadConfig } = extractLeadConfig(steps);
           if (leadStepIndex !== null) {
@@ -604,18 +502,15 @@ export function DemoEditorPage() {
             await updateDemoLeadConfig({ demoId: demoIdParam, leadStepIndex: null });
           }
         } catch (e) {
-          console.warn("Failed to persist lead config (non-fatal)", e);
+          console.error("Failed to persist lead config (non-fatal)", e);
         }
-        // Persist global hotspot tooltip style so the right panel restores it next visit
         try {
           await updateDemoStyleConfig({ demoId: demoIdParam, hotspotStyle: tooltipStyle });
         } catch (e) {
-          console.warn("Failed to persist hotspot style (non-fatal)", e);
+          console.error("Failed to persist hotspot style (non-fatal)", e);
         }
-        // Only mirror to PublicDemo if this demo is published; otherwise ensure no public items remain
         if (demoStatus === "PUBLISHED") {
           try {
-            // Prepare overrides to avoid relying on eventual consistency
             const { leadStepIndex: leadIdxNow, leadConfig: leadCfgNow } = extractLeadConfig(steps);
             await mirrorDemoToPublic(demoIdParam, {
               name: demoName || undefined,
@@ -623,13 +518,13 @@ export function DemoEditorPage() {
               leadConfig: leadCfgNow,
             });
           } catch (mirrorErr) {
-            console.warn("Mirror to public failed (will still keep private saved).", mirrorErr);
+            console.error("Mirror to public failed (will still keep private saved).", mirrorErr);
           }
         } else {
           try {
             await deletePublicDemoItems(demoIdParam);
           } catch (unpubErr) {
-            console.warn("Failed to remove public items for draft (non-fatal)", unpubErr);
+            console.error("Failed to remove public items for draft (non-fatal)", unpubErr);
           }
         }
         toast.success("Saved annotations");
@@ -654,16 +549,14 @@ export function DemoEditorPage() {
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!imageRef.current) return;
-    if (isCurrentLeadStep) return; // disable hotspot interactions on lead steps
+    if (isCurrentLeadStep) return;
     if (isPreviewing || editingTooltip) return;
     if (!currentStepId) return;
-    // If there is an existing hotspot, only start editing/dragging when clicking the dot region
     if (currentHotspots.length >= 1) {
       const existing = currentHotspots[0];
       const rect = imageRef.current.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
-      // compute rendered center of dot from normalized coords
       if (existing.xNorm !== undefined && existing.yNorm !== undefined && naturalSize) {
         const rr = computeRenderRect(rect.width, rect.height, naturalSize.w, naturalSize.h);
         const centerX = rr.x + existing.xNorm * rr.w;
@@ -674,14 +567,12 @@ export function DemoEditorPage() {
         const dy = y - centerY;
         const inside = dx * dx + dy * dy <= radius * radius;
         if (inside) {
-          // Begin potential drag; decide click vs drag on mouseup by movement threshold
           setIsDraggingHotspot(true);
           setDragHotspotId(existing.id);
           dragStartRef.current = { x: e.clientX, y: e.clientY };
           return;
         }
       }
-      // Click not on the dot: do nothing (do not open editor)
       return;
     }
 
@@ -696,7 +587,6 @@ export function DemoEditorPage() {
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!imageRef.current) return;
     if (isCurrentLeadStep) return;
-    // Drag to move existing hotspot
     if (isDraggingHotspot && dragHotspotId && currentStepId && naturalSize) {
       const rect = imageRef.current.getBoundingClientRect();
       const x = e.clientX - rect.left;
@@ -717,9 +607,7 @@ export function DemoEditorPage() {
       return;
     }
 
-    // Drawing a new hotspot
     if (!isDrawing || !imageRef.current) return;
-    // Optionally, we could preview the rectangle; currently unused.
   };
 
   const handleMouseUp = (e: React.MouseEvent) => {
@@ -727,14 +615,12 @@ export function DemoEditorPage() {
     if (isCurrentLeadStep) return;
     if (!currentStepId) return;
 
-    // Finish dragging existing hotspot
     if (isDraggingHotspot) {
       const start = dragStartRef.current;
       setIsDraggingHotspot(false);
       const id = dragHotspotId;
       setDragHotspotId(null);
       dragStartRef.current = null;
-      // If it was a simple click (no movement), open editor for that hotspot
       if (start && id) {
         const moved = Math.hypot(e.clientX - start.x, e.clientY - start.y);
         if (moved < 3) {
@@ -769,7 +655,6 @@ export function DemoEditorPage() {
       }
     } catch (_e) {}
 
-    // Enforce single hotspot per step: update existing if present; else create new
     if (currentHotspots.length >= 1) {
       const existing = currentHotspots[0];
       const updated: Hotspot = {
@@ -837,7 +722,6 @@ export function DemoEditorPage() {
     });
   };
 
-  // Keyboard shortcuts for inline tooltip editor (Enter=save, Escape=cancel)
   useKeyboardShortcut(
     [
       {
@@ -862,7 +746,6 @@ export function DemoEditorPage() {
     { enabled: !!editingTooltip }
   );
 
-  // Steps to include in preview: any with a hotspot OR the lead-capture step
   const previewableIndices = steps
     .map((s, idx) => (s.isLeadCapture || (hotspotsByStep[s.id]?.length ? true : false) ? idx : -1))
     .filter((v) => v >= 0);
@@ -1010,7 +893,7 @@ export function DemoEditorPage() {
             <span className="text-xs text-gray-600">Loaded {steps.length} captured steps</span>
           )}
           {isPreviewing && (
-            <div className="flex items-center gap-2 ml-auto">
+            <div className="flex items-center justify-center gap-3">
               <button onClick={gotoPrevAnnotated} className="text-sm py-1 px-2 rounded border bg-white border-gray-300">
                 Prev
               </button>
@@ -1062,7 +945,15 @@ export function DemoEditorPage() {
               <img
                 src={steps[selectedStepIndex]?.screenshotUrl}
                 alt={`Step ${selectedStepIndex + 1}`}
-                onLoad={() => setImageLoading(false)}
+                onLoad={(e) => {
+                  setImageLoading(false);
+                  try {
+                    const img = e.currentTarget as HTMLImageElement;
+                    const w = img.naturalWidth || img.width || 0;
+                    const h = img.naturalHeight || img.height || 0;
+                    if (w > 0 && h > 0) setNaturalSize({ w, h });
+                  } catch {}
+                }}
                 onError={() => setImageLoading(false)}
                 className={`absolute inset-0 w-full h-full object-contain ${
                   imageLoading ? "opacity-50" : "opacity-100"
@@ -1325,7 +1216,6 @@ export function DemoEditorPage() {
           ))}
         </div>
 
-        {/* Tooltip Inspector */}
         <div className="pt-4 border-t mt-6">
           <h3 className="text-lg font-semibold mb-3">Tooltip Inspector</h3>
           {isCurrentLeadStep ? (
@@ -1333,113 +1223,108 @@ export function DemoEditorPage() {
           ) : currentHotspots.length === 0 ? (
             <div className="text-xs text-gray-600">No tooltip on this step. Click on the image to add one.</div>
           ) : (
-            (() => {
-              return (
-                <div className="space-y-3 text-sm">
-                  {/* Tabs */}
-                  <div className="flex gap-2 text-xs">
-                    <button
-                      className={`px-2 py-1 rounded border ${inspectorTab === "fill" ? "bg-white border-blue-500 text-blue-700" : "bg-gray-50 border-transparent"}`}
-                      onClick={() => setInspectorTab("fill")}
-                    >
-                      Fill
-                    </button>
-                    <button
-                      className={`px-2 py-1 rounded border ${inspectorTab === "stroke" ? "bg-white border-blue-500 text-blue-700" : "bg-gray-50 border-transparent"}`}
-                      onClick={() => setInspectorTab("stroke")}
-                    >
-                      Stroke
-                    </button>
-                  </div>
+            <div className="space-y-3 text-sm">
+              <div className="flex gap-2 text-xs">
+                <button
+                  className={`px-2 py-1 rounded border ${inspectorTab === "fill" ? "bg-white border-blue-500 text-blue-700" : "bg-gray-50 border-transparent"}`}
+                  onClick={() => setInspectorTab("fill")}
+                >
+                  Fill
+                </button>
+                <button
+                  className={`px-2 py-1 rounded border ${inspectorTab === "stroke" ? "bg-white border-blue-500 text-blue-700" : "bg-gray-50 border-transparent"}`}
+                  onClick={() => setInspectorTab("stroke")}
+                >
+                  Stroke
+                </button>
+              </div>
 
-                  {inspectorTab === "fill" ? (
-                    <>
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">Size (px)</label>
-                        <input
-                          type="range"
-                          min={6}
-                          max={48}
-                          step={1}
-                          value={Number(tooltipStyle.dotSize)}
-                          onChange={(e) => applyGlobalStyle({ dotSize: Number(e.target.value) })}
-                          className="w-full"
-                        />
-                        <div className="text-[10px] text-gray-500 mt-0.5">{Number(tooltipStyle.dotSize)} px</div>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">Color</label>
-                        <input
-                          type="color"
-                          value={tooltipStyle.dotColor}
-                          onChange={(e) => applyGlobalStyle({ dotColor: e.target.value })}
-                          className="w-10 h-8 p-0 border rounded"
-                          title="Choose color"
-                        />
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">Width (px)</label>
-                        <input
-                          type="range"
-                          min={0}
-                          max={8}
-                          step={1}
-                          value={Number(tooltipStyle.dotStrokePx)}
-                          onChange={(e) => applyGlobalStyle({ dotStrokePx: Number(e.target.value) })}
-                          className="w-full"
-                        />
-                        <div className="text-[10px] text-gray-500 mt-0.5">{Number(tooltipStyle.dotStrokePx)} px</div>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">Color</label>
-                        <input
-                          type="color"
-                          value={tooltipStyle.dotStrokeColor}
-                          onChange={(e) => applyGlobalStyle({ dotStrokeColor: e.target.value })}
-                          className="w-10 h-8 p-0 border rounded"
-                          title="Choose stroke color"
-                        />
-                      </div>
-                    </>
-                  )}
+              {inspectorTab === "fill" ? (
+                <>
                   <div>
-                    <label className="block text-xs text-gray-600 mb-1">Animation (applies to all steps)</label>
-                    <select
-                      value={tooltipStyle.animation}
-                      onChange={(e) => applyGlobalStyle({ animation: e.target.value as any })}
-                      className="w-full border rounded p-1 bg-white"
-                    >
-                      <option value="none">None</option>
-                      <option value="pulse">Pulse</option>
-                      <option value="breathe">Breathe</option>
-                      <option value="fade">Fade</option>
-                    </select>
+                    <label className="block text-xs text-gray-600 mb-1">Size (px)</label>
+                    <input
+                      type="range"
+                      min={6}
+                      max={48}
+                      step={1}
+                      value={Number(tooltipStyle.dotSize)}
+                      onChange={(e) => applyGlobalStyle({ dotSize: Number(e.target.value) })}
+                      className="w-full"
+                    />
+                    <div className="text-[10px] text-gray-500 mt-0.5">{Number(tooltipStyle.dotSize)} px</div>
                   </div>
-                  <div className="flex gap-2 pt-1">
-                    <button
-                      onClick={handleSave}
-                      className="text-xs px-2 py-1 rounded border bg-blue-600 text-white hover:bg-blue-700"
-                    >
-                      Save
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (!currentStepId) return;
-                        setHotspotsByStep((prev) => ({ ...prev, [currentStepId]: [] }));
-                        setEditingTooltip(null);
-                        setTooltipText("");
-                      }}
-                      className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50"
-                    >
-                      Delete Tooltip
-                    </button>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Color</label>
+                    <input
+                      type="color"
+                      value={tooltipStyle.dotColor}
+                      onChange={(e) => applyGlobalStyle({ dotColor: e.target.value })}
+                      className="w-10 h-8 p-0 border rounded"
+                      title="Choose color"
+                    />
                   </div>
-                </div>
-              );
-            })()
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Width (px)</label>
+                    <input
+                      type="range"
+                      min={0}
+                      max={8}
+                      step={1}
+                      value={Number(tooltipStyle.dotStrokePx)}
+                      onChange={(e) => applyGlobalStyle({ dotStrokePx: Number(e.target.value) })}
+                      className="w-full"
+                    />
+                    <div className="text-[10px] text-gray-500 mt-0.5">{Number(tooltipStyle.dotStrokePx)} px</div>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Color</label>
+                    <input
+                      type="color"
+                      value={tooltipStyle.dotStrokeColor}
+                      onChange={(e) => applyGlobalStyle({ dotStrokeColor: e.target.value })}
+                      className="w-10 h-8 p-0 border rounded"
+                      title="Choose stroke color"
+                    />
+                  </div>
+                </>
+              )}
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Animation (applies to all steps)</label>
+                <select
+                  value={tooltipStyle.animation}
+                  onChange={(e) => applyGlobalStyle({ animation: e.target.value as any })}
+                  className="w-full border rounded p-1 bg-white"
+                >
+                  <option value="none">None</option>
+                  <option value="pulse">Pulse</option>
+                  <option value="breathe">Breathe</option>
+                  <option value="fade">Fade</option>
+                </select>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={handleSave}
+                  className="text-xs px-2 py-1 rounded border bg-blue-600 text-white hover:bg-blue-700"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={() => {
+                    if (!currentStepId) return;
+                    setHotspotsByStep((prev) => ({ ...prev, [currentStepId]: [] }));
+                    setEditingTooltip(null);
+                    setTooltipText("");
+                  }}
+                  className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50"
+                >
+                  Delete Tooltip
+                </button>
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -1447,7 +1332,6 @@ export function DemoEditorPage() {
         open={authOpen}
         onOpenChange={(open) => {
           setAuthOpen(open);
-          // If the user closes the auth dialog without authenticating, stop the saving state
           if (!open && !isAuthenticated) {
             setSavingDemo(false);
           }
@@ -1458,16 +1342,13 @@ export function DemoEditorPage() {
             isInDialog
             hasAnonymousSession
             onAuthSuccess={async () => {
-              // Close dialog immediately and inform user while we save
               const draft = pendingDraftRef.current;
               setAuthOpen(false);
               setSavingDemo(true);
               const toastId = toast.loading("Saving your demo…");
               try {
                 const { demoId, stepCount } = await syncAnonymousDemo(draft ? { inlineDraft: draft } : undefined);
-                console.log("Saved demo", demoId, "with steps:", stepCount);
                 toast.success("Demo saved", { description: `${stepCount} steps uploaded.` });
-                // Stay on editor page and attach demoId as query param
                 try {
                   const url = new URL(window.location.href);
                   url.searchParams.set("demoId", demoId);

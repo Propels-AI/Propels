@@ -2,8 +2,9 @@ import { generateClient } from "aws-amplify/data";
 import { getCurrentUser, fetchAuthSession } from "aws-amplify/auth";
 
 function getModels() {
-  console.debug("[api/demos] creating data client via generateClient()...");
-  const client = generateClient();
+  // Use explicit userPool auth for private Demo reads/writes to avoid intermittent apiKey fallbacks
+  console.debug("[api/demos] creating data client via generateClient({ authMode: 'userPool' })...");
+  const client = generateClient({ authMode: "userPool" as any });
   const models: any = (client as any).models;
   if (!models) {
     throw new Error("Amplify Data models unavailable after generateClient(). Check Amplify.configure outputs.data");
@@ -78,6 +79,17 @@ function getPublicModels() {
     throw new Error(
       "Amplify Data models unavailable after generateClient() for public. Check Amplify.configure outputs.data"
     );
+  }
+  return models;
+}
+
+function getPublicDemoModelsForPrivate() {
+  // Public API access to private Demo model (schema allows public read)
+  console.debug("[api/demos] creating PUBLIC client for private Demo via generateClient({ authMode: 'apiKey' })...");
+  const client = generateClient({ authMode: "apiKey" as any });
+  const models: any = (client as any).models;
+  if (!models) {
+    throw new Error("Amplify Data models unavailable for public Demo client");
   }
   return models;
 }
@@ -197,8 +209,14 @@ export async function listPublicDemoItems(demoId: string) {
   if (!models.PublicDemo) {
     throw new Error("PublicDemo model is not available. Backend schema not deployed or outputs not updated.");
   }
-  const res = await models.PublicDemo.list({ filter: { demoId: { eq: demoId } } });
-  const items = res?.data ?? [];
+  let items: any[] = [];
+  let nextToken: any = undefined;
+  do {
+    const res = await models.PublicDemo.list({ filter: { demoId: { eq: demoId } }, nextToken });
+    const page = (res as any)?.data ?? [];
+    items = items.concat(page);
+    nextToken = (res as any)?.nextToken;
+  } while (nextToken);
   for (const it of items) {
     if (typeof (it as any).hotspots === "string") {
       try {
@@ -486,12 +504,83 @@ export async function listDemoItems(demoId: string) {
       console.warn("[api/demos] fetchAuthSession failed; will attempt public read", e);
     }
     try {
+      // Debug: log current identity used for owner-based auth
+      try {
+        const u = await getCurrentUser();
+        console.debug("[api/demos] identity (username,userId):", (u as any)?.username, (u as any)?.userId);
+      } catch (e) {
+        console.debug("[api/demos] identity unavailable yet", e);
+      }
       const models = getModels();
-      const res = await models.Demo.list({ filter: { demoId: { eq: demoId } } });
-      console.debug("[api/demos] listDemoItems res (userPool):", res);
-      const items = res?.data ?? [];
+      let items: any[] = [];
+      let nextToken: any = undefined;
+      do {
+        const res = await models.Demo.list({ filter: { demoId: { eq: demoId } }, nextToken });
+        console.debug("[api/demos] listDemoItems page (userPool):", {
+          count: (res as any)?.data?.length ?? 0,
+          hasNext: !!(res as any)?.nextToken,
+        });
+        items = items.concat((res as any)?.data ?? []);
+        nextToken = (res as any)?.nextToken;
+      } while (nextToken);
       if (Array.isArray(items) && items.length > 0) return items;
-      // Fallback: if userPool returned zero items (e.g., not owner yet), try PublicDemo mirror
+      // Probe: try direct METADATA get via userPool to see if item exists but list is filtered
+      try {
+        if ((models as any).Demo?.get) {
+          const metaRes = await (models as any).Demo.get({ demoId, itemSK: "METADATA" });
+          console.debug("[api/demos] probe get(METADATA) (userPool):", metaRes);
+          const meta = (metaRes as any)?.data;
+          // If we can get METADATA directly, fetch steps via beginsWith filter and aggregate
+          if (meta) {
+            let stepItems: any[] = [];
+            let ntSteps: any = undefined;
+            do {
+              const stepRes = await models.Demo.list({
+                filter: { demoId: { eq: demoId }, itemSK: { beginsWith: "STEP#" } },
+                nextToken: ntSteps,
+              });
+              const page = (stepRes as any)?.data ?? [];
+              stepItems = stepItems.concat(page);
+              ntSteps = (stepRes as any)?.nextToken;
+            } while (ntSteps);
+            console.debug("[api/demos] step list via beginsWith count:", stepItems.length);
+            if (stepItems.length > 0) {
+              return [meta, ...stepItems];
+            }
+            // If no steps, at least return METADATA so the editor can render shell
+            return [meta];
+          }
+        }
+      } catch (probeErr) {
+        console.warn("[api/demos] probe get(METADATA) (userPool) failed", probeErr);
+      }
+      // Fallback A: if userPool returned zero items (e.g., ownerId mismatch), try public apiKey read on private Demo
+      try {
+        const pubDemoModels = getPublicDemoModelsForPrivate();
+        let pubItems: any[] = [];
+        let nextTokenPub: any = undefined;
+        do {
+          const pubRes = await pubDemoModels.Demo.list({ filter: { demoId: { eq: demoId } }, nextToken: nextTokenPub });
+          pubItems = pubItems.concat((pubRes as any)?.data ?? []);
+          nextTokenPub = (pubRes as any)?.nextToken;
+        } while (nextTokenPub);
+        console.debug("[api/demos] listDemoItems res (Demo via apiKey fallback after empty):", {
+          count: pubItems?.length,
+        });
+        if (Array.isArray(pubItems) && pubItems.length > 0) return pubItems;
+        // Probe: try direct METADATA get via apiKey client
+        try {
+          if ((pubDemoModels as any).Demo?.get) {
+            const metaResPub = await (pubDemoModels as any).Demo.get({ demoId, itemSK: "METADATA" });
+            console.debug("[api/demos] probe get(METADATA) (apiKey/private Demo):", metaResPub);
+          }
+        } catch (probePubErr) {
+          console.warn("[api/demos] probe get(METADATA) (apiKey/private Demo) failed", probePubErr);
+        }
+      } catch (publicDemoFallbackErr) {
+        console.warn("[api/demos] Demo apiKey fallback after empty failed", publicDemoFallbackErr);
+      }
+      // Fallback B: finally, try PublicDemo mirror if available
       try {
         const pubItems = await listPublicDemoItems(demoId);
         console.debug("[api/demos] listDemoItems res (PublicDemo fallback after empty):", {
@@ -517,7 +606,8 @@ export async function listDemoItems(demoId: string) {
 export async function getOwnerId(): Promise<string | undefined> {
   try {
     const user = await getCurrentUser();
-    return user?.userId;
+    // Prefer username to match default owner auth identity claim; fallback to userId (sub)
+    return (user as any)?.username || user?.userId;
   } catch {
     return undefined;
   }
@@ -527,6 +617,12 @@ export async function listMyDemos(
   status?: "DRAFT" | "PUBLISHED"
 ): Promise<Array<{ id: string; name?: string; status?: string; createdAt?: string; updatedAt?: string }>> {
   try {
+    // Ensure credentials are ready for owner-based reads
+    try {
+      await fetchAuthSession();
+    } catch (e) {
+      console.warn("[api/demos] listMyDemos: fetchAuthSession failed (continuing)", e);
+    }
     const ownerId = await getOwnerId();
     console.debug("[api/demos] listMyDemos ownerId:", ownerId, "status:", status ?? "(any)");
     if (!ownerId) {
@@ -540,18 +636,30 @@ export async function listMyDemos(
     if (status) {
       filter.status = { eq: status };
     }
-    const res = await models.Demo.list({
-      filter,
-    });
-    console.debug("[api/demos] listMyDemos res:", res);
-    const items = res?.data ?? [];
-    return items.map((it: any) => ({
+    // Paginate through all pages; first page can be empty even when later pages contain data
+    let all: any[] = [];
+    let nextToken: any = undefined;
+    do {
+      const res = await models.Demo.list({ filter, nextToken });
+      const page = (res as any)?.data ?? [];
+      console.debug("[api/demos] listMyDemos page:", { count: page.length, hasNext: !!(res as any)?.nextToken });
+      all = all.concat(page);
+      nextToken = (res as any)?.nextToken;
+    } while (nextToken);
+    // Map and sort by updatedAt desc (fallback createdAt)
+    const mapped = all.map((it: any) => ({
       id: it.demoId,
       name: it.name,
       status: it.status,
       createdAt: it.createdAt,
       updatedAt: it.updatedAt,
     }));
+    mapped.sort((a: any, b: any) => {
+      const aT = Date.parse(a.updatedAt || a.createdAt || 0);
+      const bT = Date.parse(b.updatedAt || b.createdAt || 0);
+      return bT - aT;
+    });
+    return mapped;
   } catch (e: any) {
     console.error("[api/demos] listMyDemos error:", e);
     const err = new Error(
