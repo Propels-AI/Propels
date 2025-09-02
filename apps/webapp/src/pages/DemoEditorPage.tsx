@@ -3,7 +3,7 @@ import { useKeyboardShortcut } from "@/hooks/useKeyboardShortcut";
 import { Input } from "@/components/ui/input";
 import { syncAnonymousDemo, type EditedDraft } from "../lib/services/syncAnonymousDemo";
 import { useAuth } from "@/lib/providers/AuthProvider";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import {
   deleteDemo,
   listDemoItems,
@@ -30,10 +30,19 @@ import {
 import { applyGlobalStyleToHotspots } from "@/lib/editor/applyGlobalStyleToHotspots";
 
 export function DemoEditorPage() {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
   const isAuthenticated = !!user?.userId || !!user?.username;
   const [searchParams] = useSearchParams();
   const demoIdParam = searchParams.get("demoId") || searchParams.get("demoid") || undefined;
+
+  const navigate = useNavigate();
+  // If a demoId is present, require authentication; otherwise redirect to /editor
+  useEffect(() => {
+    if (!demoIdParam) return;
+    if (!isLoading && !isAuthenticated) {
+      navigate("/editor", { replace: true });
+    }
+  }, [demoIdParam, isAuthenticated, isLoading, navigate]);
   const [loadingSteps, setLoadingSteps] = useState<boolean>(false);
   const [steps, setSteps] = useState<
     Array<{
@@ -94,9 +103,15 @@ export function DemoEditorPage() {
   const [hotspotsByStep, setHotspotsByStep] = useState<Record<string, Hotspot[]>>({});
   const [editingTooltip, setEditingTooltip] = useState<string | null>(null);
   const [tooltipText, setTooltipText] = useState("");
-  const [inspectorTab, setInspectorTab] = useState<'fill' | 'stroke'>("fill");
+  const [inspectorTab, setInspectorTab] = useState<"fill" | "stroke">("fill");
   // Global tooltip style for consistency across all steps
-  const [tooltipStyle, setTooltipStyle] = useState<{ dotSize: number; dotColor: string; dotStrokePx: number; dotStrokeColor: string; animation: "none" | "pulse" | "breathe" | "fade" }>({
+  const [tooltipStyle, setTooltipStyle] = useState<{
+    dotSize: number;
+    dotColor: string;
+    dotStrokePx: number;
+    dotStrokeColor: string;
+    animation: "none" | "pulse" | "breathe" | "fade";
+  }>({
     dotSize: 12,
     dotColor: "#2563eb",
     dotStrokePx: 2,
@@ -193,7 +208,13 @@ export function DemoEditorPage() {
         if (!stepItems.length && loadAttemptsRef.current < 10) {
           loadAttemptsRef.current += 1;
           const delayMs = 300 + loadAttemptsRef.current * 300; // ~0.6s..3.3s
-          console.log("[Editor] No steps found; retrying load in", delayMs, "ms (attempt", loadAttemptsRef.current, ")");
+          console.log(
+            "[Editor] No steps found; retrying load in",
+            delayMs,
+            "ms (attempt",
+            loadAttemptsRef.current,
+            ")"
+          );
           setTimeout(() => {
             // fire and forget; effect guard handles demoId match
             loadFromBackend(demoId);
@@ -309,17 +330,20 @@ export function DemoEditorPage() {
         // Insert saved lead-capture step from METADATA if present
         try {
           let leadIdxSaved: number | null | undefined = (meta as any)?.leadStepIndex;
-          let leadBgSaved: 'white' | 'black' = 'white';
+          let leadBgSaved: "white" | "black" = "white";
           if ((meta as any)?.leadConfig) {
             try {
-              const cfg = typeof (meta as any).leadConfig === 'string' ? JSON.parse((meta as any).leadConfig) : (meta as any).leadConfig;
-              if (cfg && (cfg.bg === 'white' || cfg.bg === 'black')) leadBgSaved = cfg.bg;
+              const cfg =
+                typeof (meta as any).leadConfig === "string"
+                  ? JSON.parse((meta as any).leadConfig)
+                  : (meta as any).leadConfig;
+              if (cfg && (cfg.bg === "white" || cfg.bg === "black")) leadBgSaved = cfg.bg;
             } catch {}
           }
-          if (typeof leadIdxSaved === 'number' && leadIdxSaved >= 0 && leadIdxSaved <= urls.length) {
+          if (typeof leadIdxSaved === "number" && leadIdxSaved >= 0 && leadIdxSaved <= urls.length) {
             const leadStep = {
-              id: 'LEAD-SAVED',
-              pageUrl: '',
+              id: "LEAD-SAVED",
+              pageUrl: "",
               screenshotUrl: undefined as unknown as string,
               isLeadCapture: true as const,
               leadBg: leadBgSaved,
@@ -499,9 +523,24 @@ export function DemoEditorPage() {
   }, []);
 
   // Apply global style changes to all hotspots across all steps
-  const applyGlobalStyle = (patch: Partial<{ dotSize: number; dotColor: string; dotStrokePx: number; dotStrokeColor: string; animation: "none" | "pulse" | "breathe" | "fade" }>) => {
+  const applyGlobalStyle = (
+    patch: Partial<{
+      dotSize: number;
+      dotColor: string;
+      dotStrokePx: number;
+      dotStrokeColor: string;
+      animation: "none" | "pulse" | "breathe" | "fade";
+    }>
+  ) => {
     setTooltipStyle((prev) => ({ ...prev, ...patch }));
-    setHotspotsByStep((prev) => applyGlobalStyleToHotspots(prev as HotspotsMap, tooltipStyle as TooltipStyle, patch as Partial<TooltipStyle>) as any);
+    setHotspotsByStep(
+      (prev) =>
+        applyGlobalStyleToHotspots(
+          prev as HotspotsMap,
+          tooltipStyle as TooltipStyle,
+          patch as Partial<TooltipStyle>
+        ) as any
+    );
   };
 
   // Inject simple keyframes for optional animations used by tooltips
@@ -516,13 +555,18 @@ export function DemoEditorPage() {
 `;
     document.head.appendChild(style);
     return () => {
-      try { document.head.removeChild(style); } catch {}
+      try {
+        document.head.removeChild(style);
+      } catch {}
     };
   }, []);
 
   const handleSave = async () => {
     const leadIdxDraft = steps.findIndex((s) => Boolean(s.isLeadCapture));
-    const leadCfgDraft = leadIdxDraft >= 0 ? { style: "solid", bg: steps[leadIdxDraft]?.leadBg === "black" ? "black" : "white" } : undefined;
+    const leadCfgDraft =
+      leadIdxDraft >= 0
+        ? { style: "solid", bg: steps[leadIdxDraft]?.leadBg === "black" ? "black" : "white" }
+        : undefined;
     const draft: EditedDraft = {
       draftId: (crypto as any).randomUUID ? (crypto as any).randomUUID() : `${Date.now()}`,
       createdAt: new Date().toISOString(),
@@ -1016,9 +1060,7 @@ export function DemoEditorPage() {
           )}
           {steps.length > 0 ? (
             isCurrentLeadStep ? (
-              <LeadCaptureOverlay
-                bg={steps[selectedStepIndex]?.leadBg === "black" ? "black" : "white"}
-              />
+              <LeadCaptureOverlay bg={steps[selectedStepIndex]?.leadBg === "black" ? "black" : "white"} />
             ) : isPreviewing ? (
               <HotspotOverlay
                 className="absolute inset-0 w-full h-full"
@@ -1064,92 +1106,94 @@ export function DemoEditorPage() {
             </div>
           ) : null}
 
-          {!isPreviewing && !isCurrentLeadStep && currentHotspots.map((hotspot) => {
-            const containerRect = imageRef.current?.getBoundingClientRect();
-            let centerX = 0;
-            let centerY = 0;
-            if (hotspot.xNorm !== undefined && hotspot.yNorm !== undefined && containerRect && naturalSize) {
-              const rr = computeRenderRect(containerRect.width, containerRect.height, naturalSize.w, naturalSize.h);
-              centerX = rr.x + hotspot.xNorm * rr.w;
-              centerY = rr.y + hotspot.yNorm * rr.h;
-            } else if (typeof hotspot.x === "number" && typeof hotspot.y === "number") {
-              centerX = hotspot.x + (hotspot.width || 0) / 2;
-              centerY = hotspot.y + (hotspot.height || 0) / 2;
-            }
-            const dotSize = Math.max(6, Math.min(48, Number(hotspot.dotSize ?? 12)));
-            const tooltipLeft = centerX + dotSize + 6;
-            const tooltipTop = centerY - 8;
-            const color = hotspot.dotColor || "#2563eb";
-            const anim = hotspot.animation || "none";
-            const animStyle: React.CSSProperties =
-              anim === "pulse"
-                ? { } // Tailwind's animate-pulse class below
-                : anim === "breathe"
-                ? { animation: "propels-breathe 1.8s ease-in-out infinite" }
-                : anim === "fade"
-                ? { animation: "propels-fade 1.4s ease-in-out infinite" }
-                : {};
-            return (
-              <div key={hotspot.id}>
-                <div
-                  className={`absolute rounded-full shadow ${anim === "pulse" ? "animate-pulse" : ""}`}
-                  style={{
-                    left: `${centerX - dotSize / 2}px`,
-                    top: `${centerY - dotSize / 2}px`,
-                    width: `${dotSize}px`,
-                    height: `${dotSize}px`,
-                    backgroundColor: color,
-                    borderStyle: "solid",
-                    borderWidth: `${Math.max(0, Number(hotspot.dotStrokePx ?? tooltipStyle.dotStrokePx))}px`,
-                    borderColor: String(hotspot.dotStrokeColor ?? tooltipStyle.dotStrokeColor),
-                    ...animStyle,
-                  }}
-                />
-
-                {editingTooltip === hotspot.id && (
+          {!isPreviewing &&
+            !isCurrentLeadStep &&
+            currentHotspots.map((hotspot) => {
+              const containerRect = imageRef.current?.getBoundingClientRect();
+              let centerX = 0;
+              let centerY = 0;
+              if (hotspot.xNorm !== undefined && hotspot.yNorm !== undefined && containerRect && naturalSize) {
+                const rr = computeRenderRect(containerRect.width, containerRect.height, naturalSize.w, naturalSize.h);
+                centerX = rr.x + hotspot.xNorm * rr.w;
+                centerY = rr.y + hotspot.yNorm * rr.h;
+              } else if (typeof hotspot.x === "number" && typeof hotspot.y === "number") {
+                centerX = hotspot.x + (hotspot.width || 0) / 2;
+                centerY = hotspot.y + (hotspot.height || 0) / 2;
+              }
+              const dotSize = Math.max(6, Math.min(48, Number(hotspot.dotSize ?? 12)));
+              const tooltipLeft = centerX + dotSize + 6;
+              const tooltipTop = centerY - 8;
+              const color = hotspot.dotColor || "#2563eb";
+              const anim = hotspot.animation || "none";
+              const animStyle: React.CSSProperties =
+                anim === "pulse"
+                  ? {} // Tailwind's animate-pulse class below
+                  : anim === "breathe"
+                    ? { animation: "propels-breathe 1.8s ease-in-out infinite" }
+                    : anim === "fade"
+                      ? { animation: "propels-fade 1.4s ease-in-out infinite" }
+                      : {};
+              return (
+                <div key={hotspot.id}>
                   <div
-                    className="absolute bg-white border rounded p-2 shadow-lg"
-                    style={{ left: `${tooltipLeft}px`, top: `${tooltipTop}px` }}
-                    onMouseDown={(e) => e.stopPropagation()}
-                  >
-                    <Input
-                      type="text"
-                      placeholder="Add tooltip text"
-                      value={tooltipText}
-                      onChange={(e) => setTooltipText(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          handleTooltipSubmit(hotspot.id);
-                        } else if (e.key === "Escape") {
-                          e.preventDefault();
-                          setEditingTooltip(null);
-                          setTooltipText("");
-                        }
-                      }}
-                      className="mb-2"
-                      autoFocus
-                    />
-                    <button
-                      onClick={() => handleTooltipSubmit(hotspot.id)}
-                      className="bg-blue-500 hover:bg-blue-700 text-white text-sm py-1 px-2 rounded"
+                    className={`absolute rounded-full shadow ${anim === "pulse" ? "animate-pulse" : ""}`}
+                    style={{
+                      left: `${centerX - dotSize / 2}px`,
+                      top: `${centerY - dotSize / 2}px`,
+                      width: `${dotSize}px`,
+                      height: `${dotSize}px`,
+                      backgroundColor: color,
+                      borderStyle: "solid",
+                      borderWidth: `${Math.max(0, Number(hotspot.dotStrokePx ?? tooltipStyle.dotStrokePx))}px`,
+                      borderColor: String(hotspot.dotStrokeColor ?? tooltipStyle.dotStrokeColor),
+                      ...animStyle,
+                    }}
+                  />
+
+                  {editingTooltip === hotspot.id && (
+                    <div
+                      className="absolute bg-white border rounded p-2 shadow-lg"
+                      style={{ left: `${tooltipLeft}px`, top: `${tooltipTop}px` }}
+                      onMouseDown={(e) => e.stopPropagation()}
                     >
-                      Save
-                    </button>
-                  </div>
-                )}
+                      <Input
+                        type="text"
+                        placeholder="Add tooltip text"
+                        value={tooltipText}
+                        onChange={(e) => setTooltipText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleTooltipSubmit(hotspot.id);
+                          } else if (e.key === "Escape") {
+                            e.preventDefault();
+                            setEditingTooltip(null);
+                            setTooltipText("");
+                          }
+                        }}
+                        className="mb-2"
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => handleTooltipSubmit(hotspot.id)}
+                        className="bg-blue-500 hover:bg-blue-700 text-white text-sm py-1 px-2 rounded"
+                      >
+                        Save
+                      </button>
+                    </div>
+                  )}
 
-                {editingTooltip !== hotspot.id && hotspot.tooltip && (
-                  <div
-                    className="absolute bg-blue-600 text-white text-xs rounded py-1 px-2 shadow"
-                    style={{ left: `${tooltipLeft}px`, top: `${tooltipTop}px` }}
-                  >
-                    {hotspot.tooltip}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                  {editingTooltip !== hotspot.id && hotspot.tooltip && (
+                    <div
+                      className="absolute bg-blue-600 text-white text-xs rounded py-1 px-2 shadow"
+                      style={{ left: `${tooltipLeft}px`, top: `${tooltipTop}px` }}
+                    >
+                      {hotspot.tooltip}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
         </div>
       </div>
       <div className="w-80 bg-gray-100 p-4 border-l space-y-6">
@@ -1196,11 +1240,17 @@ export function DemoEditorPage() {
               <span>step</span>
               <select
                 value={leadInsertAnchor}
-                onChange={(e) => setLeadInsertAnchor(Math.max(1, Math.min(Math.max(1, steps.length), parseInt(e.target.value || "1", 10))))}
+                onChange={(e) =>
+                  setLeadInsertAnchor(
+                    Math.max(1, Math.min(Math.max(1, steps.length), parseInt(e.target.value || "1", 10)))
+                  )
+                }
                 className="border rounded px-2 py-1 text-xs bg-white"
               >
                 {Array.from({ length: Math.max(1, steps.length) }, (_, i) => i + 1).map((n) => (
-                  <option key={n} value={n}>{n}</option>
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
                 ))}
               </select>
               <div className="ml-auto flex items-center gap-2">
@@ -1210,7 +1260,7 @@ export function DemoEditorPage() {
                     const anchor0 = Math.max(1, Math.min(Math.max(1, steps.length), leadInsertAnchor)) - 1; // 0-based
                     const insertIndex = leadInsertPos === "before" ? anchor0 : anchor0 + 1;
                     const newStep = {
-                      id: `LEAD-${Math.random().toString(36).slice(2,9)}`,
+                      id: `LEAD-${Math.random().toString(36).slice(2, 9)}`,
                       pageUrl: "",
                       screenshotUrl: undefined,
                       isLeadCapture: true as const,
@@ -1268,7 +1318,9 @@ export function DemoEditorPage() {
               }`}
             >
               {s.isLeadCapture ? (
-                <div className={`w-16 h-12 rounded flex items-center justify-center text-[10px] border ${s.leadBg === 'black' ? 'bg-black text-white' : 'bg-white text-gray-700'}`}>
+                <div
+                  className={`w-16 h-12 rounded flex items-center justify-center text-[10px] border ${s.leadBg === "black" ? "bg-black text-white" : "bg-white text-gray-700"}`}
+                >
                   LEAD
                 </div>
               ) : (
@@ -1276,7 +1328,7 @@ export function DemoEditorPage() {
               )}
               <div className="flex-1">
                 <p className="text-sm font-medium">Step {idx + 1}</p>
-                <p className="text-[10px] text-gray-500 truncate">{s.isLeadCapture ? 'Lead capture' : s.pageUrl}</p>
+                <p className="text-[10px] text-gray-500 truncate">{s.isLeadCapture ? "Lead capture" : s.pageUrl}</p>
               </div>
             </button>
           ))}
@@ -1296,20 +1348,20 @@ export function DemoEditorPage() {
                   {/* Tabs */}
                   <div className="flex gap-2 text-xs">
                     <button
-                      className={`px-2 py-1 rounded border ${inspectorTab === 'fill' ? 'bg-white border-blue-500 text-blue-700' : 'bg-gray-50 border-transparent'}`}
-                      onClick={() => setInspectorTab('fill')}
+                      className={`px-2 py-1 rounded border ${inspectorTab === "fill" ? "bg-white border-blue-500 text-blue-700" : "bg-gray-50 border-transparent"}`}
+                      onClick={() => setInspectorTab("fill")}
                     >
                       Fill
                     </button>
                     <button
-                      className={`px-2 py-1 rounded border ${inspectorTab === 'stroke' ? 'bg-white border-blue-500 text-blue-700' : 'bg-gray-50 border-transparent'}`}
-                      onClick={() => setInspectorTab('stroke')}
+                      className={`px-2 py-1 rounded border ${inspectorTab === "stroke" ? "bg-white border-blue-500 text-blue-700" : "bg-gray-50 border-transparent"}`}
+                      onClick={() => setInspectorTab("stroke")}
                     >
                       Stroke
                     </button>
                   </div>
 
-                  {inspectorTab === 'fill' ? (
+                  {inspectorTab === "fill" ? (
                     <>
                       <div>
                         <label className="block text-xs text-gray-600 mb-1">Size (px)</label>
