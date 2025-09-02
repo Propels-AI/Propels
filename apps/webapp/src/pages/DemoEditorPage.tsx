@@ -825,6 +825,22 @@ export function DemoEditorPage() {
                     const next = demoStatus === "PUBLISHED" ? "DRAFT" : "PUBLISHED";
                     try {
                       setTogglingStatus(true);
+                      if (next === "PUBLISHED") {
+                        try {
+                          const { leadStepIndex, leadConfig } = extractLeadConfig(steps);
+                          if (leadStepIndex !== null) {
+                            await updateDemoLeadConfig({
+                              demoId: demoIdParam,
+                              leadStepIndex,
+                              leadConfig: leadConfig as any,
+                            });
+                          } else {
+                            await updateDemoLeadConfig({ demoId: demoIdParam, leadStepIndex: null });
+                          }
+                        } catch (e) {
+                          console.error("Failed to persist lead config before publish (non-fatal)", e);
+                        }
+                      }
                       await setDemoStatus(demoIdParam, next);
                       setDemoStatusLocal(next);
                     } catch (e) {
