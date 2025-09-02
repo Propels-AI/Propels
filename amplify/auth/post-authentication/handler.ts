@@ -24,6 +24,16 @@ export const handler = async (event: PostAuthenticationTriggerEvent) => {
     }
 
     if (email) {
+      // Guard: Ensure we have a Brevo API key before attempting any network calls
+      const brevoApiKey = (env.BREVO_API_KEY ?? "").trim();
+      if (!brevoApiKey) {
+        console.warn(
+          "Brevo API key is missing or empty; skipping Brevo contact upsert to avoid failed fetch and retries",
+          { email }
+        );
+        console.log("PostAuthentication trigger completed (no Brevo due to missing API key)");
+        return event;
+      }
       const parsedListId = Number(env.BREVO_LIST_ID);
       const listId = Number.isFinite(parsedListId) && parsedListId > 0 ? parsedListId : undefined;
       if (!listId) {
@@ -38,7 +48,7 @@ export const handler = async (event: PostAuthenticationTriggerEvent) => {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
-                "api-key": env.BREVO_API_KEY,
+                "api-key": brevoApiKey,
                 "User-Agent": "propels-post-authentication/1.0",
               },
               body: JSON.stringify({
