@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { listPublicDemoItems } from "@/lib/api/demos";
 import { DemoPreview } from "@/components/DemoPreview";
+import LeadCaptureOverlay from "@/components/LeadCaptureOverlay";
 import { getUrl as storageGetUrl } from "aws-amplify/storage";
 import outputs from "../../../../amplify_outputs.json";
 
@@ -21,6 +22,12 @@ type PublicStep = {
     yNorm?: number;
     tooltip?: string;
     targetStep?: number;
+    // Styling (optional; if absent, we will apply defaults from METADATA.hotspotStyle)
+    dotSize?: number;
+    dotColor?: string;
+    animation?: "none" | "pulse" | "breathe" | "fade";
+    dotStrokePx?: number;
+    dotStrokeColor?: string;
   }>;
 };
 
@@ -31,9 +38,18 @@ export default function PublicDemoPlayer() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
   const [metaName, setMetaName] = useState<string | undefined>();
+  const [leadStepIndex, setLeadStepIndex] = useState<number | null>(null);
+  const [leadBg, setLeadBg] = useState<"white" | "black">("white");
   const [steps, setSteps] = useState<PublicStep[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [itemsRaw, setItemsRaw] = useState<any[]>([]);
+  const [hotspotStyleDefaults, setHotspotStyleDefaults] = useState<{
+    dotSize: number;
+    dotColor: string;
+    dotStrokePx: number;
+    dotStrokeColor: string;
+    animation: "none" | "pulse" | "breathe" | "fade";
+  }>({ dotSize: 12, dotColor: "#2563eb", dotStrokePx: 2, dotStrokeColor: "#ffffff", animation: "none" });
 
   useEffect(() => {
     let cancelled = false;
@@ -53,6 +69,42 @@ export default function PublicDemoPlayer() {
         const metadata = items.find((it: any) => it.itemSK === "METADATA");
         console.debug("[PublicDemoPlayer] metadata", metadata);
         setMetaName(metadata?.name);
+        // Read lead config (public mirror)
+        const lIdx = typeof metadata?.leadStepIndex === "number" ? metadata.leadStepIndex : null;
+        setLeadStepIndex(lIdx);
+        // Prefer flexible leadConfig.bg if available
+        let lBg: "white" | "black" = "white";
+        if (metadata?.leadConfig) {
+          try {
+            const cfg =
+              typeof metadata.leadConfig === "string"
+                ? JSON.parse(metadata.leadConfig)
+                : metadata.leadConfig;
+            if (cfg && typeof cfg.bg === "string") {
+              lBg = cfg.bg === "black" ? "black" : "white";
+            }
+          } catch {}
+        } else {
+          lBg = metadata?.leadBg === "black" ? "black" : "white";
+        }
+        setLeadBg(lBg);
+        // Read hotspot style defaults from METADATA
+        try {
+          const rawStyle = metadata?.hotspotStyle;
+          if (rawStyle) {
+            const parsed = typeof rawStyle === "string" ? JSON.parse(rawStyle) : rawStyle;
+            if (parsed && typeof parsed === "object") {
+              setHotspotStyleDefaults({
+                dotSize: Number(parsed.dotSize ?? 12),
+                dotColor: String(parsed.dotColor ?? "#2563eb"),
+                dotStrokePx: Number(parsed.dotStrokePx ?? 2),
+                dotStrokeColor: String(parsed.dotStrokeColor ?? "#ffffff"),
+                animation: (parsed.animation ?? "none") as any,
+              });
+            }
+          }
+        } catch {}
+
         const stepItems: PublicStep[] = items
           .filter((it: any) => typeof it.itemSK === "string" && it.itemSK.startsWith("STEP#"))
           .map((it: any) => ({
@@ -80,8 +132,12 @@ export default function PublicDemoPlayer() {
     };
   }, [demoId]);
 
-  const totalSteps = steps.length;
-  const current = steps[currentIndex];
+  // These depend on effectiveLeadIndex (declared below)
+  let realStepsCount = steps.length;
+  let displayTotal = steps.length; // initialize; will recompute after effectiveLeadIndex
+  let isLeadDisplayIndex = false;
+  let currentRealIndex = currentIndex;
+  let current: PublicStep | undefined = steps[currentIndex];
 
   const [resolvedSrc, setResolvedSrc] = useState<string | undefined>(undefined);
   const imageSrc = useMemo(() => {
@@ -139,25 +195,52 @@ export default function PublicDemoPlayer() {
   }, [current, imageSrc]);
 
   const goTo = (idx: number) => {
-    if (idx < 0 || idx >= totalSteps) return;
+    if (idx < 0 || idx >= displayTotal) return;
     setCurrentIndex(idx);
   };
+
+  // leadAt URL override for testing
+  const leadAtOverride = useMemo(() => {
+    const p = new URLSearchParams(location.search).get("leadAt");
+    if (!p) return null;
+    const n = parseInt(p, 10);
+    return Number.isFinite(n) && n >= 1 ? n - 1 : null; // user-facing 1-based -> 0-based
+  }, [location.search]);
+  const effectiveLeadIndex = leadAtOverride ?? leadStepIndex;
+
+  // Now that effectiveLeadIndex is available, compute display mapping
+  realStepsCount = steps.length;
+  displayTotal = realStepsCount + (effectiveLeadIndex !== null ? 1 : 0);
+  isLeadDisplayIndex = effectiveLeadIndex !== null && currentIndex === effectiveLeadIndex;
+  const mapDisplayToReal = (di: number) => {
+    if (effectiveLeadIndex === null) return di;
+    return di < effectiveLeadIndex ? di : di - 1;
+  };
+  currentRealIndex = isLeadDisplayIndex ? -1 : mapDisplayToReal(currentIndex);
+  current = currentRealIndex >= 0 ? steps[currentRealIndex] : undefined;
 
   const previewSteps = useMemo(
     () =>
       steps.map((s, i) => ({
         id: s.itemSK,
-        imageUrl: i === currentIndex ? resolvedSrc : undefined,
-        hotspots: s.hotspots as any,
+        imageUrl: i === currentRealIndex ? resolvedSrc : undefined,
+        hotspots: (s.hotspots || []).map((h) => ({
+          ...h,
+          dotSize: h.dotSize ?? hotspotStyleDefaults.dotSize,
+          dotColor: h.dotColor ?? hotspotStyleDefaults.dotColor,
+          dotStrokePx: h.dotStrokePx ?? hotspotStyleDefaults.dotStrokePx,
+          dotStrokeColor: h.dotStrokeColor ?? hotspotStyleDefaults.dotStrokeColor,
+          animation: (h.animation ?? hotspotStyleDefaults.animation) as any,
+        })) as any,
         pageUrl: s.pageUrl,
       })),
-    [steps, currentIndex, resolvedSrc]
+    [steps, currentRealIndex, resolvedSrc, hotspotStyleDefaults]
   );
 
   if (!demoId) return <div className="p-6">Missing demoId</div>;
   if (loading) return <div className="p-6">Loading…</div>;
   if (error) return <div className="p-6 text-red-600">{error}</div>;
-  if (totalSteps === 0)
+  if (displayTotal === 0)
     return (
       <div className="p-6 space-y-4">
         <div>No steps available</div>
@@ -192,26 +275,36 @@ error: ${error ?? "<none>"}
           <button
             className="px-3 py-1 border rounded"
             onClick={() => goTo(currentIndex + 1)}
-            disabled={currentIndex >= totalSteps - 1}
+            disabled={currentIndex >= displayTotal - 1}
           >
             Next
           </button>
         </div>
       </header>
 
-      <div className="flex-1 p-8 flex items-center justify-center">
-        <DemoPreview
-          steps={previewSteps}
-          currentIndex={currentIndex}
-          onIndexChange={setCurrentIndex}
-          showNavigation={false}
-          className="w-full"
-        />
+      <div className="flex-1 p-8 flex items-center justify-center w-full">
+        {isLeadDisplayIndex ? (
+          <div className="w-full max-w-[1280px] aspect-[1280/800] bg-white border rounded-xl flex items-center justify-center relative overflow-hidden">
+            <LeadCaptureOverlay bg={leadBg} />
+          </div>
+        ) : (
+          <DemoPreview
+            steps={previewSteps}
+            currentIndex={currentRealIndex}
+            onIndexChange={(realIdx) => {
+              // Map underlying media index -> display index (insert lead index if needed)
+              const di = effectiveLeadIndex !== null && realIdx >= effectiveLeadIndex ? realIdx + 1 : realIdx;
+              setCurrentIndex(di);
+            }}
+            showNavigation={false}
+            className="w-full"
+          />
+        )}
       </div>
 
       <footer className="bg-gray-100 p-4 border-t">
         <div className="max-w-5xl mx-auto text-center text-gray-700">
-          Step {currentIndex + 1} of {totalSteps}
+          Step {currentIndex + 1} of {displayTotal}
         </div>
         {debug && (
           <div className="max-w-5xl mx-auto mt-2">
@@ -219,7 +312,8 @@ error: ${error ?? "<none>"}
               {`Debug:
 demoId: ${demoId}
 metaName: ${metaName}
-totalSteps: ${totalSteps}
+realStepsCount: ${realStepsCount}
+displayTotal: ${displayTotal}
 currentIndex: ${currentIndex}
 current.itemSK: ${current?.itemSK}
 imageSrc: ${imageSrc}

@@ -1,5 +1,11 @@
 import { uploadStepImage } from "../services/s3Service";
-import { createDemoMetadata, createDemoStep, getOwnerId, Hotspot } from "../api/demos";
+import {
+  createDemoMetadata,
+  createDemoStep,
+  getOwnerId,
+  Hotspot,
+  updateDemoLeadConfig,
+} from "../api/demos";
 import { fetchAuthSession } from "aws-amplify/auth";
 
 function dataUrlToBlob(dataUrl: string): Blob {
@@ -19,6 +25,9 @@ export type EditedDraft = {
   name?: string;
   steps: Array<{ id: string; pageUrl: string; order: number }>;
   hotspotsByStep: Record<string, Hotspot[]>;
+  // Optional lead-capture metadata
+  leadStepIndex?: number | null;
+  leadConfig?: any;
 };
 
 export async function syncAnonymousDemo(options?: {
@@ -80,6 +89,14 @@ export async function syncAnonymousDemo(options?: {
 
   console.log("[sync] Creating demo metadata", { demoId, ownerId: dataOwnerId, name: draft?.name });
   await createDemoMetadata({ demoId, ownerId: dataOwnerId, name: draft?.name, status: "DRAFT" });
+  // Persist private lead config if present
+  try {
+    if (draft && typeof draft.leadStepIndex !== "undefined") {
+      await updateDemoLeadConfig({ demoId, leadStepIndex: draft.leadStepIndex ?? null, leadConfig: draft.leadConfig });
+    }
+  } catch (e) {
+    console.warn("[sync] updateDemoLeadConfig failed (non-fatal)", e);
+  }
 
   let created = 0;
   for (const s of draft!.steps) {

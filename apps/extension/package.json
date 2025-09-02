@@ -4,7 +4,7 @@
   "scripts": {
     "build": "tsc && npm run copy-assets",
     "dev": "tsc --watch",
-    "copy-assets": "cp manifest.json dist/ && cp popup.html dist/",
+    "copy-assets": "cp manifest.json dist/ && cp popup.html dist/ && cp popup.js dist/ && cp onboarding.html dist/",
     "clean": "rm -rf dist"
   },
   "dependencies": {

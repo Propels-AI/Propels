@@ -26,6 +26,14 @@
       .button:hover {
         background: #0056b3;
       }
+      .secondary {
+        background: #f3f4f6;
+        color: #111827;
+        border: 1px solid #e5e7eb;
+      }
+      .secondary:hover {
+        background: #e5e7eb;
+      }
       .status {
         text-align: center;
         margin-top: 16px;
@@ -39,11 +47,9 @@
       <h3>Demo Builder</h3>
     </div>
 
-    <button class="button" id="startCapture">📸 Start Capture</button>
+    <button class="button" id="recordToggle">🔴 Start Recording</button>
 
-    <button class="button" id="stopCapture">⏹️ Stop Capture</button>
-
-    <button class="button" id="viewDemos">📋 View Demos</button>
+    <button class="button secondary" id="viewDemos">👀 See Example</button>
 
     <div class="status" id="status">Ready to capture</div>
 

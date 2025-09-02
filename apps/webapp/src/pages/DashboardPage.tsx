@@ -3,10 +3,12 @@ import { useAuth } from "@/lib/providers/AuthProvider";
 import { useNavigate } from "react-router-dom";
 import { signOut } from "aws-amplify/auth";
 import { DemoListView } from "@/components/DemoListView";
+import { useState } from "react";
 
 export function DashboardPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [tab, setTab] = useState<"PUBLISHED" | "DRAFT">("PUBLISHED");
 
   const handleSignOut = async () => {
     try {
@@ -36,7 +38,28 @@ export function DashboardPage() {
             <p className="text-gray-600">You've successfully signed in with passwordless authentication.</p>
           </div>
 
-          <DemoListView />
+          <div className="mb-4">
+            <div className="inline-flex rounded-lg border bg-white p-1">
+              <button
+                className={`px-4 py-2 text-sm font-medium rounded-md ${
+                  tab === "PUBLISHED" ? "bg-blue-600 text-white" : "text-gray-700 hover:bg-gray-100"
+                }`}
+                onClick={() => setTab("PUBLISHED")}
+              >
+                Published
+              </button>
+              <button
+                className={`ml-1 px-4 py-2 text-sm font-medium rounded-md ${
+                  tab === "DRAFT" ? "bg-blue-600 text-white" : "text-gray-700 hover:bg-gray-100"
+                }`}
+                onClick={() => setTab("DRAFT")}
+              >
+                Drafted
+              </button>
+            </div>
+          </div>
+
+          <DemoListView statusFilter={tab} />
         </div>
       </div>
     </ProtectPage>
