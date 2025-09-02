@@ -2,6 +2,7 @@ import { defineAuth } from "@aws-amplify/backend";
 import { createAuthChallenge } from "./create-auth-challenge/resource";
 import { defineAuthChallenge } from "./define-auth-challenge/resource";
 import { verifyAuthChallengeResponse } from "./verify-auth-challenge-response/resource";
+import { postConfirmation } from "./post-confirmation/resource";
 
 /**
  * Define and configure your auth resource
@@ -21,5 +22,6 @@ export const auth = defineAuth({
     createAuthChallenge,
     defineAuthChallenge,
     verifyAuthChallengeResponse,
+    postConfirmation,
   },
 });
