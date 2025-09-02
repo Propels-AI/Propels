@@ -5,15 +5,7 @@ import { Input } from "@/components/ui/input";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { Label } from "@/components/ui/label";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import {
-  signIn,
-  confirmSignIn,
-  signUp,
-  confirmSignUp,
-  resendSignUpCode,
-  getCurrentUser,
-  signOut,
-} from "aws-amplify/auth";
+import { signIn, confirmSignIn, signUp, confirmSignUp, getCurrentUser, signOut } from "aws-amplify/auth";
 import { Mail, CheckCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -123,7 +115,15 @@ function PasswordlessAuthComponent({
       setMode("otpVerification");
     } catch (err) {
       const error = err as { name: string; message: string };
-      logError("Email submit signIn failed", err);
+      const isExpectedFirstSignInFailure =
+        error.name === "UserNotFoundException" ||
+        (error.name === "NotAuthorizedException" && (error.message || "").includes("Incorrect username or password"));
+
+      if (isExpectedFirstSignInFailure) {
+        log("Email submit: initial signIn indicates new user; proceeding to signUp flow");
+      } else {
+        logError("Email submit signIn failed", err);
+      }
       // Recover if we hit 'already a signed in user'
       if (
         (error.name === "InvalidStateException" || error.name === "NotAuthorizedException") &&
@@ -156,8 +156,13 @@ function PasswordlessAuthComponent({
             password: tp,
             options: { userAttributes: { email: email.trim() } },
           });
-          log("signUp succeeded; isSignUpFlow set true; switching to otpVerification (confirmation code expected)");
-          setIsSignUpFlow(true);
+          log("signUp succeeded; immediately triggering custom challenge signIn to send OTP");
+          // Immediately start custom auth flow to send email OTP
+          await signIn({
+            username: email.trim(),
+            options: { authFlowType: "CUSTOM_WITHOUT_SRP", clientMetadata: { email: email.trim() } },
+          });
+          setIsSignUpFlow(false);
           setTempPassword(tp);
           setError(null);
           setMode("otpVerification");
@@ -187,14 +192,17 @@ function PasswordlessAuthComponent({
           setError(suErr.message || "Failed to start sign up. Please try again.");
         }
       } else if (error.name === "UserNotConfirmedException") {
-        log("User exists but not confirmed; sending confirmation code");
+        log("User exists but not confirmed; triggering custom challenge signIn to send OTP");
         try {
-          await resendSignUpCode({ username: email.trim() });
-          setIsSignUpFlow(true);
+          await signIn({
+            username: email.trim(),
+            options: { authFlowType: "CUSTOM_WITHOUT_SRP", clientMetadata: { email: email.trim() } },
+          });
+          setIsSignUpFlow(false);
           setMode("otpVerification");
         } catch (resendErr) {
-          logError("Failed to resend confirmation code", resendErr);
-          setError("Failed to send confirmation code. Please try again.");
+          logError("Failed to trigger custom challenge signIn", resendErr);
+          setError("Failed to send code. Please try again.");
         }
       } else if (
         error.name === "NotAuthorizedException" &&
@@ -207,9 +215,13 @@ function PasswordlessAuthComponent({
             password: tp,
             options: { userAttributes: { email: email.trim() } },
           });
-          setIsSignUpFlow(true);
+          log("signUp succeeded after NotAuthorizedException; triggering custom challenge signIn to send OTP");
+          await signIn({
+            username: email.trim(),
+            options: { authFlowType: "CUSTOM_WITHOUT_SRP", clientMetadata: { email: email.trim() } },
+          });
+          setIsSignUpFlow(false);
           setTempPassword(tp);
-          log("signUp succeeded after NotAuthorizedException; isSignUpFlow set true; awaiting confirmation code");
           setMode("otpVerification");
         } catch (e2) {
           const e = e2 as { name?: string; message?: string };
@@ -437,19 +449,15 @@ function PasswordlessAuthComponent({
                       setIsLoading(true);
                       setError(null);
                       try {
-                        if (isSignUpFlow) {
-                          log("Resend: sign-up flow -> resendSignUpCode");
-                          await resendSignUpCode({ username: email.trim() });
-                        } else {
-                          log("Resend: existing user flow -> re-trigger custom challenge signIn");
-                          await signIn({
-                            username: email.trim(),
-                            options: {
-                              authFlowType: "CUSTOM_WITHOUT_SRP",
-                              clientMetadata: { email: email.trim() },
-                            },
-                          });
-                        }
+                        // Always re-trigger custom challenge sign-in to send a fresh OTP
+                        log("Resend: re-trigger custom challenge signIn");
+                        await signIn({
+                          username: email.trim(),
+                          options: {
+                            authFlowType: "CUSTOM_WITHOUT_SRP",
+                            clientMetadata: { email: email.trim() },
+                          },
+                        });
                         setOtpCode("");
                         setResendDisabled(true);
                         setTimeout(() => setResendDisabled(false), 20000);
