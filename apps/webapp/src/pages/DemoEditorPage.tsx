@@ -21,6 +21,7 @@ import { PasswordlessAuth } from "@/components/auth/PasswordlessAuth";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import LeadCaptureOverlay from "@/components/LeadCaptureOverlay";
+import StepsBar from "@/components/StepsBar";
 import HotspotOverlay from "@/components/HotspotOverlay";
 import {
   deriveTooltipStyleFromHotspots,
@@ -913,11 +914,18 @@ export function DemoEditorPage() {
               <button onClick={gotoPrevAnnotated} className="text-sm py-1 px-2 rounded border bg-white border-gray-300">
                 Prev
               </button>
-              <span className="text-xs text-gray-600">
-                {previewableIndices.length > 0
-                  ? `${previewableIndices.indexOf(selectedStepIndex) + 1} / ${previewableIndices.length}`
-                  : "0 / 0"}
-              </span>
+              <div className="w-64">
+                <StepsBar
+                  total={previewableIndices.length}
+                  current={Math.max(0, previewableIndices.indexOf(selectedStepIndex))}
+                  onSelect={(pos) => {
+                    const targetIdx = previewableIndices[pos] ?? selectedStepIndex;
+                    setSelectedStepIndex(targetIdx);
+                  }}
+                  className="mx-auto"
+                  size="sm"
+                />
+              </div>
               <button onClick={gotoNextAnnotated} className="text-sm py-1 px-2 rounded border bg-white border-gray-300">
                 Next
               </button>

@@ -3,6 +3,7 @@ import { useLocation, useParams } from "react-router-dom";
 import { listPublicDemoItems } from "@/lib/api/demos";
 import { DemoPreview } from "@/components/DemoPreview";
 import LeadCaptureOverlay from "@/components/LeadCaptureOverlay";
+import StepsBar from "@/components/StepsBar";
 import { getUrl as storageGetUrl } from "aws-amplify/storage";
 import outputs from "../../../../amplify_outputs.json";
 
@@ -76,10 +77,7 @@ export default function PublicDemoPlayer() {
         let lBg: "white" | "black" = "white";
         if (metadata?.leadConfig) {
           try {
-            const cfg =
-              typeof metadata.leadConfig === "string"
-                ? JSON.parse(metadata.leadConfig)
-                : metadata.leadConfig;
+            const cfg = typeof metadata.leadConfig === "string" ? JSON.parse(metadata.leadConfig) : metadata.leadConfig;
             if (cfg && typeof cfg.bg === "string") {
               lBg = cfg.bg === "black" ? "black" : "white";
             }
@@ -303,8 +301,14 @@ error: ${error ?? "<none>"}
       </div>
 
       <footer className="bg-gray-100 p-4 border-t">
-        <div className="max-w-5xl mx-auto text-center text-gray-700">
-          Step {currentIndex + 1} of {displayTotal}
+        <div className="max-w-5xl mx-auto">
+          <StepsBar
+            total={displayTotal}
+            current={currentIndex}
+            onSelect={(idx) => goTo(idx)}
+            leadIndex={effectiveLeadIndex}
+            className="mx-auto"
+          />
         </div>
         {debug && (
           <div className="max-w-5xl mx-auto mt-2">
