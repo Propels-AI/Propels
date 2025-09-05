@@ -21,6 +21,8 @@ const schema = a.schema({
       // Future-proof flexible lead configuration (style, colors, blur, etc.)
       // Example: { style: "solid" | "blur" | "dim", bg: "white" | "black" | "#RRGGBB", opacity: 0.0-1.0 }
       leadConfig: a.json().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
+      // If true, this demo uses the owner's global lead settings instead of local leadConfig
+      leadUseGlobal: a.boolean().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
     })
     .identifier(["demoId", "itemSK"])
     .secondaryIndexes((index) => [index("ownerId").sortKeys(["statusUpdatedAt"]).name("byOwnerStatus")])
@@ -51,6 +53,38 @@ const schema = a.schema({
     .authorization((allow) => [
       allow.publicApiKey().to(["read"]),
       allow.ownerDefinedIn("ownerId").to(["create", "update", "delete"]),
+    ]),
+
+  // Global lead settings per owner
+  LeadSettings: a
+    .model({
+      ownerId: a.string().required(),
+      leadConfig: a.json(),
+      updatedAt: a.datetime(),
+    })
+    .identifier(["ownerId"])
+    .authorization((allow) => [allow.ownerDefinedIn("ownerId").to(["create", "read", "update", "delete"])]),
+
+  // Captured lead submissions (owner-readable)
+  LeadSubmission: a
+    .model({
+      demoId: a.string().required(),
+      itemSK: a.string().required(), // LEAD#<iso>
+      ownerId: a.string(),
+      email: a.string(),
+      fields: a.json(),
+      pageUrl: a.string(),
+      stepIndex: a.integer(),
+      source: a.string(),
+      userAgent: a.string(),
+      referrer: a.string(),
+      createdAt: a.datetime(),
+    })
+    .identifier(["demoId", "itemSK"])
+    .secondaryIndexes((index) => [index("ownerId").sortKeys(["createdAt"]).name("leadsByOwner")])
+    .authorization((allow) => [
+      allow.publicApiKey().to(["create"]),
+      allow.ownerDefinedIn("ownerId").to(["read", "delete"]),
     ]),
 
   Waitlist: a

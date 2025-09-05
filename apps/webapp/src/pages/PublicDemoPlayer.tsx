@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { listPublicDemoItems } from "@/lib/api/demos";
 import { DemoPreview } from "@/components/DemoPreview";
+import { createLeadSubmissionPublic } from "@/lib/api/demos";
 import LeadCaptureOverlay from "@/components/LeadCaptureOverlay";
 import StepsBar from "@/components/StepsBar";
 import { getUrl as storageGetUrl } from "aws-amplify/storage";
@@ -41,6 +42,7 @@ export default function PublicDemoPlayer() {
   const [metaName, setMetaName] = useState<string | undefined>();
   const [leadStepIndex, setLeadStepIndex] = useState<number | null>(null);
   const [leadBg, setLeadBg] = useState<"white" | "black">("white");
+  const [ownerId, setOwnerId] = useState<string | undefined>(undefined);
   const [steps, setSteps] = useState<PublicStep[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [itemsRaw, setItemsRaw] = useState<any[]>([]);
@@ -70,6 +72,7 @@ export default function PublicDemoPlayer() {
         const metadata = items.find((it: any) => it.itemSK === "METADATA");
         console.debug("[PublicDemoPlayer] metadata", metadata);
         setMetaName(metadata?.name);
+        setOwnerId(metadata?.ownerId);
         // Read lead config (public mirror)
         const lIdx = typeof metadata?.leadStepIndex === "number" ? metadata.leadStepIndex : null;
         setLeadStepIndex(lIdx);
@@ -283,7 +286,27 @@ error: ${error ?? "<none>"}
       <div className="flex-1 p-8 flex items-center justify-center w-full">
         {isLeadDisplayIndex ? (
           <div className="w-full max-w-[1280px] aspect-[1280/800] bg-white border rounded-xl flex items-center justify-center relative overflow-hidden">
-            <LeadCaptureOverlay bg={leadBg} />
+            <LeadCaptureOverlay
+              bg={leadBg}
+              config={undefined as any}
+              onSubmit={async (form) => {
+                try {
+                  await createLeadSubmissionPublic({
+                    demoId: demoId!,
+                    email: form.email || form.Email,
+                    fields: form,
+                    pageUrl: window.location.href,
+                    stepIndex: leadStepIndex ?? undefined,
+                    source: "public",
+                    userAgent: navigator.userAgent,
+                    referrer: document.referrer,
+                    ownerId,
+                  });
+                } catch (e) {
+                  console.warn("Lead submission failed", e);
+                }
+              }}
+            />
           </div>
         ) : (
           <DemoPreview

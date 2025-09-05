@@ -46,8 +46,9 @@ export async function updateDemoLeadConfig(params: {
   demoId: string;
   leadStepIndex: number | null;
   leadConfig?: any;
+  leadUseGlobal?: boolean;
 }): Promise<void> {
-  const { demoId, leadStepIndex, leadConfig } = params;
+  const { demoId, leadStepIndex, leadConfig, leadUseGlobal } = params;
   const models = getModels();
   const payload: any = {
     demoId,
@@ -61,11 +62,113 @@ export async function updateDemoLeadConfig(params: {
       console.warn("[api/demos] Failed to stringify leadConfig; omitting", e);
     }
   }
+  if (typeof leadUseGlobal === "boolean") {
+    payload.leadUseGlobal = leadUseGlobal;
+  }
   const res = await models.Demo.update(payload);
   console.log("[api/demos] updateDemoLeadConfig res", res);
   if (!res?.data || (res as any)?.errors?.length) {
     throw new Error(
       `updateDemoLeadConfig failed: ${(res as any)?.errors?.map((e: any) => e?.message).join(", ") || "no data returned"}`
+    );
+  }
+}
+
+// Global lead settings helpers
+export async function getLeadSettings(): Promise<any | undefined> {
+  const ownerId = await getOwnerId();
+  if (!ownerId) return undefined;
+  const models = getModels();
+  if (!(models as any).LeadSettings?.get) return undefined;
+  const res = await (models as any).LeadSettings.get({ ownerId });
+  return (res as any)?.data;
+}
+
+export async function upsertLeadSettings(leadConfig: any): Promise<void> {
+  const ownerId = await getOwnerId();
+  if (!ownerId) throw new Error("Not signed in");
+  const models = getModels();
+  const payload: any = { ownerId, updatedAt: new Date().toISOString() };
+  try {
+    payload.leadConfig = typeof leadConfig === "string" ? leadConfig : JSON.stringify(leadConfig);
+  } catch (e) {
+    console.warn("[api/demos] Failed to stringify leadSettings.leadConfig; omitting", e);
+  }
+  // Try create then update on condition fail
+  try {
+    const res = await (models as any).LeadSettings.create(payload);
+    if (!(res as any)?.data && (res as any)?.errors?.length) throw new Error("create failed");
+  } catch {
+    const upd = await (models as any).LeadSettings.update(payload);
+    if (!(upd as any)?.data && (upd as any)?.errors?.length) throw new Error("update failed");
+  }
+}
+
+// List captured leads for a demo (owner-only)
+export async function listLeadSubmissions(demoId: string): Promise<
+  Array<{
+    demoId: string;
+    itemSK: string;
+    ownerId?: string;
+    email?: string;
+    fields?: any;
+    pageUrl?: string;
+    stepIndex?: number;
+    source?: string;
+    userAgent?: string;
+    referrer?: string;
+    createdAt?: string;
+  }>
+> {
+  const models = getModels();
+  if (!(models as any).LeadSubmission?.list) return [];
+  let items: any[] = [];
+  let nextToken: any = undefined;
+  do {
+    const res = await (models as any).LeadSubmission.list({ filter: { demoId: { eq: demoId } }, nextToken });
+    const page = (res as any)?.data ?? [];
+    items = items.concat(page);
+    nextToken = (res as any)?.nextToken;
+  } while (nextToken);
+  return items;
+}
+
+// Public create: store a lead submission under demoId (apiKey auth)
+export async function createLeadSubmissionPublic(params: {
+  demoId: string;
+  ownerId?: string;
+  email?: string;
+  fields?: any;
+  pageUrl?: string;
+  stepIndex?: number;
+  source?: string;
+  userAgent?: string;
+  referrer?: string;
+  createdAt?: string;
+}): Promise<void> {
+  const client = generateClient({ authMode: "apiKey" as any });
+  const models: any = (client as any).models;
+  if (!models?.LeadSubmission) throw new Error("LeadSubmission model not available");
+  const now = params.createdAt || new Date().toISOString();
+  const itemSK = `LEAD#${now}`;
+  const payload: any = {
+    demoId: params.demoId,
+    itemSK,
+    ownerId: params.ownerId,
+    email: params.email,
+    fields: params.fields ? JSON.stringify(params.fields) : undefined,
+    pageUrl: params.pageUrl,
+    stepIndex: params.stepIndex,
+    source: params.source,
+    userAgent: params.userAgent,
+    referrer: params.referrer,
+    createdAt: now,
+  };
+  Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
+  const res = await models.LeadSubmission.create(payload);
+  if (!res?.data || (res as any)?.errors?.length) {
+    throw new Error(
+      `createLeadSubmissionPublic failed: ${(res as any)?.errors?.map((e: any) => e?.message).join(", ") || "no data"}`
     );
   }
 }
@@ -251,6 +354,17 @@ export async function mirrorDemoToPublic(
   }
   const meta = items.find((it: any) => it.itemSK === "METADATA");
   if (meta) {
+    // Resolve effective lead config: global vs local
+    let effectiveLeadConfig: any =
+      overrides && "leadConfig" in overrides ? overrides.leadConfig : (meta as any).leadConfig;
+    try {
+      if ((meta as any).leadUseGlobal === true && (overrides === undefined || !("leadConfig" in overrides))) {
+        const global = await getLeadSettings();
+        if (global && global.leadConfig) effectiveLeadConfig = global.leadConfig;
+      }
+    } catch (e) {
+      console.warn("[api/demos] mirror: failed to resolve global lead settings (non-fatal)", e);
+    }
     await createPublicDemoMetadata({
       demoId,
       name: overrides?.name ?? meta.name,
@@ -258,8 +372,7 @@ export async function mirrorDemoToPublic(
       updatedAt: now,
       leadStepIndex:
         overrides && "leadStepIndex" in overrides ? (overrides.leadStepIndex ?? null) : (meta.leadStepIndex ?? null),
-      leadConfig:
-        overrides && "leadConfig" in overrides ? (overrides.leadConfig ?? undefined) : (meta.leadConfig ?? undefined),
+      leadConfig: effectiveLeadConfig ?? undefined,
     });
   } else {
     console.warn("[api/demos] mirrorDemoToPublic: METADATA missing");

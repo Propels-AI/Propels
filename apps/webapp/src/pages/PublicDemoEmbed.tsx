@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
-import { listPublicDemoItems } from "@/lib/api/demos";
+import { listPublicDemoItems, createLeadSubmissionPublic } from "@/lib/api/demos";
 import HotspotOverlay from "@/components/HotspotOverlay";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import LeadCaptureOverlay from "@/components/LeadCaptureOverlay";
@@ -38,6 +38,7 @@ export default function PublicDemoEmbed() {
   const [error, setError] = useState<string | undefined>();
   const [leadStepIndex, setLeadStepIndex] = useState<number | null>(null);
   const [leadBg, setLeadBg] = useState<"white" | "black">("white");
+  const [ownerId, setOwnerId] = useState<string | undefined>(undefined);
   const [steps, setSteps] = useState<PublicStep[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [hotspotStyleDefaults, setHotspotStyleDefaults] = useState<{
@@ -58,6 +59,7 @@ export default function PublicDemoEmbed() {
         const items = await listPublicDemoItems(demoId);
         if (cancelled) return;
         const metadata = items.find((it: any) => it.itemSK === "METADATA");
+        setOwnerId(metadata?.ownerId);
         const lIdx = typeof metadata?.leadStepIndex === "number" ? metadata.leadStepIndex : null;
         setLeadStepIndex(lIdx);
         let lBg: "white" | "black" = "white";
@@ -262,7 +264,27 @@ export default function PublicDemoEmbed() {
     <div className="w-full bg-transparent">
       <div className="relative w-full" style={{ aspectRatio: forcedAspect || naturalAspect || "16 / 10" }}>
         {isLeadDisplayIndex ? (
-          <LeadCaptureOverlay bg={leadBg} />
+          <LeadCaptureOverlay
+            bg={leadBg}
+            config={undefined as any}
+            onSubmit={async (form) => {
+              try {
+                await createLeadSubmissionPublic({
+                  demoId: demoId!,
+                  email: form.email || form.Email,
+                  fields: form,
+                  pageUrl: window.location.href,
+                  stepIndex: leadStepIndex ?? undefined,
+                  source: "embed",
+                  userAgent: navigator.userAgent,
+                  referrer: document.referrer,
+                  ownerId,
+                });
+              } catch (e) {
+                console.warn("Lead submission failed", e);
+              }
+            }}
+          />
         ) : (
           <HotspotOverlay
             className="absolute inset-0 w-full h-full"
