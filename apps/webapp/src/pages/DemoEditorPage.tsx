@@ -779,39 +779,37 @@ export function DemoEditorPage() {
   return (
     <div className="min-h-screen flex">
       <div className="flex-1 p-8">
-        <h1 className="text-2xl font-bold mb-1">Demo Editor</h1>
-        <div className="mb-3 text-xs text-gray-600">
-          {demoIdParam ? `Viewing saved demo: ${demoIdParam}` : "Editing local captures"}
+        <div className="mb-3 flex items-center gap-2">
+          <Input
+            value={demoName}
+            placeholder="Untitled Demo"
+            onChange={(e) => setDemoName(e.target.value)}
+            className="h-8 text-sm w-64"
+          />
+          {demoIdParam && (
+            <button
+              onClick={async () => {
+                if (!demoIdParam) return;
+                try {
+                  setSavingTitle(true);
+                  await renameDemo(demoIdParam, demoName || "");
+                } catch (e) {
+                  console.error("Failed to rename demo", e);
+                  alert("Failed to save title. Please try again.");
+                } finally {
+                  setSavingTitle(false);
+                }
+              }}
+              disabled={savingTitle || savingDemo}
+              className={`text-sm py-1.5 px-2 rounded border ${savingTitle ? "opacity-60" : ""}`}
+            >
+              {savingTitle ? "Saving..." : "Save Title"}
+            </button>
+          )}
         </div>
         <div className="mb-4 flex items-center gap-3">
           {demoIdParam && (
             <>
-              <div className="flex items-center gap-2 mr-4">
-                <Input
-                  value={demoName}
-                  placeholder="Untitled Demo"
-                  onChange={(e) => setDemoName(e.target.value)}
-                  className="h-8 text-sm w-64"
-                />
-                <button
-                  onClick={async () => {
-                    if (!demoIdParam) return;
-                    try {
-                      setSavingTitle(true);
-                      await renameDemo(demoIdParam, demoName || "");
-                    } catch (e) {
-                      console.error("Failed to rename demo", e);
-                      alert("Failed to save title. Please try again.");
-                    } finally {
-                      setSavingTitle(false);
-                    }
-                  }}
-                  disabled={savingTitle || savingDemo}
-                  className={`text-sm py-1.5 px-2 rounded border ${savingTitle ? "opacity-60" : ""}`}
-                >
-                  {savingTitle ? "Saving..." : "Save Title"}
-                </button>
-              </div>
               <div className="flex items-center gap-2 mr-4">
                 <span
                   className={`px-2 py-1 rounded text-xs font-medium ${
@@ -902,9 +900,7 @@ export function DemoEditorPage() {
           >
             {savingDemo ? "Saving..." : "Save"}
           </button>
-          {!isAuthenticated && (
-            <span className="text-xs text-gray-500">You can freely edit. Saving requires sign in.</span>
-          )}
+
           {loadingSteps && <span className="text-xs text-gray-400">Loading steps…</span>}
           {!loadingSteps && steps.length > 0 && (
             <span className="text-xs text-gray-600">Loaded {steps.length} captured steps</span>

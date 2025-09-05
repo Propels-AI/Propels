@@ -309,6 +309,7 @@ error: ${error ?? "<none>"}
             leadIndex={effectiveLeadIndex}
             className="mx-auto"
           />
+          <div className="sr-only">{`Step ${currentIndex + 1} of ${displayTotal}`}</div>
         </div>
         {debug && (
           <div className="max-w-5xl mx-auto mt-2">
