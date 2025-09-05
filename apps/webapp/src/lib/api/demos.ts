@@ -56,8 +56,7 @@ export async function updateDemoLeadConfig(params: {
   };
   if (leadConfig !== undefined) {
     try {
-      payload.leadConfig =
-        typeof leadConfig === "string" ? leadConfig : JSON.stringify(leadConfig);
+      payload.leadConfig = typeof leadConfig === "string" ? leadConfig : JSON.stringify(leadConfig);
     } catch (e) {
       console.warn("[api/demos] Failed to stringify leadConfig; omitting", e);
     }
@@ -145,9 +144,9 @@ export async function createPublicDemoMetadata(params: {
       const upd = await models.PublicDemo.update(payload);
       if (!upd?.data || (upd as any)?.errors?.length) {
         throw new Error(
-          `createPublicDemoMetadata->update fallback failed: ${(upd as any)?.errors
-            ?.map((e: any) => e?.message)
-            .join(", ") || "no data returned"}`
+          `createPublicDemoMetadata->update fallback failed: ${
+            (upd as any)?.errors?.map((e: any) => e?.message).join(", ") || "no data returned"
+          }`
         );
       }
       return;
@@ -258,9 +257,9 @@ export async function mirrorDemoToPublic(
       createdAt: meta.createdAt,
       updatedAt: now,
       leadStepIndex:
-        overrides && "leadStepIndex" in overrides ? overrides.leadStepIndex ?? null : (meta.leadStepIndex ?? null),
+        overrides && "leadStepIndex" in overrides ? (overrides.leadStepIndex ?? null) : (meta.leadStepIndex ?? null),
       leadConfig:
-        overrides && "leadConfig" in overrides ? overrides.leadConfig ?? undefined : (meta.leadConfig ?? undefined),
+        overrides && "leadConfig" in overrides ? (overrides.leadConfig ?? undefined) : (meta.leadConfig ?? undefined),
     });
   } else {
     console.warn("[api/demos] mirrorDemoToPublic: METADATA missing");

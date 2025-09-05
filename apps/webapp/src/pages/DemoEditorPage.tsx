@@ -30,6 +30,7 @@ import {
 } from "@/lib/editor/deriveTooltipStyleFromHotspots";
 import { applyGlobalStyleToHotspots } from "@/lib/editor/applyGlobalStyleToHotspots";
 import { extractLeadConfig } from "@/lib/editor/extractLeadConfig";
+import { Dialog as UIDialog, DialogContent as UIDialogContent } from "@/components/ui/dialog";
 
 export function DemoEditorPage() {
   const { user, isLoading } = useAuth();
@@ -76,6 +77,7 @@ export function DemoEditorPage() {
   const [togglingStatus, setTogglingStatus] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [savingDemo, setSavingDemo] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   // Retry counter for backend load (handle eventual consistency right after creation)
   const loadAttemptsRef = useRef<number>(0);
 
@@ -529,6 +531,9 @@ export function DemoEditorPage() {
           }
         }
         toast.success("Saved annotations");
+        try {
+          setShareOpen(true);
+        } catch {}
       } else {
         const { demoId, stepCount } = await syncAnonymousDemo({ inlineDraft: draft });
         console.log("Saved demo", demoId, "with steps:", stepCount);
@@ -883,14 +888,61 @@ export function DemoEditorPage() {
             </>
           )}
           <button
-            onClick={() => (isPreviewing ? exitPreview() : enterPreview())}
-            className={`text-sm py-2 px-3 rounded border ${
-              isPreviewing ? "bg-green-100 border-green-400" : "bg-white border-gray-300"
-            }`}
-            title="Toggle preview mode"
+            onClick={() => {
+              const demoId = demoIdParam;
+              if (!demoId) {
+                alert("Save your demo first to preview in blog.");
+                return;
+              }
+              const url = `/preview-blog?demoId=${encodeURIComponent(demoId)}`;
+              window.open(url, "_blank", "noopener,noreferrer");
+            }}
+            className={`text-sm py-2 px-3 rounded border bg-white border-gray-300`}
+            title="Open blog preview"
           >
-            {isPreviewing ? "Preview: On (Esc to stop)" : "Preview: Off"}
+            Blog Preview
           </button>
+          {demoIdParam && demoStatus === "PUBLISHED" && (
+            <>
+              <button
+                onClick={async () => {
+                  try {
+                    const url = `${window.location.origin}/p/${demoIdParam}`;
+                    await navigator.clipboard.writeText(url);
+                    toast.success("Copied public URL");
+                  } catch (e) {
+                    try {
+                      prompt("Copy public URL", `${window.location.origin}/p/${demoIdParam}`);
+                    } catch {}
+                  }
+                }}
+                className="text-sm py-2 px-3 rounded border bg-white border-gray-300"
+                title="Copy public page URL"
+              >
+                Copy URL
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    const code = `<iframe src="${window.location.origin}/embed/${demoIdParam}?ar=16:9" style="width:100%;aspect-ratio:16/9;border:0;" allow="fullscreen"></iframe>`;
+                    await navigator.clipboard.writeText(code);
+                    toast.success("Copied embed code");
+                  } catch (e) {
+                    try {
+                      prompt(
+                        "Copy iframe embed code",
+                        `<iframe src=\"${window.location.origin}/embed/${demoIdParam}?ar=16:9\" style=\"width:100%;aspect-ratio:16/9;border:0;\" allow=\"fullscreen\"></iframe>`
+                      );
+                    } catch {}
+                  }
+                }}
+                className="text-sm py-2 px-3 rounded border bg-white border-gray-300"
+                title="Copy iframe embed code"
+              >
+                Copy Embed
+              </button>
+            </>
+          )}
           <button
             onClick={handleSave}
             disabled={savingDemo}
@@ -1387,6 +1439,43 @@ export function DemoEditorPage() {
           />
         </DialogContent>
       </Dialog>
+
+      {/* Share dialog after save */}
+      <UIDialog open={shareOpen} onOpenChange={setShareOpen}>
+        <UIDialogContent className="p-4">
+          <div className="space-y-3">
+            <h3 className="text-lg font-semibold">Share your demo</h3>
+            <div className="space-y-2">
+              <label className="text-xs text-gray-600">Public page URL</label>
+              <input
+                readOnly
+                value={demoIdParam ? `${window.location.origin}/p/${demoIdParam}` : ""}
+                className="w-full border rounded px-2 py-1 text-xs"
+                onFocus={(e) => e.currentTarget.select()}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs text-gray-600">Embed code (16:9)</label>
+              <textarea
+                readOnly
+                rows={4}
+                className="w-full border rounded px-2 py-1 text-xs font-mono"
+                onFocus={(e) => e.currentTarget.select()}
+                value={
+                  demoIdParam
+                    ? `<iframe src="${window.location.origin}/embed/${demoIdParam}?ar=16:9" style="width:100%;aspect-ratio:16/9;border:0;" allow="fullscreen"></iframe>`
+                    : ""
+                }
+              />
+            </div>
+            <div className="text-right">
+              <button className="text-sm px-3 py-1.5 rounded border bg-white" onClick={() => setShareOpen(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </UIDialogContent>
+      </UIDialog>
     </div>
   );
 }

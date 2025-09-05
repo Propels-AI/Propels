@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useLocation, useParams } from "react-router-dom";
 import { listPublicDemoItems } from "@/lib/api/demos";
 import HotspotOverlay from "@/components/HotspotOverlay";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -33,6 +33,7 @@ type PublicStep = {
 
 export default function PublicDemoEmbed() {
   const { demoId } = useParams();
+  const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
   const [leadStepIndex, setLeadStepIndex] = useState<number | null>(null);
@@ -121,6 +122,22 @@ export default function PublicDemoEmbed() {
 
   const [resolvedSrc, setResolvedSrc] = useState<string | undefined>(undefined);
   const [naturalAspect, setNaturalAspect] = useState<string | null>(null);
+  const forcedAspect: string | null = useMemo(() => {
+    try {
+      const ar = new URLSearchParams(location.search).get("ar");
+      if (!ar) return null;
+      const cleaned = String(ar).replace(/\s+/g, "");
+      const parts = cleaned.includes(":") ? cleaned.split(":") : cleaned.split("/");
+      if (parts.length === 2) {
+        const w = Number(parts[0]);
+        const h = Number(parts[1]);
+        if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) return `${w} / ${h}`;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }, [location.search]);
   const imageSrc = useMemo(() => {
     const raw = current?.s3Key || current?.thumbnailS3Key;
     if (!raw) return undefined;
@@ -243,7 +260,7 @@ export default function PublicDemoEmbed() {
 
   return (
     <div className="w-full bg-transparent">
-      <div className="relative w-full" style={{ aspectRatio: naturalAspect || "16 / 10" }}>
+      <div className="relative w-full" style={{ aspectRatio: forcedAspect || naturalAspect || "16 / 10" }}>
         {isLeadDisplayIndex ? (
           <LeadCaptureOverlay bg={leadBg} />
         ) : (
