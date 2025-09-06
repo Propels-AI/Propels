@@ -98,7 +98,8 @@ describe("DemoEditorPage Tooltip Inspector", () => {
     expect(strokeColor.value.toLowerCase()).toBe("#aabbcc");
 
     // Change animation select
-    const select = screen.getByRole("combobox") as HTMLSelectElement;
+    const label = screen.getByText(/Animation \(applies to all steps\)/i);
+    const select = label.parentElement!.querySelector("select") as HTMLSelectElement;
     fireEvent.change(select, { target: { value: "pulse" } });
     expect(select.value).toBe("pulse");
   });
