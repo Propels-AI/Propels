@@ -772,17 +772,6 @@ export function DemoEditorPage() {
     .map((s, idx) => (s.isLeadCapture || (hotspotsByStep[s.id]?.length ? true : false) ? idx : -1))
     .filter((v) => v >= 0);
 
-  const enterPreview = () => {
-    setIsPreviewing(true);
-    if (currentStepId && !(hotspotsByStep[currentStepId]?.length > 0) && !isCurrentLeadStep) {
-      if (previewableIndices.length > 0) setSelectedStepIndex(previewableIndices[0]);
-    }
-  };
-
-  const exitPreview = () => {
-    setIsPreviewing(false);
-  };
-
   const gotoPrevAnnotated = () => {
     if (previewableIndices.length === 0) return;
     const pos = previewableIndices.indexOf(selectedStepIndex);
