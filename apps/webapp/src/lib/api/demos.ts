@@ -104,6 +104,47 @@ export async function upsertLeadSettings(leadConfig: any): Promise<void> {
   }
 }
 
+// Lead templates API
+export async function listLeadTemplates(): Promise<
+  Array<{ templateId: string; name: string; leadConfig: any; updatedAt?: string }>
+> {
+  const ownerId = await getOwnerId();
+  if (!ownerId) return [];
+  const models = getModels();
+  if (!(models as any).LeadTemplate?.list) return [];
+  let items: any[] = [];
+  let nextToken: any = undefined;
+  do {
+    const res = await (models as any).LeadTemplate.list({ filter: { ownerId: { eq: ownerId } }, nextToken });
+    items = items.concat((res as any)?.data ?? []);
+    nextToken = (res as any)?.nextToken;
+  } while (nextToken);
+  return items.map((i: any) => ({
+    templateId: i.templateId,
+    name: i.name,
+    leadConfig: i.leadConfig,
+    updatedAt: i.updatedAt,
+  }));
+}
+
+export async function saveLeadTemplate(name: string, leadConfig: any): Promise<void> {
+  const ownerId = await getOwnerId();
+  if (!ownerId) throw new Error("Not signed in");
+  const models = getModels();
+  const now = new Date().toISOString();
+  const templateId = crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}`;
+  const payload: any = {
+    ownerId,
+    templateId,
+    name,
+    leadConfig: typeof leadConfig === "string" ? leadConfig : JSON.stringify(leadConfig),
+    createdAt: now,
+    updatedAt: now,
+  };
+  const res = await (models as any).LeadTemplate.create(payload);
+  if (!(res as any)?.data && (res as any)?.errors?.length) throw new Error("saveLeadTemplate failed");
+}
+
 // List captured leads for a demo (owner-only)
 export async function listLeadSubmissions(demoId: string): Promise<
   Array<{

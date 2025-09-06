@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useKeyboardShortcut } from "@/hooks/useKeyboardShortcut";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { syncAnonymousDemo, type EditedDraft } from "../lib/services/syncAnonymousDemo";
 import { useAuth } from "@/lib/providers/AuthProvider";
 import { useSearchParams, useNavigate } from "react-router-dom";
@@ -14,12 +15,14 @@ import {
   deletePublicDemoItems,
   updateDemoLeadConfig,
   updateDemoStyleConfig,
+  listLeadTemplates,
+  saveLeadTemplate,
 } from "@/lib/api/demos";
 import { getUrl } from "aws-amplify/storage";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { PasswordlessAuth } from "@/components/auth/PasswordlessAuth";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, Copy } from "lucide-react";
 import LeadCaptureOverlay from "@/components/LeadCaptureOverlay";
 import StepsBar from "@/components/StepsBar";
 import HotspotOverlay from "@/components/HotspotOverlay";
@@ -108,6 +111,13 @@ export function DemoEditorPage() {
   const [editingTooltip, setEditingTooltip] = useState<string | null>(null);
   const [tooltipText, setTooltipText] = useState("");
   const [inspectorTab, setInspectorTab] = useState<"fill" | "stroke">("fill");
+  // Lead form config
+  const [leadFormConfig, setLeadFormConfig] = useState<any>({
+    title: "Stay in the loop",
+    subtitle: "Enjoying the demo? Leave your details and we’ll reach out.",
+    ctaText: "Notify me",
+    fields: [{ key: "email", type: "email", label: "Email", required: true, placeholder: "you@company.com" }],
+  });
   // Global tooltip style for consistency across all steps
   const [tooltipStyle, setTooltipStyle] = useState<{
     dotSize: number;
@@ -153,6 +163,15 @@ export function DemoEditorPage() {
         if (meta) {
           setDemoName(meta.name || "");
           setDemoStatusLocal((meta.status as any) === "PUBLISHED" ? "PUBLISHED" : "DRAFT");
+          try {
+            if ((meta as any).leadConfig) {
+              const cfg =
+                typeof (meta as any).leadConfig === "string"
+                  ? JSON.parse((meta as any).leadConfig)
+                  : (meta as any).leadConfig;
+              if (cfg && typeof cfg === "object") setLeadFormConfig(cfg);
+            }
+          } catch {}
           try {
             const raw = (meta as any).hotspotStyle;
             if (raw) {
@@ -466,7 +485,7 @@ export function DemoEditorPage() {
   }, []);
 
   const handleSave = async () => {
-    const { leadStepIndex: leadIdxDraft, leadConfig: leadCfgDraft } = extractLeadConfig(steps);
+    const { leadStepIndex: leadIdxDraft } = extractLeadConfig(steps);
     const draft: EditedDraft = {
       draftId: (crypto as any).randomUUID ? (crypto as any).randomUUID() : `${Date.now()}`,
       createdAt: new Date().toISOString(),
@@ -474,7 +493,7 @@ export function DemoEditorPage() {
       steps: steps.map((s, idx) => ({ id: s.id, pageUrl: s.pageUrl, order: idx })),
       hotspotsByStep: hotspotsByStep,
       leadStepIndex: leadIdxDraft,
-      leadConfig: leadCfgDraft,
+      leadConfig: leadFormConfig,
     };
 
     if (!isAuthenticated) {
@@ -498,12 +517,12 @@ export function DemoEditorPage() {
         });
         await Promise.all(updates);
         try {
-          const { leadStepIndex, leadConfig } = extractLeadConfig(steps);
-          if (leadStepIndex !== null) {
-            await updateDemoLeadConfig({ demoId: demoIdParam, leadStepIndex, leadConfig: leadConfig as any });
-          } else {
-            await updateDemoLeadConfig({ demoId: demoIdParam, leadStepIndex: null });
-          }
+          const { leadStepIndex } = extractLeadConfig(steps);
+          await updateDemoLeadConfig({
+            demoId: demoIdParam,
+            leadStepIndex: leadStepIndex !== null ? leadStepIndex : null,
+            leadConfig: leadFormConfig as any,
+          });
         } catch (e) {
           console.error("Failed to persist lead config (non-fatal)", e);
         }
@@ -531,9 +550,6 @@ export function DemoEditorPage() {
           }
         }
         toast.success("Saved annotations");
-        try {
-          setShareOpen(true);
-        } catch {}
       } else {
         const { demoId, stepCount } = await syncAnonymousDemo({ inlineDraft: draft });
         console.log("Saved demo", demoId, "with steps:", stepCount);
@@ -847,6 +863,9 @@ export function DemoEditorPage() {
                       }
                       await setDemoStatus(demoIdParam, next);
                       setDemoStatusLocal(next);
+                      if (next === "PUBLISHED") {
+                        setShareOpen(true);
+                      }
                     } catch (e) {
                       console.error("Failed to update status", e);
                       alert("Failed to update status. Please try again.");
@@ -1006,7 +1025,10 @@ export function DemoEditorPage() {
           )}
           {steps.length > 0 ? (
             isCurrentLeadStep ? (
-              <LeadCaptureOverlay bg={steps[selectedStepIndex]?.leadBg === "black" ? "black" : "white"} />
+              <LeadCaptureOverlay
+                bg={steps[selectedStepIndex]?.leadBg === "black" ? "black" : "white"}
+                config={leadFormConfig as any}
+              />
             ) : isPreviewing ? (
               <HotspotOverlay
                 className="absolute inset-0 w-full h-full"
@@ -1399,6 +1421,86 @@ export function DemoEditorPage() {
             </div>
           )}
         </div>
+
+        <div className="pt-4 border-t mt-6">
+          <h3 className="text-lg font-semibold mb-3">Lead Form</h3>
+          <div className="space-y-3 text-sm">
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">Title</label>
+                  <input
+                    className="w-full border rounded px-2 py-1"
+                    value={leadFormConfig.title || ""}
+                    onChange={(e) => setLeadFormConfig((p: any) => ({ ...p, title: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">CTA Text</label>
+                  <input
+                    className="w-full border rounded px-2 py-1"
+                    value={leadFormConfig.ctaText || ""}
+                    onChange={(e) => setLeadFormConfig((p: any) => ({ ...p, ctaText: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Subtitle</label>
+                <textarea
+                  className="w-full border rounded px-2 py-1 h-16"
+                  value={leadFormConfig.subtitle || ""}
+                  onChange={(e) => setLeadFormConfig((p: any) => ({ ...p, subtitle: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1">
+                <div className="text-xs text-gray-600">Fields</div>
+                {[
+                  { key: "email", label: "Email", type: "email", required: true },
+                  { key: "name", label: "Name", type: "text" },
+                  { key: "phone", label: "Phone", type: "tel" },
+                  { key: "position", label: "Position", type: "text" },
+                  { key: "message", label: "Message", type: "textarea" },
+                  { key: "custom", label: "Custom", type: "text" },
+                ].map((f) => {
+                  const list: any[] = Array.isArray(leadFormConfig.fields) ? leadFormConfig.fields : [];
+                  const exists = list.find((x) => x.key === f.key);
+                  const enabled = !!exists;
+                  return (
+                    <label key={f.key} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        className="accent-blue-600"
+                        checked={enabled}
+                        disabled={f.key === "email"}
+                        onChange={(e) => {
+                          setLeadFormConfig((p: any) => {
+                            const current: any[] = Array.isArray(p.fields) ? [...p.fields] : [];
+                            if (e.target.checked) {
+                              if (!current.find((x) => x.key === f.key))
+                                current.push({ key: f.key, type: f.type, label: f.label });
+                            } else {
+                              const idx = current.findIndex((x) => x.key === f.key);
+                              if (idx >= 0) current.splice(idx, 1);
+                            }
+                            // Ensure email is present & required
+                            if (!current.find((x) => x.key === "email"))
+                              current.unshift({ key: "email", type: "email", label: "Email", required: true });
+                            return { ...p, fields: current };
+                          });
+                        }}
+                      />
+                      <span>{f.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <TemplatePicker getConfig={() => leadFormConfig} applyConfig={(cfg) => setLeadFormConfig(cfg)} />
+            </div>
+          </div>
+        </div>
       </div>
       <Dialog
         open={authOpen}
@@ -1440,33 +1542,73 @@ export function DemoEditorPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Share dialog after save */}
+      {/* Share dialog after publish */}
       <UIDialog open={shareOpen} onOpenChange={setShareOpen}>
         <UIDialogContent className="p-4">
-          <div className="space-y-3">
-            <h3 className="text-lg font-semibold">Share your demo</h3>
-            <div className="space-y-2">
-              <label className="text-xs text-gray-600">Public page URL</label>
-              <input
-                readOnly
-                value={demoIdParam ? `${window.location.origin}/p/${demoIdParam}` : ""}
-                className="w-full border rounded px-2 py-1 text-xs"
-                onFocus={(e) => e.currentTarget.select()}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs text-gray-600">Embed code (16:9)</label>
-              <textarea
-                readOnly
-                rows={4}
-                className="w-full border rounded px-2 py-1 text-xs font-mono"
-                onFocus={(e) => e.currentTarget.select()}
-                value={
-                  demoIdParam
-                    ? `<iframe src="${window.location.origin}/embed/${demoIdParam}?ar=16:9" style="width:100%;aspect-ratio:16/9;border:0;" allow="fullscreen"></iframe>`
-                    : ""
-                }
-              />
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold">Your demo is live! What’s next?</h3>
+            <div className="text-sm space-y-4">
+              <div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">1.</span>
+                    <span>Copy the embed code and add it to your site</span>
+                  </div>
+                  <button
+                    className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50"
+                    onClick={async () => {
+                      try {
+                        const code = demoIdParam
+                          ? `<iframe src="${window.location.origin}/embed/${demoIdParam}?ar=16:9" style="width:100%;aspect-ratio:16/9;border:0;" allow="fullscreen"></iframe>`
+                          : "";
+                        await navigator.clipboard.writeText(code);
+                        toast.success("Embed code copied");
+                      } catch {}
+                    }}
+                    title="Copy embed code"
+                  >
+                    <Copy className="w-3.5 h-3.5" /> Copy
+                  </button>
+                </div>
+                <textarea
+                  readOnly
+                  rows={4}
+                  className="mt-2 w-full border rounded px-2 py-1 text-xs font-mono"
+                  onFocus={(e) => e.currentTarget.select()}
+                  value={
+                    demoIdParam
+                      ? `<iframe src="${window.location.origin}/embed/${demoIdParam}?ar=16:9" style="width:100%;aspect-ratio:16/9;border:0;" allow="fullscreen"></iframe>`
+                      : ""
+                  }
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">2.</span>
+                    <span>Or share the public viewing link</span>
+                  </div>
+                  <button
+                    className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50"
+                    onClick={async () => {
+                      try {
+                        const url = demoIdParam ? `${window.location.origin}/p/${demoIdParam}` : "";
+                        await navigator.clipboard.writeText(url);
+                        toast.success("Public link copied");
+                      } catch {}
+                    }}
+                    title="Copy public link"
+                  >
+                    <Copy className="w-3.5 h-3.5" /> Copy
+                  </button>
+                </div>
+                <input
+                  readOnly
+                  className="mt-2 w-full border rounded px-2 py-1 text-xs"
+                  value={demoIdParam ? `${window.location.origin}/p/${demoIdParam}` : ""}
+                  onFocus={(e) => e.currentTarget.select()}
+                />
+              </div>
             </div>
             <div className="text-right">
               <button className="text-sm px-3 py-1.5 rounded border bg-white" onClick={() => setShareOpen(false)}>
@@ -1476,8 +1618,77 @@ export function DemoEditorPage() {
           </div>
         </UIDialogContent>
       </UIDialog>
+      {/* Lightweight template picker actions */}
+      <></>
     </div>
   );
 }
 
 export default DemoEditorPage;
+
+function TemplatePicker(props: { getConfig: () => any; applyConfig: (cfg: any) => void }) {
+  const { getConfig, applyConfig } = props;
+  const [loading, setLoading] = useState(false);
+  const [templates, setTemplates] = useState<Array<{ templateId: string; name: string; leadConfig: any }>>([]);
+  const [name, setName] = useState("");
+
+  const load = async () => {
+    try {
+      setLoading(true);
+      const list = await listLeadTemplates();
+      setTemplates(list);
+    } catch {
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <Button variant="outline" className="h-8" onClick={load} disabled={loading}>
+          {loading ? "Loading…" : "Load templates"}
+        </Button>
+        <select
+          onChange={(e) => {
+            const t = templates.find((x) => x.templateId === e.target.value);
+            if (t?.leadConfig) {
+              const cfg = typeof t.leadConfig === "string" ? JSON.parse(t.leadConfig) : t.leadConfig;
+              applyConfig(cfg);
+            }
+          }}
+          className="border rounded px-2 py-1 text-xs bg-white"
+        >
+          <option value="">Select template…</option>
+          {templates.map((t) => (
+            <option key={t.templateId} value={t.templateId}>
+              {t.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="flex items-center gap-2">
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Template name"
+          className="h-8 text-xs w-48"
+        />
+        <Button
+          variant="outline"
+          className="h-8"
+          onClick={async () => {
+            if (!name.trim()) return;
+            try {
+              await saveLeadTemplate(name.trim(), getConfig());
+              setName("");
+              await load();
+            } catch {}
+          }}
+        >
+          Save as template
+        </Button>
+      </div>
+    </div>
+  );
+}

@@ -28,44 +28,53 @@ export default function LeadSubmissionsPage() {
     };
   }, [demoId]);
 
-  const csv = useMemo(() => {
-    const cols = [
-      "createdAt",
-      "email",
-      "name",
-      "phone",
-      "position",
-      "message",
-      "custom",
-      "stepIndex",
-      "pageUrl",
-      "source",
+  const columns = useMemo(() => {
+    const defs: Array<{
+      key: string;
+      title: string;
+      get: (r: any) => any;
+      className: string;
+    }> = [
+      { key: "createdAt", title: "Created", get: (r) => r.createdAt || "", className: "p-2 whitespace-nowrap" },
+      {
+        key: "email",
+        title: "Email",
+        get: (r) => r.email || (r.fields?.email ?? ""),
+        className: "p-2 whitespace-nowrap",
+      },
+      { key: "name", title: "Name", get: (r) => r.fields?.name || "", className: "p-2 whitespace-nowrap" },
+      { key: "phone", title: "Phone", get: (r) => r.fields?.phone || "", className: "p-2 whitespace-nowrap" },
+      {
+        key: "position",
+        title: "Position",
+        get: (r) => r.fields?.position || "",
+        className: "p-2 whitespace-nowrap",
+      },
+      { key: "message", title: "Message", get: (r) => r.fields?.message || "", className: "p-2" },
+      { key: "custom", title: "Custom", get: (r) => r.fields?.custom || "", className: "p-2" },
+      { key: "stepIndex", title: "Step", get: (r) => r.stepIndex ?? "", className: "p-2 text-center" },
+      { key: "pageUrl", title: "Page", get: (r) => r.pageUrl || "", className: "p-2 truncate max-w-[240px]" },
+      { key: "source", title: "Source", get: (r) => r.source || "", className: "p-2 whitespace-nowrap" },
     ];
+    const hasValue = (v: any) => {
+      if (v == null) return false;
+      const s = String(v);
+      return s.trim().length > 0;
+    };
+    // Only keep columns that have at least one non-empty value across rows
+    return defs.filter((col) => rows.some((r) => hasValue(col.get(r))));
+  }, [rows]);
+
+  const csv = useMemo(() => {
     const escape = (v: any) => {
       const s = v == null ? "" : String(v);
       if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
       return s;
     };
-    const header = cols.join(",");
-    const lines = rows.map((r) => {
-      const fields = r.fields || {};
-      return [
-        r.createdAt || "",
-        r.email || fields.email || "",
-        fields.name || "",
-        fields.phone || "",
-        fields.position || "",
-        fields.message || "",
-        fields.custom || "",
-        r.stepIndex ?? "",
-        r.pageUrl || "",
-        r.source || "",
-      ]
-        .map(escape)
-        .join(",");
-    });
+    const header = columns.map((c) => c.key).join(",");
+    const lines = rows.map((r) => columns.map((c) => escape(c.get(r))).join(","));
     return [header, ...lines].join("\n");
-  }, [rows]);
+  }, [rows, columns]);
 
   const downloadCsv = () => {
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -93,33 +102,22 @@ export default function LeadSubmissionsPage() {
         <table className="min-w-full text-sm">
           <thead className="bg-gray-50">
             <tr>
-              <th className="text-left p-2">Created</th>
-              <th className="text-left p-2">Email</th>
-              <th className="text-left p-2">Name</th>
-              <th className="text-left p-2">Phone</th>
-              <th className="text-left p-2">Position</th>
-              <th className="text-left p-2">Message</th>
-              <th className="text-left p-2">Custom</th>
-              <th className="text-left p-2">Step</th>
-              <th className="text-left p-2">Page</th>
-              <th className="text-left p-2">Source</th>
+              {columns.map((c) => (
+                <th key={c.key} className="text-left p-2">
+                  {c.title}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => {
-              const f = r.fields || {};
               return (
                 <tr key={r.itemSK} className="border-t">
-                  <td className="p-2 whitespace-nowrap">{r.createdAt || ""}</td>
-                  <td className="p-2 whitespace-nowrap">{r.email || f.email || ""}</td>
-                  <td className="p-2 whitespace-nowrap">{f.name || ""}</td>
-                  <td className="p-2 whitespace-nowrap">{f.phone || ""}</td>
-                  <td className="p-2 whitespace-nowrap">{f.position || ""}</td>
-                  <td className="p-2">{f.message || ""}</td>
-                  <td className="p-2">{f.custom || ""}</td>
-                  <td className="p-2 text-center">{r.stepIndex ?? ""}</td>
-                  <td className="p-2 truncate max-w-[240px]">{r.pageUrl || ""}</td>
-                  <td className="p-2 whitespace-nowrap">{r.source || ""}</td>
+                  {columns.map((c) => (
+                    <td key={c.key} className={c.className}>
+                      {c.get(r)}
+                    </td>
+                  ))}
                 </tr>
               );
             })}

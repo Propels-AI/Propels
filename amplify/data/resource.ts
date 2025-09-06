@@ -65,6 +65,20 @@ const schema = a.schema({
     .identifier(["ownerId"])
     .authorization((allow) => [allow.ownerDefinedIn("ownerId").to(["create", "read", "update", "delete"])]),
 
+  // Owner-scoped reusable lead form templates
+  LeadTemplate: a
+    .model({
+      ownerId: a.string().required(),
+      templateId: a.string().required(),
+      name: a.string().required(),
+      leadConfig: a.json(),
+      createdAt: a.datetime(),
+      updatedAt: a.datetime(),
+    })
+    .identifier(["ownerId", "templateId"])
+    .secondaryIndexes((index) => [index("ownerId").sortKeys(["updatedAt"]).name("templatesByOwner")])
+    .authorization((allow) => [allow.ownerDefinedIn("ownerId").to(["create", "read", "update", "delete"])]),
+
   // Captured lead submissions (owner-readable)
   LeadSubmission: a
     .model({

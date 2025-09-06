@@ -38,6 +38,7 @@ export default function PublicDemoEmbed() {
   const [error, setError] = useState<string | undefined>();
   const [leadStepIndex, setLeadStepIndex] = useState<number | null>(null);
   const [leadBg, setLeadBg] = useState<"white" | "black">("white");
+  const [leadConfig, setLeadConfig] = useState<any>(undefined);
   const [ownerId, setOwnerId] = useState<string | undefined>(undefined);
   const [steps, setSteps] = useState<PublicStep[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -67,6 +68,7 @@ export default function PublicDemoEmbed() {
           try {
             const cfg = typeof metadata.leadConfig === "string" ? JSON.parse(metadata.leadConfig) : metadata.leadConfig;
             if (cfg && typeof cfg.bg === "string") lBg = cfg.bg === "black" ? "black" : "white";
+            setLeadConfig(cfg);
           } catch {}
         } else {
           lBg = metadata?.leadBg === "black" ? "black" : "white";
@@ -266,7 +268,7 @@ export default function PublicDemoEmbed() {
         {isLeadDisplayIndex ? (
           <LeadCaptureOverlay
             bg={leadBg}
-            config={undefined as any}
+            config={leadConfig as any}
             onSubmit={async (form) => {
               try {
                 await createLeadSubmissionPublic({
