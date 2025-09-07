@@ -55,6 +55,8 @@ export default function PublicDemoPlayer() {
     tooltipBgColor?: string;
     tooltipTextColor?: string;
     tooltipTextSizePx?: number;
+    tooltipOffsetXNorm?: number;
+    tooltipOffsetYNorm?: number;
   }>({ dotSize: 12, dotColor: "#2563eb", dotStrokePx: 2, dotStrokeColor: "#ffffff", animation: "none" });
 
   useEffect(() => {
@@ -107,6 +109,8 @@ export default function PublicDemoPlayer() {
                 tooltipBgColor: parsed.tooltipBgColor,
                 tooltipTextColor: parsed.tooltipTextColor,
                 tooltipTextSizePx: parsed.tooltipTextSizePx,
+                tooltipOffsetXNorm: parsed.tooltipOffsetXNorm,
+                tooltipOffsetYNorm: parsed.tooltipOffsetYNorm,
               });
             }
           }
@@ -238,6 +242,12 @@ export default function PublicDemoPlayer() {
           dotStrokePx: h.dotStrokePx ?? hotspotStyleDefaults.dotStrokePx,
           dotStrokeColor: h.dotStrokeColor ?? hotspotStyleDefaults.dotStrokeColor,
           animation: (h.animation ?? hotspotStyleDefaults.animation) as any,
+          // Tooltip bubble styling & offsets defaults from METADATA.hotspotStyle
+          tooltipBgColor: (h as any).tooltipBgColor ?? hotspotStyleDefaults.tooltipBgColor,
+          tooltipTextColor: (h as any).tooltipTextColor ?? hotspotStyleDefaults.tooltipTextColor,
+          tooltipTextSizePx: (h as any).tooltipTextSizePx ?? hotspotStyleDefaults.tooltipTextSizePx,
+          tooltipOffsetXNorm: (h as any).tooltipOffsetXNorm ?? hotspotStyleDefaults.tooltipOffsetXNorm,
+          tooltipOffsetYNorm: (h as any).tooltipOffsetYNorm ?? hotspotStyleDefaults.tooltipOffsetYNorm,
         })) as any,
         pageUrl: s.pageUrl,
       })),

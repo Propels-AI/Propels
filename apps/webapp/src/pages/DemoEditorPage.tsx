@@ -1045,6 +1045,22 @@ export function DemoEditorPage() {
                 className="absolute inset-0 w-full h-full"
                 imageUrl={steps[selectedStepIndex]?.screenshotUrl}
                 hotspots={currentHotspots as any}
+                enableBubbleDrag
+                onBubbleDrag={(id, dxNorm, dyNorm) => {
+                  setHotspotsByStep((prev) => {
+                    if (!currentStepId) return prev;
+                    const list = Array.isArray(prev[currentStepId]) ? [...prev[currentStepId]] : [];
+                    const idx = list.findIndex((h) => h.id === id);
+                    if (idx === -1) return prev;
+                    const existing = list[idx] as any;
+                    list[idx] = {
+                      ...existing,
+                      tooltipOffsetXNorm: dxNorm,
+                      tooltipOffsetYNorm: dyNorm,
+                    };
+                    return { ...prev, [currentStepId]: list } as any;
+                  });
+                }}
               />
             ) : (
               <img
@@ -1108,8 +1124,30 @@ export function DemoEditorPage() {
                 centerY = hotspot.y + (hotspot.height || 0) / 2;
               }
               const dotSize = Math.max(6, Math.min(48, Number(hotspot.dotSize ?? 12)));
-              const tooltipLeft = centerX + dotSize + 6;
-              const tooltipTop = centerY - 8;
+              const offsetXNorm: number | undefined = (hotspot as any).tooltipOffsetXNorm;
+              const offsetYNorm: number | undefined = (hotspot as any).tooltipOffsetYNorm;
+              const tooltipLeft =
+                typeof offsetXNorm === "number" && naturalSize
+                  ? centerX +
+                    offsetXNorm *
+                      computeRenderRect(
+                        imageRef.current!.clientWidth,
+                        imageRef.current!.clientHeight,
+                        naturalSize.w,
+                        naturalSize.h
+                      ).w
+                  : centerX + dotSize + 6;
+              const tooltipTop =
+                typeof offsetYNorm === "number" && naturalSize
+                  ? centerY +
+                    offsetYNorm *
+                      computeRenderRect(
+                        imageRef.current!.clientWidth,
+                        imageRef.current!.clientHeight,
+                        naturalSize.w,
+                        naturalSize.h
+                      ).h
+                  : centerY - 8;
               const color = hotspot.dotColor || "#2563eb";
               const anim = hotspot.animation || "none";
               const animStyle: React.CSSProperties =
@@ -1179,6 +1217,40 @@ export function DemoEditorPage() {
                         backgroundColor: hotspot.tooltipBgColor || tooltipStyle.tooltipBgColor || "#2563eb",
                         color: hotspot.tooltipTextColor || tooltipStyle.tooltipTextColor || "#ffffff",
                         fontSize: `${Number(hotspot.tooltipTextSizePx || tooltipStyle.tooltipTextSizePx || 12)}px`,
+                      }}
+                      onMouseDown={(e) => {
+                        // Enable dragging bubble in edit mode (not preview)
+                        if (isPreviewing) return;
+                        e.stopPropagation();
+                        const rect = imageRef.current?.getBoundingClientRect();
+                        if (!rect || !naturalSize) return;
+                        const startX = e.clientX;
+                        const startY = e.clientY;
+                        const startLeft = tooltipLeft;
+                        const startTop = tooltipTop;
+                        const boxRect = computeRenderRect(rect.width, rect.height, naturalSize.w, naturalSize.h);
+                        const onMove = (ev: MouseEvent) => {
+                          const dx = ev.clientX - startX;
+                          const dy = ev.clientY - startY;
+                          const newLeft = startLeft + dx;
+                          const newTop = startTop + dy;
+                          const dxNorm = (newLeft - centerX) / boxRect.w;
+                          const dyNorm = (newTop - centerY) / boxRect.h;
+                          setHotspotsByStep((prev) => {
+                            const list = Array.isArray(prev[currentStepId!]) ? [...prev[currentStepId!]] : [];
+                            const idx = list.findIndex((h) => h.id === hotspot.id);
+                            if (idx === -1) return prev;
+                            const existing = list[idx] as any;
+                            list[idx] = { ...existing, tooltipOffsetXNorm: dxNorm, tooltipOffsetYNorm: dyNorm };
+                            return { ...prev, [currentStepId!]: list } as any;
+                          });
+                        };
+                        const onUp = () => {
+                          document.removeEventListener("mousemove", onMove);
+                          document.removeEventListener("mouseup", onUp);
+                        };
+                        document.addEventListener("mousemove", onMove);
+                        document.addEventListener("mouseup", onUp);
                       }}
                     >
                       {hotspot.tooltip}

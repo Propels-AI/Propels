@@ -17,6 +17,8 @@ export type PublicHotspot = {
   tooltipBgColor?: string;
   tooltipTextColor?: string;
   tooltipTextSizePx?: number;
+  tooltipOffsetXNorm?: number;
+  tooltipOffsetYNorm?: number;
 };
 
 export function applyStyleDefaults<T extends PublicHotspot>(list: T[] | undefined, defaults: TooltipStyle): T[] {
@@ -31,5 +33,7 @@ export function applyStyleDefaults<T extends PublicHotspot>(list: T[] | undefine
     tooltipBgColor: (h as any).tooltipBgColor ?? (defaults as any).tooltipBgColor ?? "#2563eb",
     tooltipTextColor: (h as any).tooltipTextColor ?? (defaults as any).tooltipTextColor ?? "#ffffff",
     tooltipTextSizePx: (h as any).tooltipTextSizePx ?? (defaults as any).tooltipTextSizePx ?? 12,
+    tooltipOffsetXNorm: (h as any).tooltipOffsetXNorm ?? (defaults as any).tooltipOffsetXNorm ?? undefined,
+    tooltipOffsetYNorm: (h as any).tooltipOffsetYNorm ?? (defaults as any).tooltipOffsetYNorm ?? undefined,
   }));
 }
