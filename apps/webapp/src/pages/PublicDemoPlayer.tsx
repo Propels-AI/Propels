@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
-import { listPublicDemoItems, listDemoItems } from "@/lib/api/demos";
 import { DemoPreview } from "@/components/DemoPreview";
 import { createLeadSubmissionPublic } from "@/lib/api/demos";
 import LeadCaptureOverlay from "@/components/LeadCaptureOverlay";
 import StepsBar from "@/components/StepsBar";
-import { getUrl as storageGetUrl } from "aws-amplify/storage";
+import { usePublicDemo } from "@/features/public/hooks/usePublicDemo";
+import { useImageResolver } from "@/features/public/hooks/useImageResolver";
 import outputs from "../../../../amplify_outputs.json";
 
 type PublicStep = {
@@ -36,132 +36,41 @@ type PublicStep = {
 export default function PublicDemoPlayer() {
   const { demoId } = useParams();
   const location = useLocation();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | undefined>();
-  const [metaName, setMetaName] = useState<string | undefined>();
-  const [leadStepIndex, setLeadStepIndex] = useState<number | null>(null);
-  const [leadBg, setLeadBg] = useState<"white" | "black">("white");
-  const [leadConfig, setLeadConfig] = useState<any>(undefined);
-  const [steps, setSteps] = useState<PublicStep[]>([]);
+  const { loading, error, metaName, leadStepIndex, leadBg, leadConfig, steps, hotspotStyleDefaults } = usePublicDemo(
+    demoId
+  );
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [hotspotStyleDefaults, setHotspotStyleDefaults] = useState<{
-    dotSize: number;
-    dotColor: string;
-    dotStrokePx: number;
-    dotStrokeColor: string;
-    animation: "none" | "pulse" | "breathe" | "fade";
-    tooltipBgColor?: string;
-    tooltipTextColor?: string;
-    tooltipTextSizePx?: number;
-    tooltipOffsetXNorm?: number;
-    tooltipOffsetYNorm?: number;
-  }>({ dotSize: 12, dotColor: "#2563eb", dotStrokePx: 2, dotStrokeColor: "#ffffff", animation: "none" });
-
   useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      if (!demoId) return;
-      setLoading(true);
-      setError(undefined);
-      try {
-        const items = await listPublicDemoItems(demoId);
-        if (cancelled) return;
-        const metadata = items.find((it: any) => it.itemSK === "METADATA");
-        setMetaName(metadata?.name);
-        // Read lead config (public mirror)
-        const lIdx = typeof metadata?.leadStepIndex === "number" ? metadata.leadStepIndex : null;
-        setLeadStepIndex(lIdx);
-        // Prefer flexible leadConfig.bg if available
-        let lBg: "white" | "black" = "white";
-        if (metadata?.leadConfig) {
-          try {
-            const cfgRaw = metadata.leadConfig;
-            let cfg: any = typeof cfgRaw === "string" ? JSON.parse(cfgRaw) : cfgRaw;
-            // Defensive: handle double-encoded JSON
-            if (typeof cfg === "string") {
-              try { cfg = JSON.parse(cfg); } catch {}
-            }
-            setLeadConfig(cfg);
-            if (cfg && typeof cfg.bg === "string") {
-              lBg = cfg.bg === "black" ? "black" : "white";
-            }
-          } catch {}
-        } else {
-          lBg = metadata?.leadBg === "black" ? "black" : "white";
-        }
-        setLeadBg(lBg);
-        // If lead config has no fields (public mirror may be stale), attempt private fallback
-        try {
-          if (!Array.isArray((metadata?.leadConfig as any)?.fields)) {
-            const privateItems = await listDemoItems(demoId);
-            const privateMeta = (privateItems || []).find((it: any) => it.itemSK === "METADATA");
-            let cfg: any = privateMeta?.leadConfig;
-            if (cfg) {
-              try { cfg = typeof cfg === "string" ? JSON.parse(cfg) : cfg; } catch {}
-              if (typeof cfg === "string") { try { cfg = JSON.parse(cfg); } catch {} }
-              if (cfg && Array.isArray(cfg.fields)) {
-                setLeadConfig((prev: any) => (prev && Array.isArray(prev.fields) ? prev : cfg));
-                if (cfg.bg === "black" || cfg.bg === "white") setLeadBg(cfg.bg);
-              }
-            }
-          }
-        } catch {}
-        // Read hotspot style defaults from METADATA
-        try {
-          const rawStyle = metadata?.hotspotStyle;
-          if (rawStyle) {
-            const parsed = typeof rawStyle === "string" ? JSON.parse(rawStyle) : rawStyle;
-            if (parsed && typeof parsed === "object") {
-              setHotspotStyleDefaults({
-                dotSize: Number(parsed.dotSize ?? 12),
-                dotColor: String(parsed.dotColor ?? "#2563eb"),
-                dotStrokePx: Number(parsed.dotStrokePx ?? 2),
-                dotStrokeColor: String(parsed.dotStrokeColor ?? "#ffffff"),
-                animation: (parsed.animation ?? "none") as any,
-                tooltipBgColor: parsed.tooltipBgColor,
-                tooltipTextColor: parsed.tooltipTextColor,
-                tooltipTextSizePx: parsed.tooltipTextSizePx,
-                tooltipOffsetXNorm: parsed.tooltipOffsetXNorm,
-                tooltipOffsetYNorm: parsed.tooltipOffsetYNorm,
-              });
-            }
-          }
-        } catch {}
+    // Reset index when steps reload
+    setCurrentIndex(0);
+  }, [steps?.length]);
 
-        const stepItems: PublicStep[] = items
-          .filter((it: any) => typeof it.itemSK === "string" && it.itemSK.startsWith("STEP#"))
-          .map((it: any) => ({
-            itemSK: it.itemSK,
-            order: it.order,
-            s3Key: it.s3Key,
-            thumbnailS3Key: it.thumbnailS3Key,
-            pageUrl: it.pageUrl,
-            hotspots: it.hotspots ?? [],
-          }));
-        stepItems.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-        setSteps(stepItems);
-        setCurrentIndex(0);
-      } catch (e: any) {
-        console.error("[PublicDemoPlayer] load error", e);
-        setError(e?.message || "Failed to load demo");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [demoId]);
-
-  // These depend on effectiveLeadIndex (declared below)
+  // Prepare variables; will be finalized after computing effectiveLeadIndex
   let realStepsCount = steps.length;
-  let displayTotal = steps.length; // initialize; will recompute after effectiveLeadIndex
+  let displayTotal = steps.length;
   let isLeadDisplayIndex = false;
   let currentRealIndex = currentIndex;
   let current: PublicStep | undefined = steps[currentIndex];
+  // Determine effective lead index first (supports ?leadAt override)
+  const leadAtOverride = useMemo(() => {
+    const p = new URLSearchParams(location.search).get("leadAt");
+    if (!p) return null;
+    const n = parseInt(p, 10);
+    return Number.isFinite(n) && n >= 1 ? n - 1 : null; // user-facing 1-based -> 0-based
+  }, [location.search]);
+  const effectiveLeadIndex = leadAtOverride ?? leadStepIndex;
 
-  const [resolvedSrc, setResolvedSrc] = useState<string | undefined>(undefined);
+  // Compute mapping using effectiveLeadIndex
+  realStepsCount = steps.length;
+  displayTotal = realStepsCount + (effectiveLeadIndex !== null ? 1 : 0);
+  isLeadDisplayIndex = effectiveLeadIndex !== null && currentIndex === effectiveLeadIndex;
+  const mapDisplayToReal = (di: number) => {
+    if (effectiveLeadIndex === null) return di;
+    return di < effectiveLeadIndex ? di : di - 1;
+  };
+  currentRealIndex = isLeadDisplayIndex ? -1 : mapDisplayToReal(currentIndex);
+  current = currentRealIndex >= 0 ? steps[currentRealIndex] : undefined;
+
   const imageSrc = useMemo(() => {
     const raw = current?.s3Key || current?.thumbnailS3Key;
     if (!raw) return undefined;
@@ -174,72 +83,21 @@ export default function PublicDemoPlayer() {
         : undefined;
     return finalSrc;
   }, [current]);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function resolve() {
-      const raw = current?.s3Key || current?.thumbnailS3Key;
-      const hasDirect = typeof imageSrc === "string" && imageSrc.length > 0;
-      if (!raw) {
-        setResolvedSrc(undefined);
-        return;
-      }
-      if (hasDirect) {
-        setResolvedSrc(imageSrc);
-        return;
-      }
-      try {
-        const isPublicPrefixed = String(raw).startsWith("public/");
-        const keyForStorage = isPublicPrefixed ? String(raw).replace(/^public\//, "") : String(raw);
-        const { url } = await storageGetUrl({ key: keyForStorage, options: { accessLevel: "guest" as any } });
-        if (!cancelled) setResolvedSrc(url.toString());
-        
-        return;
-      } catch (e) {
-        console.warn("[PublicDemoPlayer] Storage.getUrl failed; will attempt direct S3 URL", e);
-      }
-      try {
-        const bucket = (outputs as any)?.storage?.bucket;
-        const region = (outputs as any)?.aws_region || (outputs as any)?.awsRegion || (outputs as any)?.region;
-        if (bucket && region) {
-          const s3Url = `https://${bucket}.s3.${region}.amazonaws.com/${String(raw).replace(/^\//, "")}`;
-          if (!cancelled) setResolvedSrc(s3Url);
-          
-          return;
-        }
-      } catch {}
-      if (!cancelled) setResolvedSrc(raw);
-    }
-    resolve();
-    return () => {
-      cancelled = true;
-    };
-  }, [current, imageSrc]);
+  const bucket = (outputs as any)?.storage?.bucket;
+  const region = (outputs as any)?.aws_region || (outputs as any)?.awsRegion || (outputs as any)?.region;
+  const { resolvedSrc } = useImageResolver(
+    current?.s3Key || current?.thumbnailS3Key,
+    imageSrc,
+    false,
+    { bucket, region }
+  );
 
   const goTo = (idx: number) => {
     if (idx < 0 || idx >= displayTotal) return;
     setCurrentIndex(idx);
   };
 
-  // leadAt URL override for testing
-  const leadAtOverride = useMemo(() => {
-    const p = new URLSearchParams(location.search).get("leadAt");
-    if (!p) return null;
-    const n = parseInt(p, 10);
-    return Number.isFinite(n) && n >= 1 ? n - 1 : null; // user-facing 1-based -> 0-based
-  }, [location.search]);
-  const effectiveLeadIndex = leadAtOverride ?? leadStepIndex;
-
-  // Now that effectiveLeadIndex is available, compute display mapping
-  realStepsCount = steps.length;
-  displayTotal = realStepsCount + (effectiveLeadIndex !== null ? 1 : 0);
-  isLeadDisplayIndex = effectiveLeadIndex !== null && currentIndex === effectiveLeadIndex;
-  const mapDisplayToReal = (di: number) => {
-    if (effectiveLeadIndex === null) return di;
-    return di < effectiveLeadIndex ? di : di - 1;
-  };
-  currentRealIndex = isLeadDisplayIndex ? -1 : mapDisplayToReal(currentIndex);
-  current = currentRealIndex >= 0 ? steps[currentRealIndex] : undefined;
+  // (mapping moved above, effectiveLeadIndex already computed)
 
   const previewSteps = useMemo(
     () =>

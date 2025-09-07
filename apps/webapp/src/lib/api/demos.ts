@@ -572,13 +572,23 @@ export async function setDemoStatus(demoId: string, status: "DRAFT" | "PUBLISHED
       if (!Array.isArray(items)) return;
       const metadata = items.find((it: any) => it.itemSK === "METADATA");
       if (metadata) {
+        // Resolve effective lead config: honor leadUseGlobal when set
+        let effectiveLeadConfig: any = (metadata as any).leadConfig;
+        try {
+          if ((metadata as any).leadUseGlobal === true && !effectiveLeadConfig) {
+            const global = await getLeadSettings();
+            if (global && global.leadConfig) effectiveLeadConfig = global.leadConfig;
+          }
+        } catch (e) {
+          console.warn("[api/demos] setDemoStatus: failed to resolve global lead settings (non-fatal)", e);
+        }
         await createPublicDemoMetadata({
           demoId,
           name: metadata.name,
           createdAt: metadata.createdAt,
           updatedAt: now,
           leadStepIndex: metadata.leadStepIndex ?? null,
-          leadConfig: metadata.leadConfig ?? undefined,
+          leadConfig: effectiveLeadConfig ?? undefined,
           hotspotStyle: metadata.hotspotStyle ?? undefined,
         });
       }
