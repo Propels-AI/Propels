@@ -306,11 +306,7 @@ export default function PublicDemoEmbed() {
                 }
               }}
             />
-            {!Array.isArray((leadConfig as any)?.fields) && (
-              <div className="absolute top-2 right-2 z-20 text-xs px-2 py-1 rounded bg-amber-100 text-amber-800 border border-amber-300 shadow">
-                Showing default lead form (no fields in config)
-              </div>
-            )}
+            {/* Default lead form warning removed */}
           </>
         ) : (
           <HotspotOverlay

@@ -36,7 +36,6 @@ type PublicStep = {
 export default function PublicDemoPlayer() {
   const { demoId } = useParams();
   const location = useLocation();
-  const debug = useMemo(() => new URLSearchParams(location.search).get("debug") === "1", [location.search]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
   const [metaName, setMetaName] = useState<string | undefined>();
@@ -45,7 +44,6 @@ export default function PublicDemoPlayer() {
   const [leadConfig, setLeadConfig] = useState<any>(undefined);
   const [steps, setSteps] = useState<PublicStep[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [itemsRaw, setItemsRaw] = useState<any[]>([]);
   const [hotspotStyleDefaults, setHotspotStyleDefaults] = useState<{
     dotSize: number;
     dotColor: string;
@@ -66,16 +64,9 @@ export default function PublicDemoPlayer() {
       setLoading(true);
       setError(undefined);
       try {
-        console.debug("[PublicDemoPlayer] loading items", { demoId });
         const items = await listPublicDemoItems(demoId);
-        console.debug("[PublicDemoPlayer] items fetched", {
-          count: Array.isArray(items) ? items.length : undefined,
-          items,
-        });
         if (cancelled) return;
-        setItemsRaw(Array.isArray(items) ? items : []);
         const metadata = items.find((it: any) => it.itemSK === "METADATA");
-        console.debug("[PublicDemoPlayer] metadata", metadata);
         setMetaName(metadata?.name);
         // Read lead config (public mirror)
         const lIdx = typeof metadata?.leadStepIndex === "number" ? metadata.leadStepIndex : null;
@@ -148,7 +139,6 @@ export default function PublicDemoPlayer() {
             hotspots: it.hotspots ?? [],
           }));
         stepItems.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-        console.debug("[PublicDemoPlayer] steps parsed", stepItems);
         setSteps(stepItems);
         setCurrentIndex(0);
       } catch (e: any) {
@@ -203,7 +193,7 @@ export default function PublicDemoPlayer() {
         const keyForStorage = isPublicPrefixed ? String(raw).replace(/^public\//, "") : String(raw);
         const { url } = await storageGetUrl({ key: keyForStorage, options: { accessLevel: "guest" as any } });
         if (!cancelled) setResolvedSrc(url.toString());
-        console.debug("[PublicDemoPlayer] resolved via Storage.getUrl", { raw, keyForStorage, url: url.toString() });
+        
         return;
       } catch (e) {
         console.warn("[PublicDemoPlayer] Storage.getUrl failed; will attempt direct S3 URL", e);
@@ -214,7 +204,7 @@ export default function PublicDemoPlayer() {
         if (bucket && region) {
           const s3Url = `https://${bucket}.s3.${region}.amazonaws.com/${String(raw).replace(/^\//, "")}`;
           if (!cancelled) setResolvedSrc(s3Url);
-          console.debug("[PublicDemoPlayer] resolved via direct S3 URL", { raw, s3Url });
+          
           return;
         }
       } catch {}
@@ -278,25 +268,7 @@ export default function PublicDemoPlayer() {
   if (!demoId) return <div className="p-6">Missing demoId</div>;
   if (loading) return <div className="p-6">Loading…</div>;
   if (error) return <div className="p-6 text-red-600">{error}</div>;
-  if (displayTotal === 0)
-    return (
-      <div className="p-6 space-y-4">
-        <div>No steps available</div>
-        {(debug || true) && (
-          <pre className="text-xs whitespace-pre-wrap bg-gray-50 border p-3 rounded">
-            {`Debug:
-demoId: ${demoId}
-items.count: ${itemsRaw.length}
-items.sampleKeys: ${itemsRaw
-              .map((i) => i?.itemSK)
-              .slice(0, 10)
-              .join(", ")}
-error: ${error ?? "<none>"}
-`}
-          </pre>
-        )}
-      </div>
-    );
+  if (displayTotal === 0) return <div className="p-6">No steps available</div>;
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -343,11 +315,7 @@ error: ${error ?? "<none>"}
                 }
               }}
             />
-            {!Array.isArray((leadConfig as any)?.fields) && (
-              <div className="absolute top-2 right-2 z-20 text-xs px-2 py-1 rounded bg-amber-100 text-amber-800 border border-amber-300 shadow">
-                Showing default lead form (no fields in config)
-              </div>
-            )}
+            {/* Default lead form warning removed */}
           </div>
         ) : (
           <DemoPreview
@@ -375,22 +343,6 @@ error: ${error ?? "<none>"}
           />
           <div className="sr-only">{`Step ${currentIndex + 1} of ${displayTotal}`}</div>
         </div>
-        {debug && (
-          <div className="max-w-5xl mx-auto mt-2">
-            <pre className="text-xs whitespace-pre-wrap bg-gray-50 border p-3 rounded overflow-auto">
-              {`Debug:
-demoId: ${demoId}
-metaName: ${metaName}
-realStepsCount: ${realStepsCount}
-displayTotal: ${displayTotal}
-currentIndex: ${currentIndex}
-current.itemSK: ${current?.itemSK}
-imageSrc: ${imageSrc}
-resolvedSrc: ${resolvedSrc}
-`}
-            </pre>
-          </div>
-        )}
       </footer>
     </div>
   );
