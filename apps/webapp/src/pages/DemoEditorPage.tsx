@@ -105,6 +105,10 @@ export function DemoEditorPage() {
     animation?: "none" | "pulse" | "breathe" | "fade";
     dotStrokePx?: number; // border width in px
     dotStrokeColor?: string; // border color
+    // Tooltip text bubble styling
+    tooltipBgColor?: string;
+    tooltipTextColor?: string;
+    tooltipTextSizePx?: number;
   };
 
   const [hotspotsByStep, setHotspotsByStep] = useState<Record<string, Hotspot[]>>({});
@@ -125,12 +129,18 @@ export function DemoEditorPage() {
     dotStrokePx: number;
     dotStrokeColor: string;
     animation: "none" | "pulse" | "breathe" | "fade";
+    tooltipBgColor?: string;
+    tooltipTextColor?: string;
+    tooltipTextSizePx?: number;
   }>({
     dotSize: 12,
     dotColor: "#2563eb",
     dotStrokePx: 2,
     dotStrokeColor: "#ffffff",
     animation: "none",
+    tooltipBgColor: "#2563eb",
+    tooltipTextColor: "#ffffff",
+    tooltipTextSizePx: 12,
   });
   const imageRef = useRef<HTMLDivElement>(null);
   const computeRenderRect = (containerW: number, containerH: number, naturalW: number, naturalH: number) => {
@@ -183,6 +193,9 @@ export function DemoEditorPage() {
                   dotStrokePx: Number(parsed.dotStrokePx ?? prev.dotStrokePx ?? 2),
                   dotStrokeColor: String(parsed.dotStrokeColor ?? prev.dotStrokeColor ?? "#ffffff"),
                   animation: (parsed.animation ?? prev.animation ?? "none") as any,
+                  tooltipBgColor: String(parsed.tooltipBgColor ?? prev.tooltipBgColor ?? "#2563eb"),
+                  tooltipTextColor: String(parsed.tooltipTextColor ?? prev.tooltipTextColor ?? "#ffffff"),
+                  tooltipTextSizePx: Number(parsed.tooltipTextSizePx ?? prev.tooltipTextSizePx ?? 12),
                 }));
               }
             }
@@ -266,6 +279,9 @@ export function DemoEditorPage() {
                 dotStrokePx: 2,
                 dotStrokeColor: "#ffffff",
                 animation: "none",
+                tooltipBgColor: "#2563eb",
+                tooltipTextColor: "#ffffff",
+                tooltipTextSizePx: 12,
               } as TooltipStyle
             );
             if (derived) {
@@ -275,6 +291,9 @@ export function DemoEditorPage() {
                 dotStrokePx: Number(derived.dotStrokePx ?? prev.dotStrokePx ?? 2),
                 dotStrokeColor: String(derived.dotStrokeColor ?? prev.dotStrokeColor ?? "#ffffff"),
                 animation: (derived.animation ?? prev.animation ?? "none") as any,
+                tooltipBgColor: String(derived.tooltipBgColor ?? prev.tooltipBgColor ?? "#2563eb"),
+                tooltipTextColor: String(derived.tooltipTextColor ?? prev.tooltipTextColor ?? "#ffffff"),
+                tooltipTextSizePx: Number(derived.tooltipTextSizePx ?? prev.tooltipTextSizePx ?? 12),
               }));
             }
           }
@@ -454,6 +473,9 @@ export function DemoEditorPage() {
       dotStrokePx: number;
       dotStrokeColor: string;
       animation: "none" | "pulse" | "breathe" | "fade";
+      tooltipBgColor?: string;
+      tooltipTextColor?: string;
+      tooltipTextSizePx?: number;
     }>
   ) => {
     setTooltipStyle((prev) => ({ ...prev, ...patch }));
@@ -1150,8 +1172,14 @@ export function DemoEditorPage() {
 
                   {editingTooltip !== hotspot.id && hotspot.tooltip && (
                     <div
-                      className="absolute bg-blue-600 text-white text-xs rounded py-1 px-2 shadow"
-                      style={{ left: `${tooltipLeft}px`, top: `${tooltipTop}px` }}
+                      className="absolute rounded py-1 px-2 shadow"
+                      style={{
+                        left: `${tooltipLeft}px`,
+                        top: `${tooltipTop}px`,
+                        backgroundColor: hotspot.tooltipBgColor || tooltipStyle.tooltipBgColor || "#2563eb",
+                        color: hotspot.tooltipTextColor || tooltipStyle.tooltipTextColor || "#ffffff",
+                        fontSize: `${Number(hotspot.tooltipTextSizePx || tooltipStyle.tooltipTextSizePx || 12)}px`,
+                      }}
                     >
                       {hotspot.tooltip}
                     </div>
@@ -1375,6 +1403,41 @@ export function DemoEditorPage() {
                   </div>
                 </>
               )}
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Tooltip background</label>
+                <input
+                  type="color"
+                  value={tooltipStyle.tooltipBgColor || "#2563eb"}
+                  onChange={(e) => applyGlobalStyle({ tooltipBgColor: e.target.value })}
+                  className="w-10 h-8 p-0 border rounded"
+                  title="Choose tooltip background"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Tooltip text color</label>
+                <input
+                  type="color"
+                  value={tooltipStyle.tooltipTextColor || "#ffffff"}
+                  onChange={(e) => applyGlobalStyle({ tooltipTextColor: e.target.value })}
+                  className="w-10 h-8 p-0 border rounded"
+                  title="Choose tooltip text color"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Tooltip text size (px)</label>
+                <input
+                  type="range"
+                  min={10}
+                  max={24}
+                  step={1}
+                  value={Number(tooltipStyle.tooltipTextSizePx || 12)}
+                  onChange={(e) => applyGlobalStyle({ tooltipTextSizePx: Number(e.target.value) })}
+                  className="w-full"
+                />
+                <div className="text-[10px] text-gray-500 mt-0.5">
+                  {Number(tooltipStyle.tooltipTextSizePx || 12)} px
+                </div>
+              </div>
               <div>
                 <label className="block text-xs text-gray-600 mb-1">Animation (applies to all steps)</label>
                 <select

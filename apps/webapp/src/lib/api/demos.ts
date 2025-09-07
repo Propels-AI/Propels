@@ -245,6 +245,7 @@ export async function createPublicDemoMetadata(params: {
   updatedAt?: string;
   leadStepIndex?: number | null;
   leadConfig?: any;
+  hotspotStyle?: any;
 }): Promise<void> {
   const models = getModels();
   if (!models.PublicDemo) {
@@ -276,6 +277,14 @@ export async function createPublicDemoMetadata(params: {
         typeof params.leadConfig === "string" ? params.leadConfig : JSON.stringify(params.leadConfig);
     } catch (e) {
       console.warn("[api/demos] Failed to stringify public leadConfig; omitting", e);
+    }
+  }
+  if (params.hotspotStyle !== undefined) {
+    try {
+      payload.hotspotStyle =
+        typeof params.hotspotStyle === "string" ? params.hotspotStyle : JSON.stringify(params.hotspotStyle);
+    } catch (e) {
+      console.warn("[api/demos] Failed to stringify public hotspotStyle; omitting", e);
     }
   }
 
@@ -414,6 +423,7 @@ export async function mirrorDemoToPublic(
       leadStepIndex:
         overrides && "leadStepIndex" in overrides ? (overrides.leadStepIndex ?? null) : (meta.leadStepIndex ?? null),
       leadConfig: effectiveLeadConfig ?? undefined,
+      hotspotStyle: (meta as any).hotspotStyle ?? undefined,
     });
   } else {
     console.warn("[api/demos] mirrorDemoToPublic: METADATA missing");
@@ -493,6 +503,7 @@ export async function setDemoStatus(demoId: string, status: "DRAFT" | "PUBLISHED
           updatedAt: now,
           leadStepIndex: metadata.leadStepIndex ?? null,
           leadConfig: metadata.leadConfig ?? undefined,
+          hotspotStyle: metadata.hotspotStyle ?? undefined,
         });
       }
       const steps = items.filter((it: any) => typeof it.itemSK === "string" && it.itemSK.startsWith("STEP#"));

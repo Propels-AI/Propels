@@ -8,6 +8,9 @@ describe("deriveTooltipStyleFromHotspots", () => {
     dotStrokePx: 2,
     dotStrokeColor: "#ffffff",
     animation: "none",
+    tooltipBgColor: "#2563eb",
+    tooltipTextColor: "#ffffff",
+    tooltipTextSizePx: 12,
   };
 
   it("returns defaults when no hotspots exist", () => {
@@ -38,6 +41,9 @@ describe("deriveTooltipStyleFromHotspots", () => {
       dotStrokePx: 3,
       dotStrokeColor: "#00ff00",
       animation: "pulse",
+      tooltipBgColor: defaults.tooltipBgColor,
+      tooltipTextColor: defaults.tooltipTextColor,
+      tooltipTextSizePx: defaults.tooltipTextSizePx,
     });
   });
 
@@ -63,6 +69,9 @@ describe("deriveTooltipStyleFromHotspots", () => {
       dotStrokePx: 0,
       dotStrokeColor: defaults.dotStrokeColor,
       animation: defaults.animation,
+      tooltipBgColor: defaults.tooltipBgColor,
+      tooltipTextColor: defaults.tooltipTextColor,
+      tooltipTextSizePx: defaults.tooltipTextSizePx,
     });
   });
 });

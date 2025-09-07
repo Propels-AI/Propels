@@ -23,7 +23,12 @@ export type HotspotOverlayProps = {
   onHotspotClick?: (id: string) => void;
 };
 
-export const HotspotOverlay: React.FC<HotspotOverlayProps> = ({ imageUrl, hotspots = [], className, onHotspotClick }) => {
+export const HotspotOverlay: React.FC<HotspotOverlayProps> = ({
+  imageUrl,
+  hotspots = [],
+  className,
+  onHotspotClick,
+}) => {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const [box, setBox] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
@@ -58,7 +63,10 @@ export const HotspotOverlay: React.FC<HotspotOverlayProps> = ({ imageUrl, hotspo
     const containerH = rect.height;
     const imageAspect = naturalW / naturalH;
     const containerAspect = containerW / containerH;
-    let renderW = 0, renderH = 0, left = 0, top = 0;
+    let renderW = 0,
+      renderH = 0,
+      left = 0,
+      top = 0;
     if (containerAspect > imageAspect) {
       // pillarbox
       renderH = containerH;
@@ -100,26 +108,39 @@ export const HotspotOverlay: React.FC<HotspotOverlayProps> = ({ imageUrl, hotspo
           if (s) return s;
         }
       } catch {}
-      try { return JSON.stringify(v); } catch { return String(v); }
+      try {
+        return JSON.stringify(v);
+      } catch {
+        return String(v);
+      }
     }
     return "";
   };
 
   const first = hotspots[0] || {};
-  const stepStyleDefaults = useMemo(() => ({
-    dotSize: Number(first.dotSize ?? 12),
-    dotColor: String(first.dotColor ?? "#2563eb"),
-    dotStrokePx: Number(first.dotStrokePx ?? 2),
-    dotStrokeColor: String(first.dotStrokeColor ?? "#ffffff"),
-    animation: (first.animation ?? "none") as "none" | "pulse" | "breathe" | "fade",
-  }), [first]);
+  const stepStyleDefaults = useMemo(
+    () => ({
+      dotSize: Number(first.dotSize ?? 12),
+      dotColor: String(first.dotColor ?? "#2563eb"),
+      dotStrokePx: Number(first.dotStrokePx ?? 2),
+      dotStrokeColor: String(first.dotStrokeColor ?? "#ffffff"),
+      animation: (first.animation ?? "none") as "none" | "pulse" | "breathe" | "fade",
+    }),
+    [first]
+  );
 
   return (
     <div ref={wrapperRef} className={className}>
       <div className="relative w-full h-full">
         {imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img ref={imgRef} src={imageUrl} alt="Step" className="absolute inset-0 w-full h-full object-contain" onLoad={measure} />
+          <img
+            ref={imgRef}
+            src={imageUrl}
+            alt="Step"
+            className="absolute inset-0 w-full h-full object-contain"
+            onLoad={measure}
+          />
         ) : (
           <span className="text-gray-500">No image</span>
         )}
@@ -149,21 +170,42 @@ export const HotspotOverlay: React.FC<HotspotOverlayProps> = ({ imageUrl, hotspo
           const color = (h as any).dotColor || stepStyleDefaults.dotColor || "#2563eb";
           const anim = (h as any).animation || stepStyleDefaults.animation || "none";
           const animStyle: React.CSSProperties =
-            anim === "pulse" ? {} :
-            anim === "breathe" ? { animation: "propels-breathe 1.8s ease-in-out infinite" } :
-            anim === "fade" ? { animation: "propels-fade 1.4s ease-in-out infinite" } : {};
+            anim === "pulse"
+              ? {}
+              : anim === "breathe"
+                ? { animation: "propels-breathe 1.8s ease-in-out infinite" }
+                : anim === "fade"
+                  ? { animation: "propels-fade 1.4s ease-in-out infinite" }
+                  : {};
 
           const stroke = Math.max(0, Number((h as any).dotStrokePx ?? stepStyleDefaults.dotStrokePx ?? 2));
           const strokeColor = (h as any).dotStrokeColor ?? stepStyleDefaults.dotStrokeColor ?? "#ffffff";
+
+          const bubbleBg = (h as any).tooltipBgColor ?? (stepStyleDefaults as any).tooltipBgColor ?? "#2563eb";
+          const bubbleText = (h as any).tooltipTextColor ?? (stepStyleDefaults as any).tooltipTextColor ?? "#ffffff";
+          const bubbleSizePx = Number(
+            (h as any).tooltipTextSizePx ?? (stepStyleDefaults as any).tooltipTextSizePx ?? 12
+          );
 
           return (
             <div key={h.id} className="absolute group" style={style} onClick={() => onHotspotClick?.(h.id)}>
               <div
                 className={`rounded-full shadow ${anim === "pulse" ? "animate-pulse" : ""}`}
-                style={{ width: dotSize, height: dotSize, backgroundColor: color, borderStyle: "solid", borderWidth: stroke, borderColor: strokeColor, ...animStyle }}
+                style={{
+                  width: dotSize,
+                  height: dotSize,
+                  backgroundColor: color,
+                  borderStyle: "solid",
+                  borderWidth: stroke,
+                  borderColor: strokeColor,
+                  ...animStyle,
+                }}
               />
               {hasTooltip && (
-                <div className="absolute left-full ml-1.5 top-1/2 -translate-y-1/2 whitespace-pre px-2 py-1 text-xs text-white bg-blue-600 rounded shadow opacity-100 pointer-events-none">
+                <div
+                  className="absolute left-full ml-1.5 top-1/2 -translate-y-1/2 whitespace-pre px-2 py-1 rounded shadow opacity-100 pointer-events-none"
+                  style={{ backgroundColor: bubbleBg, color: bubbleText, fontSize: `${bubbleSizePx}px` }}
+                >
                   {tooltipText}
                 </div>
               )}

@@ -52,6 +52,9 @@ export default function PublicDemoPlayer() {
     dotStrokePx: number;
     dotStrokeColor: string;
     animation: "none" | "pulse" | "breathe" | "fade";
+    tooltipBgColor?: string;
+    tooltipTextColor?: string;
+    tooltipTextSizePx?: number;
   }>({ dotSize: 12, dotColor: "#2563eb", dotStrokePx: 2, dotStrokeColor: "#ffffff", animation: "none" });
 
   useEffect(() => {
@@ -101,6 +104,9 @@ export default function PublicDemoPlayer() {
                 dotStrokePx: Number(parsed.dotStrokePx ?? 2),
                 dotStrokeColor: String(parsed.dotStrokeColor ?? "#ffffff"),
                 animation: (parsed.animation ?? "none") as any,
+                tooltipBgColor: parsed.tooltipBgColor,
+                tooltipTextColor: parsed.tooltipTextColor,
+                tooltipTextSizePx: parsed.tooltipTextSizePx,
               });
             }
           }

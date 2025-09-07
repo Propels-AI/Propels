@@ -4,6 +4,10 @@ export type TooltipStyle = {
   dotStrokePx: number;
   dotStrokeColor: string;
   animation: "none" | "pulse" | "breathe" | "fade";
+  // Tooltip text bubble styles
+  tooltipBgColor?: string;
+  tooltipTextColor?: string;
+  tooltipTextSizePx?: number;
 };
 
 export type Hotspot = {
@@ -20,14 +24,14 @@ export type Hotspot = {
   dotStrokePx?: number;
   dotStrokeColor?: string;
   animation?: TooltipStyle["animation"];
+  tooltipBgColor?: string;
+  tooltipTextColor?: string;
+  tooltipTextSizePx?: number;
 };
 
 export type HotspotsMap = Record<string, Hotspot[]>;
 
-export function deriveTooltipStyleFromHotspots(
-  map: HotspotsMap,
-  defaults: TooltipStyle
-): TooltipStyle {
+export function deriveTooltipStyleFromHotspots(map: HotspotsMap, defaults: TooltipStyle): TooltipStyle {
   for (const list of Object.values(map)) {
     if (Array.isArray(list) && list.length > 0) {
       const h = list[0] as Hotspot;
@@ -37,6 +41,9 @@ export function deriveTooltipStyleFromHotspots(
         dotStrokePx: Number(h.dotStrokePx ?? defaults.dotStrokePx),
         dotStrokeColor: String(h.dotStrokeColor ?? defaults.dotStrokeColor),
         animation: (h.animation ?? defaults.animation) as TooltipStyle["animation"],
+        tooltipBgColor: String((h as any).tooltipBgColor ?? (defaults as any).tooltipBgColor ?? "#2563eb"),
+        tooltipTextColor: String((h as any).tooltipTextColor ?? (defaults as any).tooltipTextColor ?? "#ffffff"),
+        tooltipTextSizePx: Number((h as any).tooltipTextSizePx ?? (defaults as any).tooltipTextSizePx ?? 12),
       };
     }
   }
