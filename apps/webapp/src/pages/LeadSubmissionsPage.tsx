@@ -29,8 +29,22 @@ function LeadSubmissionsPageInner() {
     };
   }, [demoId]);
 
+  // Normalize rows: parse fields if it is a JSON string
+  const normalizedRows = useMemo(() => {
+    return rows.map((r) => {
+      let parsed = r?.fields;
+      if (typeof parsed === "string") {
+        try {
+          parsed = JSON.parse(parsed);
+        } catch {}
+      }
+      return { ...r, fields: parsed };
+    });
+  }, [rows]);
+
   const columns = useMemo(() => {
-    const defs: Array<{
+    // Base columns that we always consider
+    const baseDefs: Array<{
       key: string;
       title: string;
       get: (r: any) => any;
@@ -57,14 +71,41 @@ function LeadSubmissionsPageInner() {
       { key: "pageUrl", title: "Page", get: (r) => r.pageUrl || "", className: "p-2 truncate max-w-[240px]" },
       { key: "source", title: "Source", get: (r) => r.source || "", className: "p-2 whitespace-nowrap" },
     ];
+
+    // Collect dynamic field keys from rows.fields
+    const baseKeys = new Set(baseDefs.map((d) => d.key));
+    const dynamicKeys = new Set<string>();
+    for (const r of normalizedRows) {
+      const f = r?.fields || {};
+      Object.keys(f).forEach((k) => {
+        if (!baseKeys.has(k)) dynamicKeys.add(k);
+      });
+    }
+
+    const humanize = (k: string) => k.replace(/[_-]+/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
+
+    const dynamicDefs: Array<{
+      key: string;
+      title: string;
+      get: (r: any) => any;
+      className: string;
+    }> = Array.from(dynamicKeys).map((key) => ({
+      key,
+      title: humanize(key),
+      get: (r) => r.fields?.[key] ?? "",
+      className: "p-2",
+    }));
+
+    const defs = [...baseDefs, ...dynamicDefs];
+
     const hasValue = (v: any) => {
       if (v == null) return false;
       const s = String(v);
       return s.trim().length > 0;
     };
     // Only keep columns that have at least one non-empty value across rows
-    return defs.filter((col) => rows.some((r) => hasValue(col.get(r))));
-  }, [rows]);
+    return defs.filter((col) => normalizedRows.some((r) => hasValue(col.get(r))));
+  }, [normalizedRows]);
 
   const csv = useMemo(() => {
     const escape = (v: any) => {
@@ -73,9 +114,9 @@ function LeadSubmissionsPageInner() {
       return s;
     };
     const header = columns.map((c) => c.key).join(",");
-    const lines = rows.map((r) => columns.map((c) => escape(c.get(r))).join(","));
+    const lines = normalizedRows.map((r) => columns.map((c) => escape(c.get(r))).join(","));
     return [header, ...lines].join("\n");
-  }, [rows, columns]);
+  }, [normalizedRows, columns]);
 
   const downloadCsv = () => {
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -111,14 +152,19 @@ function LeadSubmissionsPageInner() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => {
+            {normalizedRows.map((r) => {
               return (
                 <tr key={r.itemSK} className="border-t">
-                  {columns.map((c) => (
-                    <td key={c.key} className={c.className}>
-                      {c.get(r)}
-                    </td>
-                  ))}
+                  {columns.map((c) => {
+                    const raw = c.get(r);
+                    const str = raw == null ? "" : String(raw);
+                    const display = str.trim().length > 0 ? raw : "–";
+                    return (
+                      <td key={c.key} className={c.className}>
+                        {display}
+                      </td>
+                    );
+                  })}
                 </tr>
               );
             })}
