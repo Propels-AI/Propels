@@ -71,13 +71,13 @@ describe("DemoEditorPage Tooltip Inspector", () => {
   it("updates UI when user changes size, color, stroke, and animation", async () => {
     await renderWithDemoId();
 
-    // Wait for initial loader to place values
-    await waitFor(() => expect(screen.getByText(/12 px/i)).toBeInTheDocument());
+    // Wait for initial loader to place values (first size meter)
+    await waitFor(() => expect(screen.getAllByText(/12 px/i)[0]).toBeInTheDocument());
 
     // Change size to 24
     const sizeInput = screen.getAllByRole("slider")[0] as HTMLInputElement;
     fireEvent.change(sizeInput, { target: { value: "24" } });
-    await waitFor(() => expect(screen.getByText(/24 px/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByText(/24 px/i)[0]).toBeInTheDocument());
 
     // Change fill color
     const fillColor = screen.getByTitle(/choose color/i) as HTMLInputElement;
@@ -93,12 +93,13 @@ describe("DemoEditorPage Tooltip Inspector", () => {
     await waitFor(() => expect(screen.getByText(/3 px/i)).toBeInTheDocument());
 
     // Change stroke color
-    const strokeColor = screen.getByTitle(/color/i) as HTMLInputElement;
+    const strokeColor = screen.getByTitle(/choose stroke color/i) as HTMLInputElement;
     fireEvent.change(strokeColor, { target: { value: "#aabbcc" } });
     expect(strokeColor.value.toLowerCase()).toBe("#aabbcc");
 
     // Change animation select
-    const select = screen.getByRole("combobox") as HTMLSelectElement;
+    const label = screen.getByText(/Animation \(applies to all steps\)/i);
+    const select = label.parentElement!.querySelector("select") as HTMLSelectElement;
     fireEvent.change(select, { target: { value: "pulse" } });
     expect(select.value).toBe("pulse");
   });

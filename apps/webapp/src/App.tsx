@@ -6,6 +6,9 @@ import { DashboardPage } from "@/pages/DashboardPage";
 import DemoEditorPage from "@/pages/DemoEditorPage";
 import DemoPlayer from "@/pages/DemoPlayer";
 import PublicDemoPlayer from "@/pages/PublicDemoPlayer";
+import PublicDemoEmbed from "@/pages/PublicDemoEmbed";
+import BlogPreviewPage from "./pages/BlogPreviewPage";
+import LeadSubmissionsPage from "@/pages/LeadSubmissionsPage";
 import { AuthProvider } from "@/lib/providers/AuthProvider";
 import { Toaster } from "sonner";
 
@@ -23,6 +26,9 @@ function App() {
             <Route path="/editor" element={<DemoEditorPage />} />
             <Route path="/demo-player" element={<DemoPlayer />} />
             <Route path="/p/:demoId" element={<PublicDemoPlayer />} />
+            <Route path="/embed/:demoId" element={<PublicDemoEmbed />} />
+            <Route path="/preview-blog" element={<BlogPreviewPage />} />
+            <Route path="/leads/:demoId" element={<LeadSubmissionsPage />} />
             <Route path="/" element={<SignInPage />} />
           </Routes>
         </Router>

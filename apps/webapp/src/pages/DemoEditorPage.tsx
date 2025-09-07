@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useKeyboardShortcut } from "@/hooks/useKeyboardShortcut";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { syncAnonymousDemo, type EditedDraft } from "../lib/services/syncAnonymousDemo";
 import { useAuth } from "@/lib/providers/AuthProvider";
 import { useSearchParams, useNavigate } from "react-router-dom";
@@ -14,13 +15,16 @@ import {
   deletePublicDemoItems,
   updateDemoLeadConfig,
   updateDemoStyleConfig,
+  listLeadTemplates,
+  saveLeadTemplate,
 } from "@/lib/api/demos";
 import { getUrl } from "aws-amplify/storage";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { PasswordlessAuth } from "@/components/auth/PasswordlessAuth";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, Copy } from "lucide-react";
 import LeadCaptureOverlay from "@/components/LeadCaptureOverlay";
+import StepsBar from "@/components/StepsBar";
 import HotspotOverlay from "@/components/HotspotOverlay";
 import {
   deriveTooltipStyleFromHotspots,
@@ -29,6 +33,7 @@ import {
 } from "@/lib/editor/deriveTooltipStyleFromHotspots";
 import { applyGlobalStyleToHotspots } from "@/lib/editor/applyGlobalStyleToHotspots";
 import { extractLeadConfig } from "@/lib/editor/extractLeadConfig";
+import { Dialog as UIDialog, DialogContent as UIDialogContent } from "@/components/ui/dialog";
 
 export function DemoEditorPage() {
   const { user, isLoading } = useAuth();
@@ -75,6 +80,7 @@ export function DemoEditorPage() {
   const [togglingStatus, setTogglingStatus] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [savingDemo, setSavingDemo] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   // Retry counter for backend load (handle eventual consistency right after creation)
   const loadAttemptsRef = useRef<number>(0);
 
@@ -99,12 +105,23 @@ export function DemoEditorPage() {
     animation?: "none" | "pulse" | "breathe" | "fade";
     dotStrokePx?: number; // border width in px
     dotStrokeColor?: string; // border color
+    // Tooltip text bubble styling
+    tooltipBgColor?: string;
+    tooltipTextColor?: string;
+    tooltipTextSizePx?: number;
   };
 
   const [hotspotsByStep, setHotspotsByStep] = useState<Record<string, Hotspot[]>>({});
   const [editingTooltip, setEditingTooltip] = useState<string | null>(null);
   const [tooltipText, setTooltipText] = useState("");
   const [inspectorTab, setInspectorTab] = useState<"fill" | "stroke">("fill");
+  // Lead form config
+  const [leadFormConfig, setLeadFormConfig] = useState<any>({
+    title: "Stay in the loop",
+    subtitle: "Enjoying the demo? Leave your details and we’ll reach out.",
+    ctaText: "Notify me",
+    fields: [{ key: "email", type: "email", label: "Email", required: true, placeholder: "you@company.com" }],
+  });
   // Global tooltip style for consistency across all steps
   const [tooltipStyle, setTooltipStyle] = useState<{
     dotSize: number;
@@ -112,12 +129,18 @@ export function DemoEditorPage() {
     dotStrokePx: number;
     dotStrokeColor: string;
     animation: "none" | "pulse" | "breathe" | "fade";
+    tooltipBgColor?: string;
+    tooltipTextColor?: string;
+    tooltipTextSizePx?: number;
   }>({
     dotSize: 12,
     dotColor: "#2563eb",
     dotStrokePx: 2,
     dotStrokeColor: "#ffffff",
     animation: "none",
+    tooltipBgColor: "#2563eb",
+    tooltipTextColor: "#ffffff",
+    tooltipTextSizePx: 12,
   });
   const imageRef = useRef<HTMLDivElement>(null);
   const computeRenderRect = (containerW: number, containerH: number, naturalW: number, naturalH: number) => {
@@ -151,6 +174,15 @@ export function DemoEditorPage() {
           setDemoName(meta.name || "");
           setDemoStatusLocal((meta.status as any) === "PUBLISHED" ? "PUBLISHED" : "DRAFT");
           try {
+            if ((meta as any).leadConfig) {
+              const cfg =
+                typeof (meta as any).leadConfig === "string"
+                  ? JSON.parse((meta as any).leadConfig)
+                  : (meta as any).leadConfig;
+              if (cfg && typeof cfg === "object") setLeadFormConfig(cfg);
+            }
+          } catch {}
+          try {
             const raw = (meta as any).hotspotStyle;
             if (raw) {
               const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
@@ -161,6 +193,9 @@ export function DemoEditorPage() {
                   dotStrokePx: Number(parsed.dotStrokePx ?? prev.dotStrokePx ?? 2),
                   dotStrokeColor: String(parsed.dotStrokeColor ?? prev.dotStrokeColor ?? "#ffffff"),
                   animation: (parsed.animation ?? prev.animation ?? "none") as any,
+                  tooltipBgColor: String(parsed.tooltipBgColor ?? prev.tooltipBgColor ?? "#2563eb"),
+                  tooltipTextColor: String(parsed.tooltipTextColor ?? prev.tooltipTextColor ?? "#ffffff"),
+                  tooltipTextSizePx: Number(parsed.tooltipTextSizePx ?? prev.tooltipTextSizePx ?? 12),
                 }));
               }
             }
@@ -244,6 +279,9 @@ export function DemoEditorPage() {
                 dotStrokePx: 2,
                 dotStrokeColor: "#ffffff",
                 animation: "none",
+                tooltipBgColor: "#2563eb",
+                tooltipTextColor: "#ffffff",
+                tooltipTextSizePx: 12,
               } as TooltipStyle
             );
             if (derived) {
@@ -253,6 +291,9 @@ export function DemoEditorPage() {
                 dotStrokePx: Number(derived.dotStrokePx ?? prev.dotStrokePx ?? 2),
                 dotStrokeColor: String(derived.dotStrokeColor ?? prev.dotStrokeColor ?? "#ffffff"),
                 animation: (derived.animation ?? prev.animation ?? "none") as any,
+                tooltipBgColor: String(derived.tooltipBgColor ?? prev.tooltipBgColor ?? "#2563eb"),
+                tooltipTextColor: String(derived.tooltipTextColor ?? prev.tooltipTextColor ?? "#ffffff"),
+                tooltipTextSizePx: Number(derived.tooltipTextSizePx ?? prev.tooltipTextSizePx ?? 12),
               }));
             }
           }
@@ -432,6 +473,9 @@ export function DemoEditorPage() {
       dotStrokePx: number;
       dotStrokeColor: string;
       animation: "none" | "pulse" | "breathe" | "fade";
+      tooltipBgColor?: string;
+      tooltipTextColor?: string;
+      tooltipTextSizePx?: number;
     }>
   ) => {
     setTooltipStyle((prev) => ({ ...prev, ...patch }));
@@ -463,7 +507,7 @@ export function DemoEditorPage() {
   }, []);
 
   const handleSave = async () => {
-    const { leadStepIndex: leadIdxDraft, leadConfig: leadCfgDraft } = extractLeadConfig(steps);
+    const { leadStepIndex: leadIdxDraft } = extractLeadConfig(steps);
     const draft: EditedDraft = {
       draftId: (crypto as any).randomUUID ? (crypto as any).randomUUID() : `${Date.now()}`,
       createdAt: new Date().toISOString(),
@@ -471,7 +515,7 @@ export function DemoEditorPage() {
       steps: steps.map((s, idx) => ({ id: s.id, pageUrl: s.pageUrl, order: idx })),
       hotspotsByStep: hotspotsByStep,
       leadStepIndex: leadIdxDraft,
-      leadConfig: leadCfgDraft,
+      leadConfig: leadFormConfig,
     };
 
     if (!isAuthenticated) {
@@ -495,12 +539,12 @@ export function DemoEditorPage() {
         });
         await Promise.all(updates);
         try {
-          const { leadStepIndex, leadConfig } = extractLeadConfig(steps);
-          if (leadStepIndex !== null) {
-            await updateDemoLeadConfig({ demoId: demoIdParam, leadStepIndex, leadConfig: leadConfig as any });
-          } else {
-            await updateDemoLeadConfig({ demoId: demoIdParam, leadStepIndex: null });
-          }
+          const { leadStepIndex } = extractLeadConfig(steps);
+          await updateDemoLeadConfig({
+            demoId: demoIdParam,
+            leadStepIndex: leadStepIndex !== null ? leadStepIndex : null,
+            leadConfig: leadFormConfig as any,
+          });
         } catch (e) {
           console.error("Failed to persist lead config (non-fatal)", e);
         }
@@ -511,11 +555,12 @@ export function DemoEditorPage() {
         }
         if (demoStatus === "PUBLISHED") {
           try {
-            const { leadStepIndex: leadIdxNow, leadConfig: leadCfgNow } = extractLeadConfig(steps);
+            const { leadStepIndex: leadIdxNow } = extractLeadConfig(steps);
+            // Use the full lead form configuration that the editor manages so fields are preserved in PublicDemo
             await mirrorDemoToPublic(demoIdParam, {
               name: demoName || undefined,
               leadStepIndex: leadIdxNow,
-              leadConfig: leadCfgNow,
+              leadConfig: leadFormConfig,
             });
           } catch (mirrorErr) {
             console.error("Mirror to public failed (will still keep private saved).", mirrorErr);
@@ -750,17 +795,6 @@ export function DemoEditorPage() {
     .map((s, idx) => (s.isLeadCapture || (hotspotsByStep[s.id]?.length ? true : false) ? idx : -1))
     .filter((v) => v >= 0);
 
-  const enterPreview = () => {
-    setIsPreviewing(true);
-    if (currentStepId && !(hotspotsByStep[currentStepId]?.length > 0) && !isCurrentLeadStep) {
-      if (previewableIndices.length > 0) setSelectedStepIndex(previewableIndices[0]);
-    }
-  };
-
-  const exitPreview = () => {
-    setIsPreviewing(false);
-  };
-
   const gotoPrevAnnotated = () => {
     if (previewableIndices.length === 0) return;
     const pos = previewableIndices.indexOf(selectedStepIndex);
@@ -778,39 +812,37 @@ export function DemoEditorPage() {
   return (
     <div className="min-h-screen flex">
       <div className="flex-1 p-8">
-        <h1 className="text-2xl font-bold mb-1">Demo Editor</h1>
-        <div className="mb-3 text-xs text-gray-600">
-          {demoIdParam ? `Viewing saved demo: ${demoIdParam}` : "Editing local captures"}
+        <div className="mb-3 flex items-center gap-2">
+          <Input
+            value={demoName}
+            placeholder="Untitled Demo"
+            onChange={(e) => setDemoName(e.target.value)}
+            className="h-8 text-sm w-64"
+          />
+          {demoIdParam && (
+            <button
+              onClick={async () => {
+                if (!demoIdParam) return;
+                try {
+                  setSavingTitle(true);
+                  await renameDemo(demoIdParam, demoName || "");
+                } catch (e) {
+                  console.error("Failed to rename demo", e);
+                  alert("Failed to save title. Please try again.");
+                } finally {
+                  setSavingTitle(false);
+                }
+              }}
+              disabled={savingTitle || savingDemo}
+              className={`text-sm py-1.5 px-2 rounded border ${savingTitle ? "opacity-60" : ""}`}
+            >
+              {savingTitle ? "Saving..." : "Save Title"}
+            </button>
+          )}
         </div>
         <div className="mb-4 flex items-center gap-3">
           {demoIdParam && (
             <>
-              <div className="flex items-center gap-2 mr-4">
-                <Input
-                  value={demoName}
-                  placeholder="Untitled Demo"
-                  onChange={(e) => setDemoName(e.target.value)}
-                  className="h-8 text-sm w-64"
-                />
-                <button
-                  onClick={async () => {
-                    if (!demoIdParam) return;
-                    try {
-                      setSavingTitle(true);
-                      await renameDemo(demoIdParam, demoName || "");
-                    } catch (e) {
-                      console.error("Failed to rename demo", e);
-                      alert("Failed to save title. Please try again.");
-                    } finally {
-                      setSavingTitle(false);
-                    }
-                  }}
-                  disabled={savingTitle || savingDemo}
-                  className={`text-sm py-1.5 px-2 rounded border ${savingTitle ? "opacity-60" : ""}`}
-                >
-                  {savingTitle ? "Saving..." : "Save Title"}
-                </button>
-              </div>
               <div className="flex items-center gap-2 mr-4">
                 <span
                   className={`px-2 py-1 rounded text-xs font-medium ${
@@ -843,6 +875,9 @@ export function DemoEditorPage() {
                       }
                       await setDemoStatus(demoIdParam, next);
                       setDemoStatusLocal(next);
+                      if (next === "PUBLISHED") {
+                        setShareOpen(true);
+                      }
                     } catch (e) {
                       console.error("Failed to update status", e);
                       alert("Failed to update status. Please try again.");
@@ -884,14 +919,61 @@ export function DemoEditorPage() {
             </>
           )}
           <button
-            onClick={() => (isPreviewing ? exitPreview() : enterPreview())}
-            className={`text-sm py-2 px-3 rounded border ${
-              isPreviewing ? "bg-green-100 border-green-400" : "bg-white border-gray-300"
-            }`}
-            title="Toggle preview mode"
+            onClick={() => {
+              const demoId = demoIdParam;
+              if (!demoId) {
+                alert("Save your demo first to preview in blog.");
+                return;
+              }
+              const url = `/preview-blog?demoId=${encodeURIComponent(demoId)}`;
+              window.open(url, "_blank", "noopener,noreferrer");
+            }}
+            className={`text-sm py-2 px-3 rounded border bg-white border-gray-300`}
+            title="Open blog preview"
           >
-            {isPreviewing ? "Preview: On (Esc to stop)" : "Preview: Off"}
+            Blog Preview
           </button>
+          {demoIdParam && demoStatus === "PUBLISHED" && (
+            <>
+              <button
+                onClick={async () => {
+                  try {
+                    const url = `${window.location.origin}/p/${demoIdParam}`;
+                    await navigator.clipboard.writeText(url);
+                    toast.success("Copied public URL");
+                  } catch (e) {
+                    try {
+                      prompt("Copy public URL", `${window.location.origin}/p/${demoIdParam}`);
+                    } catch {}
+                  }
+                }}
+                className="text-sm py-2 px-3 rounded border bg-white border-gray-300"
+                title="Copy public page URL"
+              >
+                Copy URL
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    const code = `<iframe src="${window.location.origin}/embed/${demoIdParam}?ar=16:9" style="width:100%;aspect-ratio:16/9;border:0;" allow="fullscreen"></iframe>`;
+                    await navigator.clipboard.writeText(code);
+                    toast.success("Copied embed code");
+                  } catch (e) {
+                    try {
+                      prompt(
+                        "Copy iframe embed code",
+                        `<iframe src=\"${window.location.origin}/embed/${demoIdParam}?ar=16:9\" style=\"width:100%;aspect-ratio:16/9;border:0;\" allow=\"fullscreen\"></iframe>`
+                      );
+                    } catch {}
+                  }
+                }}
+                className="text-sm py-2 px-3 rounded border bg-white border-gray-300"
+                title="Copy iframe embed code"
+              >
+                Copy Embed
+              </button>
+            </>
+          )}
           <button
             onClick={handleSave}
             disabled={savingDemo}
@@ -901,9 +983,7 @@ export function DemoEditorPage() {
           >
             {savingDemo ? "Saving..." : "Save"}
           </button>
-          {!isAuthenticated && (
-            <span className="text-xs text-gray-500">You can freely edit. Saving requires sign in.</span>
-          )}
+
           {loadingSteps && <span className="text-xs text-gray-400">Loading steps…</span>}
           {!loadingSteps && steps.length > 0 && (
             <span className="text-xs text-gray-600">Loaded {steps.length} captured steps</span>
@@ -913,11 +993,18 @@ export function DemoEditorPage() {
               <button onClick={gotoPrevAnnotated} className="text-sm py-1 px-2 rounded border bg-white border-gray-300">
                 Prev
               </button>
-              <span className="text-xs text-gray-600">
-                {previewableIndices.length > 0
-                  ? `${previewableIndices.indexOf(selectedStepIndex) + 1} / ${previewableIndices.length}`
-                  : "0 / 0"}
-              </span>
+              <div className="w-64">
+                <StepsBar
+                  total={previewableIndices.length}
+                  current={Math.max(0, previewableIndices.indexOf(selectedStepIndex))}
+                  onSelect={(pos) => {
+                    const targetIdx = previewableIndices[pos] ?? selectedStepIndex;
+                    setSelectedStepIndex(targetIdx);
+                  }}
+                  className="mx-auto"
+                  size="sm"
+                />
+              </div>
               <button onClick={gotoNextAnnotated} className="text-sm py-1 px-2 rounded border bg-white border-gray-300">
                 Next
               </button>
@@ -950,12 +1037,31 @@ export function DemoEditorPage() {
           )}
           {steps.length > 0 ? (
             isCurrentLeadStep ? (
-              <LeadCaptureOverlay bg={steps[selectedStepIndex]?.leadBg === "black" ? "black" : "white"} />
+              <LeadCaptureOverlay
+                bg={steps[selectedStepIndex]?.leadBg === "black" ? "black" : "white"}
+                config={leadFormConfig as any}
+              />
             ) : isPreviewing ? (
               <HotspotOverlay
                 className="absolute inset-0 w-full h-full"
                 imageUrl={steps[selectedStepIndex]?.screenshotUrl}
                 hotspots={currentHotspots as any}
+                enableBubbleDrag
+                onBubbleDrag={(id, dxNorm, dyNorm) => {
+                  setHotspotsByStep((prev) => {
+                    if (!currentStepId) return prev;
+                    const list = Array.isArray(prev[currentStepId]) ? [...prev[currentStepId]] : [];
+                    const idx = list.findIndex((h) => h.id === id);
+                    if (idx === -1) return prev;
+                    const existing = list[idx] as any;
+                    list[idx] = {
+                      ...existing,
+                      tooltipOffsetXNorm: dxNorm,
+                      tooltipOffsetYNorm: dyNorm,
+                    };
+                    return { ...prev, [currentStepId]: list } as any;
+                  });
+                }}
               />
             ) : (
               <img
@@ -1019,8 +1125,30 @@ export function DemoEditorPage() {
                 centerY = hotspot.y + (hotspot.height || 0) / 2;
               }
               const dotSize = Math.max(6, Math.min(48, Number(hotspot.dotSize ?? 12)));
-              const tooltipLeft = centerX + dotSize + 6;
-              const tooltipTop = centerY - 8;
+              const offsetXNorm: number | undefined = (hotspot as any).tooltipOffsetXNorm;
+              const offsetYNorm: number | undefined = (hotspot as any).tooltipOffsetYNorm;
+              const tooltipLeft =
+                typeof offsetXNorm === "number" && naturalSize
+                  ? centerX +
+                    offsetXNorm *
+                      computeRenderRect(
+                        imageRef.current!.clientWidth,
+                        imageRef.current!.clientHeight,
+                        naturalSize.w,
+                        naturalSize.h
+                      ).w
+                  : centerX + dotSize + 6;
+              const tooltipTop =
+                typeof offsetYNorm === "number" && naturalSize
+                  ? centerY +
+                    offsetYNorm *
+                      computeRenderRect(
+                        imageRef.current!.clientWidth,
+                        imageRef.current!.clientHeight,
+                        naturalSize.w,
+                        naturalSize.h
+                      ).h
+                  : centerY - 8;
               const color = hotspot.dotColor || "#2563eb";
               const anim = hotspot.animation || "none";
               const animStyle: React.CSSProperties =
@@ -1083,8 +1211,48 @@ export function DemoEditorPage() {
 
                   {editingTooltip !== hotspot.id && hotspot.tooltip && (
                     <div
-                      className="absolute bg-blue-600 text-white text-xs rounded py-1 px-2 shadow"
-                      style={{ left: `${tooltipLeft}px`, top: `${tooltipTop}px` }}
+                      className="absolute rounded py-1 px-2 shadow"
+                      style={{
+                        left: `${tooltipLeft}px`,
+                        top: `${tooltipTop}px`,
+                        backgroundColor: hotspot.tooltipBgColor || tooltipStyle.tooltipBgColor || "#2563eb",
+                        color: hotspot.tooltipTextColor || tooltipStyle.tooltipTextColor || "#ffffff",
+                        fontSize: `${Number(hotspot.tooltipTextSizePx || tooltipStyle.tooltipTextSizePx || 12)}px`,
+                      }}
+                      onMouseDown={(e) => {
+                        // Enable dragging bubble in edit mode (not preview)
+                        if (isPreviewing) return;
+                        e.stopPropagation();
+                        const rect = imageRef.current?.getBoundingClientRect();
+                        if (!rect || !naturalSize) return;
+                        const startX = e.clientX;
+                        const startY = e.clientY;
+                        const startLeft = tooltipLeft;
+                        const startTop = tooltipTop;
+                        const boxRect = computeRenderRect(rect.width, rect.height, naturalSize.w, naturalSize.h);
+                        const onMove = (ev: MouseEvent) => {
+                          const dx = ev.clientX - startX;
+                          const dy = ev.clientY - startY;
+                          const newLeft = startLeft + dx;
+                          const newTop = startTop + dy;
+                          const dxNorm = (newLeft - centerX) / boxRect.w;
+                          const dyNorm = (newTop - centerY) / boxRect.h;
+                          setHotspotsByStep((prev) => {
+                            const list = Array.isArray(prev[currentStepId!]) ? [...prev[currentStepId!]] : [];
+                            const idx = list.findIndex((h) => h.id === hotspot.id);
+                            if (idx === -1) return prev;
+                            const existing = list[idx] as any;
+                            list[idx] = { ...existing, tooltipOffsetXNorm: dxNorm, tooltipOffsetYNorm: dyNorm };
+                            return { ...prev, [currentStepId!]: list } as any;
+                          });
+                        };
+                        const onUp = () => {
+                          document.removeEventListener("mousemove", onMove);
+                          document.removeEventListener("mouseup", onUp);
+                        };
+                        document.addEventListener("mousemove", onMove);
+                        document.addEventListener("mouseup", onUp);
+                      }}
                     >
                       {hotspot.tooltip}
                     </div>
@@ -1309,6 +1477,41 @@ export function DemoEditorPage() {
                 </>
               )}
               <div>
+                <label className="block text-xs text-gray-600 mb-1">Tooltip background</label>
+                <input
+                  type="color"
+                  value={tooltipStyle.tooltipBgColor || "#2563eb"}
+                  onChange={(e) => applyGlobalStyle({ tooltipBgColor: e.target.value })}
+                  className="w-10 h-8 p-0 border rounded"
+                  title="Choose tooltip background"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Tooltip text color</label>
+                <input
+                  type="color"
+                  value={tooltipStyle.tooltipTextColor || "#ffffff"}
+                  onChange={(e) => applyGlobalStyle({ tooltipTextColor: e.target.value })}
+                  className="w-10 h-8 p-0 border rounded"
+                  title="Choose tooltip text color"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Tooltip text size (px)</label>
+                <input
+                  type="range"
+                  min={10}
+                  max={24}
+                  step={1}
+                  value={Number(tooltipStyle.tooltipTextSizePx || 12)}
+                  onChange={(e) => applyGlobalStyle({ tooltipTextSizePx: Number(e.target.value) })}
+                  className="w-full"
+                />
+                <div className="text-[10px] text-gray-500 mt-0.5">
+                  {Number(tooltipStyle.tooltipTextSizePx || 12)} px
+                </div>
+              </div>
+              <div>
                 <label className="block text-xs text-gray-600 mb-1">Animation (applies to all steps)</label>
                 <select
                   value={tooltipStyle.animation}
@@ -1342,6 +1545,86 @@ export function DemoEditorPage() {
               </div>
             </div>
           )}
+        </div>
+
+        <div className="pt-4 border-t mt-6">
+          <h3 className="text-lg font-semibold mb-3">Lead Form</h3>
+          <div className="space-y-3 text-sm">
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">Title</label>
+                  <input
+                    className="w-full border rounded px-2 py-1"
+                    value={leadFormConfig.title || ""}
+                    onChange={(e) => setLeadFormConfig((p: any) => ({ ...p, title: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">CTA Text</label>
+                  <input
+                    className="w-full border rounded px-2 py-1"
+                    value={leadFormConfig.ctaText || ""}
+                    onChange={(e) => setLeadFormConfig((p: any) => ({ ...p, ctaText: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Subtitle</label>
+                <textarea
+                  className="w-full border rounded px-2 py-1 h-16"
+                  value={leadFormConfig.subtitle || ""}
+                  onChange={(e) => setLeadFormConfig((p: any) => ({ ...p, subtitle: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1">
+                <div className="text-xs text-gray-600">Fields</div>
+                {[
+                  { key: "email", label: "Email", type: "email", required: true },
+                  { key: "name", label: "Name", type: "text" },
+                  { key: "phone", label: "Phone", type: "tel" },
+                  { key: "position", label: "Position", type: "text" },
+                  { key: "message", label: "Message", type: "textarea" },
+                  { key: "custom", label: "Custom", type: "text" },
+                ].map((f) => {
+                  const list: any[] = Array.isArray(leadFormConfig.fields) ? leadFormConfig.fields : [];
+                  const exists = list.find((x) => x.key === f.key);
+                  const enabled = !!exists;
+                  return (
+                    <label key={f.key} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        className="accent-blue-600"
+                        checked={enabled}
+                        disabled={f.key === "email"}
+                        onChange={(e) => {
+                          setLeadFormConfig((p: any) => {
+                            const current: any[] = Array.isArray(p.fields) ? [...p.fields] : [];
+                            if (e.target.checked) {
+                              if (!current.find((x) => x.key === f.key))
+                                current.push({ key: f.key, type: f.type, label: f.label });
+                            } else {
+                              const idx = current.findIndex((x) => x.key === f.key);
+                              if (idx >= 0) current.splice(idx, 1);
+                            }
+                            // Ensure email is present & required
+                            if (!current.find((x) => x.key === "email"))
+                              current.unshift({ key: "email", type: "email", label: "Email", required: true });
+                            return { ...p, fields: current };
+                          });
+                        }}
+                      />
+                      <span>{f.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <TemplatePicker getConfig={() => leadFormConfig} applyConfig={(cfg) => setLeadFormConfig(cfg)} />
+            </div>
+          </div>
         </div>
       </div>
       <Dialog
@@ -1383,8 +1666,154 @@ export function DemoEditorPage() {
           />
         </DialogContent>
       </Dialog>
+
+      {/* Share dialog after publish */}
+      <UIDialog open={shareOpen} onOpenChange={setShareOpen}>
+        <UIDialogContent className="p-4">
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold">Your demo is live! What’s next?</h3>
+            <div className="text-sm space-y-4">
+              <div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">1.</span>
+                    <span>Copy the embed code and add it to your site</span>
+                  </div>
+                  <button
+                    className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50"
+                    onClick={async () => {
+                      try {
+                        const code = demoIdParam
+                          ? `<iframe src="${window.location.origin}/embed/${demoIdParam}?ar=16:9" style="width:100%;aspect-ratio:16/9;border:0;" allow="fullscreen"></iframe>`
+                          : "";
+                        await navigator.clipboard.writeText(code);
+                        toast.success("Embed code copied");
+                      } catch {}
+                    }}
+                    title="Copy embed code"
+                  >
+                    <Copy className="w-3.5 h-3.5" /> Copy
+                  </button>
+                </div>
+                <textarea
+                  readOnly
+                  rows={4}
+                  className="mt-2 w-full border rounded px-2 py-1 text-xs font-mono"
+                  onFocus={(e) => e.currentTarget.select()}
+                  value={
+                    demoIdParam
+                      ? `<iframe src="${window.location.origin}/embed/${demoIdParam}?ar=16:9" style="width:100%;aspect-ratio:16/9;border:0;" allow="fullscreen"></iframe>`
+                      : ""
+                  }
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">2.</span>
+                    <span>Or share the public viewing link</span>
+                  </div>
+                  <button
+                    className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50"
+                    onClick={async () => {
+                      try {
+                        const url = demoIdParam ? `${window.location.origin}/p/${demoIdParam}` : "";
+                        await navigator.clipboard.writeText(url);
+                        toast.success("Public link copied");
+                      } catch {}
+                    }}
+                    title="Copy public link"
+                  >
+                    <Copy className="w-3.5 h-3.5" /> Copy
+                  </button>
+                </div>
+                <input
+                  readOnly
+                  className="mt-2 w-full border rounded px-2 py-1 text-xs"
+                  value={demoIdParam ? `${window.location.origin}/p/${demoIdParam}` : ""}
+                  onFocus={(e) => e.currentTarget.select()}
+                />
+              </div>
+            </div>
+            <div className="text-right">
+              <button className="text-sm px-3 py-1.5 rounded border bg-white" onClick={() => setShareOpen(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </UIDialogContent>
+      </UIDialog>
+      {/* Lightweight template picker actions */}
+      <></>
     </div>
   );
 }
 
 export default DemoEditorPage;
+
+function TemplatePicker(props: { getConfig: () => any; applyConfig: (cfg: any) => void }) {
+  const { getConfig, applyConfig } = props;
+  const [loading, setLoading] = useState(false);
+  const [templates, setTemplates] = useState<Array<{ templateId: string; name: string; leadConfig: any }>>([]);
+  const [name, setName] = useState("");
+
+  const load = async () => {
+    try {
+      setLoading(true);
+      const list = await listLeadTemplates();
+      setTemplates(list);
+    } catch {
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <Button variant="outline" className="h-8" onClick={load} disabled={loading}>
+          {loading ? "Loading…" : "Load templates"}
+        </Button>
+        <select
+          onChange={(e) => {
+            const t = templates.find((x) => x.templateId === e.target.value);
+            if (t?.leadConfig) {
+              const cfg = typeof t.leadConfig === "string" ? JSON.parse(t.leadConfig) : t.leadConfig;
+              applyConfig(cfg);
+            }
+          }}
+          className="border rounded px-2 py-1 text-xs bg-white"
+        >
+          <option value="">Select template…</option>
+          {templates.map((t) => (
+            <option key={t.templateId} value={t.templateId}>
+              {t.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="flex items-center gap-2">
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Template name"
+          className="h-8 text-xs w-48"
+        />
+        <Button
+          variant="outline"
+          className="h-8"
+          onClick={async () => {
+            if (!name.trim()) return;
+            try {
+              await saveLeadTemplate(name.trim(), getConfig());
+              setName("");
+              await load();
+            } catch {}
+          }}
+        >
+          Save as template
+        </Button>
+      </div>
+    </div>
+  );
+}

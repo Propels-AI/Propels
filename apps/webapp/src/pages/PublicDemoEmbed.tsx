@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
-import { listPublicDemoItems, listDemoItems } from "@/lib/api/demos";
-import { DemoPreview } from "@/components/DemoPreview";
-import { createLeadSubmissionPublic } from "@/lib/api/demos";
+import { listPublicDemoItems, createLeadSubmissionPublic, listDemoItems } from "@/lib/api/demos";
+import HotspotOverlay from "@/components/HotspotOverlay";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import LeadCaptureOverlay from "@/components/LeadCaptureOverlay";
-import StepsBar from "@/components/StepsBar";
 import { getUrl as storageGetUrl } from "aws-amplify/storage";
 import outputs from "../../../../amplify_outputs.json";
 
@@ -24,7 +23,6 @@ type PublicStep = {
     yNorm?: number;
     tooltip?: string;
     targetStep?: number;
-    // Styling (optional; if absent, we will apply defaults from METADATA.hotspotStyle)
     dotSize?: number;
     dotColor?: string;
     animation?: "none" | "pulse" | "breathe" | "fade";
@@ -33,12 +31,11 @@ type PublicStep = {
   }>;
 };
 
-export default function PublicDemoPlayer() {
+export default function PublicDemoEmbed() {
   const { demoId } = useParams();
   const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
-  const [metaName, setMetaName] = useState<string | undefined>();
   const [leadStepIndex, setLeadStepIndex] = useState<number | null>(null);
   const [leadBg, setLeadBg] = useState<"white" | "black">("white");
   const [leadConfig, setLeadConfig] = useState<any>(undefined);
@@ -50,11 +47,6 @@ export default function PublicDemoPlayer() {
     dotStrokePx: number;
     dotStrokeColor: string;
     animation: "none" | "pulse" | "breathe" | "fade";
-    tooltipBgColor?: string;
-    tooltipTextColor?: string;
-    tooltipTextSizePx?: number;
-    tooltipOffsetXNorm?: number;
-    tooltipOffsetYNorm?: number;
   }>({ dotSize: 12, dotColor: "#2563eb", dotStrokePx: 2, dotStrokeColor: "#ffffff", animation: "none" });
 
   useEffect(() => {
@@ -67,30 +59,25 @@ export default function PublicDemoPlayer() {
         const items = await listPublicDemoItems(demoId);
         if (cancelled) return;
         const metadata = items.find((it: any) => it.itemSK === "METADATA");
-        setMetaName(metadata?.name);
-        // Read lead config (public mirror)
         const lIdx = typeof metadata?.leadStepIndex === "number" ? metadata.leadStepIndex : null;
         setLeadStepIndex(lIdx);
-        // Prefer flexible leadConfig.bg if available
         let lBg: "white" | "black" = "white";
         if (metadata?.leadConfig) {
           try {
-            const cfgRaw = metadata.leadConfig;
-            let cfg: any = typeof cfgRaw === "string" ? JSON.parse(cfgRaw) : cfgRaw;
+            const raw = metadata.leadConfig;
+            let cfg: any = typeof raw === "string" ? JSON.parse(raw) : raw;
             // Defensive: handle double-encoded JSON
             if (typeof cfg === "string") {
               try { cfg = JSON.parse(cfg); } catch {}
             }
+            if (cfg && typeof cfg.bg === "string") lBg = cfg.bg === "black" ? "black" : "white";
             setLeadConfig(cfg);
-            if (cfg && typeof cfg.bg === "string") {
-              lBg = cfg.bg === "black" ? "black" : "white";
-            }
           } catch {}
         } else {
           lBg = metadata?.leadBg === "black" ? "black" : "white";
         }
         setLeadBg(lBg);
-        // If lead config has no fields (public mirror may be stale), attempt private fallback
+        // If public mirror has no fields in leadConfig, try to fetch from private Demo METADATA as fallback
         try {
           if (!Array.isArray((metadata?.leadConfig as any)?.fields)) {
             const privateItems = await listDemoItems(demoId);
@@ -106,7 +93,6 @@ export default function PublicDemoPlayer() {
             }
           }
         } catch {}
-        // Read hotspot style defaults from METADATA
         try {
           const rawStyle = metadata?.hotspotStyle;
           if (rawStyle) {
@@ -118,11 +104,6 @@ export default function PublicDemoPlayer() {
                 dotStrokePx: Number(parsed.dotStrokePx ?? 2),
                 dotStrokeColor: String(parsed.dotStrokeColor ?? "#ffffff"),
                 animation: (parsed.animation ?? "none") as any,
-                tooltipBgColor: parsed.tooltipBgColor,
-                tooltipTextColor: parsed.tooltipTextColor,
-                tooltipTextSizePx: parsed.tooltipTextSizePx,
-                tooltipOffsetXNorm: parsed.tooltipOffsetXNorm,
-                tooltipOffsetYNorm: parsed.tooltipOffsetYNorm,
               });
             }
           }
@@ -142,7 +123,6 @@ export default function PublicDemoPlayer() {
         setSteps(stepItems);
         setCurrentIndex(0);
       } catch (e: any) {
-        console.error("[PublicDemoPlayer] load error", e);
         setError(e?.message || "Failed to load demo");
       } finally {
         if (!cancelled) setLoading(false);
@@ -154,14 +134,33 @@ export default function PublicDemoPlayer() {
     };
   }, [demoId]);
 
-  // These depend on effectiveLeadIndex (declared below)
-  let realStepsCount = steps.length;
-  let displayTotal = steps.length; // initialize; will recompute after effectiveLeadIndex
-  let isLeadDisplayIndex = false;
-  let currentRealIndex = currentIndex;
-  let current: PublicStep | undefined = steps[currentIndex];
+  let displayTotal = steps.length + (leadStepIndex !== null ? 1 : 0);
+  const isLeadDisplayIndex = leadStepIndex !== null && currentIndex === leadStepIndex;
+  const mapDisplayToReal = (di: number) => {
+    if (leadStepIndex === null) return di;
+    return di < leadStepIndex ? di : di - 1;
+  };
+  const currentRealIndex = isLeadDisplayIndex ? -1 : mapDisplayToReal(currentIndex);
+  const current = currentRealIndex >= 0 ? steps[currentRealIndex] : undefined;
 
   const [resolvedSrc, setResolvedSrc] = useState<string | undefined>(undefined);
+  const [naturalAspect, setNaturalAspect] = useState<string | null>(null);
+  const forcedAspect: string | null = useMemo(() => {
+    try {
+      const ar = new URLSearchParams(location.search).get("ar");
+      if (!ar) return null;
+      const cleaned = String(ar).replace(/\s+/g, "");
+      const parts = cleaned.includes(":") ? cleaned.split(":") : cleaned.split("/");
+      if (parts.length === 2) {
+        const w = Number(parts[0]);
+        const h = Number(parts[1]);
+        if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) return `${w} / ${h}`;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }, [location.search]);
   const imageSrc = useMemo(() => {
     const raw = current?.s3Key || current?.thumbnailS3Key;
     if (!raw) return undefined;
@@ -186,29 +185,72 @@ export default function PublicDemoPlayer() {
       }
       if (hasDirect) {
         setResolvedSrc(imageSrc);
+        try {
+          const img = new Image();
+          img.onload = () => {
+            if (cancelled) return;
+            const w = img.naturalWidth || img.width || 0;
+            const h = img.naturalHeight || img.height || 0;
+            if (w > 0 && h > 0) setNaturalAspect(`${w} / ${h}`);
+          };
+          img.src = imageSrc as string;
+        } catch {}
         return;
       }
       try {
         const isPublicPrefixed = String(raw).startsWith("public/");
         const keyForStorage = isPublicPrefixed ? String(raw).replace(/^public\//, "") : String(raw);
         const { url } = await storageGetUrl({ key: keyForStorage, options: { accessLevel: "guest" as any } });
-        if (!cancelled) setResolvedSrc(url.toString());
-        
+        if (!cancelled) {
+          const u = url.toString();
+          setResolvedSrc(u);
+          try {
+            const img = new Image();
+            img.onload = () => {
+              if (cancelled) return;
+              const w = img.naturalWidth || img.width || 0;
+              const h = img.naturalHeight || img.height || 0;
+              if (w > 0 && h > 0) setNaturalAspect(`${w} / ${h}`);
+            };
+            img.src = u;
+          } catch {}
+        }
         return;
-      } catch (e) {
-        console.warn("[PublicDemoPlayer] Storage.getUrl failed; will attempt direct S3 URL", e);
-      }
+      } catch (e) {}
       try {
         const bucket = (outputs as any)?.storage?.bucket;
         const region = (outputs as any)?.aws_region || (outputs as any)?.awsRegion || (outputs as any)?.region;
         if (bucket && region) {
           const s3Url = `https://${bucket}.s3.${region}.amazonaws.com/${String(raw).replace(/^\//, "")}`;
-          if (!cancelled) setResolvedSrc(s3Url);
-          
+          if (!cancelled) {
+            setResolvedSrc(s3Url);
+            try {
+              const img = new Image();
+              img.onload = () => {
+                if (cancelled) return;
+                const w = img.naturalWidth || img.width || 0;
+                const h = img.naturalHeight || img.height || 0;
+                if (w > 0 && h > 0) setNaturalAspect(`${w} / ${h}`);
+              };
+              img.src = s3Url;
+            } catch {}
+          }
           return;
         }
       } catch {}
-      if (!cancelled) setResolvedSrc(raw);
+      if (!cancelled) {
+        setResolvedSrc(raw);
+        try {
+          const img = new Image();
+          img.onload = () => {
+            if (cancelled) return;
+            const w = img.naturalWidth || img.width || 0;
+            const h = img.naturalHeight || img.height || 0;
+            if (w > 0 && h > 0) setNaturalAspect(`${w} / ${h}`);
+          };
+          img.src = raw as string;
+        } catch {}
+      }
     }
     resolve();
     return () => {
@@ -216,85 +258,34 @@ export default function PublicDemoPlayer() {
     };
   }, [current, imageSrc]);
 
-  const goTo = (idx: number) => {
-    if (idx < 0 || idx >= displayTotal) return;
-    setCurrentIndex(idx);
+  const currentHotspots = useMemo(() => {
+    if (currentRealIndex < 0) return [] as any[];
+    const s = steps[currentRealIndex];
+    return (s?.hotspots || []).map((h) => ({
+      ...h,
+      dotSize: h.dotSize ?? hotspotStyleDefaults.dotSize,
+      dotColor: h.dotColor ?? hotspotStyleDefaults.dotColor,
+      dotStrokePx: h.dotStrokePx ?? hotspotStyleDefaults.dotStrokePx,
+      dotStrokeColor: h.dotStrokeColor ?? hotspotStyleDefaults.dotStrokeColor,
+      animation: (h.animation ?? hotspotStyleDefaults.animation) as any,
+    }));
+  }, [steps, currentRealIndex, hotspotStyleDefaults]);
+
+  if (!demoId) return <div className="p-4 text-sm">Missing demoId</div>;
+  if (loading) return <div className="p-4 text-sm">Loading…</div>;
+  if (error) return <div className="p-4 text-sm text-red-600">{error}</div>;
+  if (displayTotal === 0) return <div className="p-4 text-sm">No steps available</div>;
+
+  const go = (d: number) => {
+    const next = Math.max(0, Math.min(displayTotal - 1, currentIndex + d));
+    setCurrentIndex(next);
   };
-
-  // leadAt URL override for testing
-  const leadAtOverride = useMemo(() => {
-    const p = new URLSearchParams(location.search).get("leadAt");
-    if (!p) return null;
-    const n = parseInt(p, 10);
-    return Number.isFinite(n) && n >= 1 ? n - 1 : null; // user-facing 1-based -> 0-based
-  }, [location.search]);
-  const effectiveLeadIndex = leadAtOverride ?? leadStepIndex;
-
-  // Now that effectiveLeadIndex is available, compute display mapping
-  realStepsCount = steps.length;
-  displayTotal = realStepsCount + (effectiveLeadIndex !== null ? 1 : 0);
-  isLeadDisplayIndex = effectiveLeadIndex !== null && currentIndex === effectiveLeadIndex;
-  const mapDisplayToReal = (di: number) => {
-    if (effectiveLeadIndex === null) return di;
-    return di < effectiveLeadIndex ? di : di - 1;
-  };
-  currentRealIndex = isLeadDisplayIndex ? -1 : mapDisplayToReal(currentIndex);
-  current = currentRealIndex >= 0 ? steps[currentRealIndex] : undefined;
-
-  const previewSteps = useMemo(
-    () =>
-      steps.map((s, i) => ({
-        id: s.itemSK,
-        imageUrl: i === currentRealIndex ? resolvedSrc : undefined,
-        hotspots: (s.hotspots || []).map((h) => ({
-          ...h,
-          dotSize: h.dotSize ?? hotspotStyleDefaults.dotSize,
-          dotColor: h.dotColor ?? hotspotStyleDefaults.dotColor,
-          dotStrokePx: h.dotStrokePx ?? hotspotStyleDefaults.dotStrokePx,
-          dotStrokeColor: h.dotStrokeColor ?? hotspotStyleDefaults.dotStrokeColor,
-          animation: (h.animation ?? hotspotStyleDefaults.animation) as any,
-          // Tooltip bubble styling & offsets defaults from METADATA.hotspotStyle
-          tooltipBgColor: (h as any).tooltipBgColor ?? hotspotStyleDefaults.tooltipBgColor,
-          tooltipTextColor: (h as any).tooltipTextColor ?? hotspotStyleDefaults.tooltipTextColor,
-          tooltipTextSizePx: (h as any).tooltipTextSizePx ?? hotspotStyleDefaults.tooltipTextSizePx,
-          tooltipOffsetXNorm: (h as any).tooltipOffsetXNorm ?? hotspotStyleDefaults.tooltipOffsetXNorm,
-          tooltipOffsetYNorm: (h as any).tooltipOffsetYNorm ?? hotspotStyleDefaults.tooltipOffsetYNorm,
-        })) as any,
-        pageUrl: s.pageUrl,
-      })),
-    [steps, currentRealIndex, resolvedSrc, hotspotStyleDefaults]
-  );
-
-  if (!demoId) return <div className="p-6">Missing demoId</div>;
-  if (loading) return <div className="p-6">Loading…</div>;
-  if (error) return <div className="p-6 text-red-600">{error}</div>;
-  if (displayTotal === 0) return <div className="p-6">No steps available</div>;
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <header className="p-4 border-b flex items-center justify-between">
-        <h1 className="text-lg font-semibold">{metaName || "Demo"}</h1>
-        <div className="space-x-2">
-          <button
-            className="px-3 py-1 border rounded"
-            onClick={() => goTo(currentIndex - 1)}
-            disabled={currentIndex === 0}
-          >
-            Prev
-          </button>
-          <button
-            className="px-3 py-1 border rounded"
-            onClick={() => goTo(currentIndex + 1)}
-            disabled={currentIndex >= displayTotal - 1}
-          >
-            Next
-          </button>
-        </div>
-      </header>
-
-      <div className="flex-1 p-8 flex items-center justify-center w-full">
+    <div className="w-full bg-transparent">
+      <div className="relative w-full" style={{ aspectRatio: forcedAspect || naturalAspect || "16 / 10" }}>
         {isLeadDisplayIndex ? (
-          <div className="w-full max-w-[1280px] aspect-[1280/800] bg-white border rounded-xl flex items-center justify-center relative overflow-hidden">
+          <>
             <LeadCaptureOverlay
               bg={leadBg}
               config={leadConfig as any}
@@ -306,7 +297,7 @@ export default function PublicDemoPlayer() {
                     fields: form,
                     pageUrl: window.location.href,
                     stepIndex: leadStepIndex ?? undefined,
-                    source: "public",
+                    source: "embed",
                     userAgent: navigator.userAgent,
                     referrer: document.referrer,
                   });
@@ -316,34 +307,43 @@ export default function PublicDemoPlayer() {
               }}
             />
             {/* Default lead form warning removed */}
-          </div>
+          </>
         ) : (
-          <DemoPreview
-            steps={previewSteps}
-            currentIndex={currentRealIndex}
-            onIndexChange={(realIdx) => {
-              // Map underlying media index -> display index (insert lead index if needed)
-              const di = effectiveLeadIndex !== null && realIdx >= effectiveLeadIndex ? realIdx + 1 : realIdx;
-              setCurrentIndex(di);
-            }}
-            showNavigation={false}
-            className="w-full"
+          <HotspotOverlay
+            className="absolute inset-0 w-full h-full"
+            imageUrl={resolvedSrc}
+            hotspots={currentHotspots as any}
           />
         )}
-      </div>
-
-      <footer className="bg-gray-100 p-4 border-t">
-        <div className="max-w-5xl mx-auto">
-          <StepsBar
-            total={displayTotal}
-            current={currentIndex}
-            onSelect={(idx) => goTo(idx)}
-            leadIndex={effectiveLeadIndex}
-            className="mx-auto"
-          />
-          <div className="sr-only">{`Step ${currentIndex + 1} of ${displayTotal}`}</div>
+        <button
+          aria-label="Previous step"
+          onClick={() => go(-1)}
+          disabled={currentIndex === 0}
+          className={`absolute left-2 top-1/2 -translate-y-1/2 z-50 rounded-full p-2 bg-white/80 hover:bg-white shadow ${
+            currentIndex === 0 ? "opacity-50 cursor-not-allowed" : ""
+          }`}
+        >
+          <ChevronLeft className="h-5 w-5" />
+        </button>
+        <button
+          aria-label="Next step"
+          onClick={() => go(1)}
+          disabled={currentIndex >= displayTotal - 1}
+          className={`absolute right-2 top-1/2 -translate-y-1/2 z-50 rounded-full p-2 bg-white/80 hover:bg-white shadow ${
+            currentIndex >= displayTotal - 1 ? "opacity-50 cursor-not-allowed" : ""
+          }`}
+        >
+          <ChevronRight className="h-5 w-5" />
+        </button>
+        <div className="absolute left-3 right-3 bottom-3 z-40 pointer-events-none">
+          <div className="relative w-full h-1.5 bg-black/15 rounded overflow-hidden">
+            <div
+              className="absolute left-0 top-0 bottom-0 bg-blue-600"
+              style={{ width: `${((currentIndex + 1) / displayTotal) * 100}%` }}
+            />
+          </div>
         </div>
-      </footer>
+      </div>
     </div>
   );
 }

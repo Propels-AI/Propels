@@ -46,8 +46,9 @@ export async function updateDemoLeadConfig(params: {
   demoId: string;
   leadStepIndex: number | null;
   leadConfig?: any;
+  leadUseGlobal?: boolean;
 }): Promise<void> {
-  const { demoId, leadStepIndex, leadConfig } = params;
+  const { demoId, leadStepIndex, leadConfig, leadUseGlobal } = params;
   const models = getModels();
   const payload: any = {
     demoId,
@@ -56,17 +57,235 @@ export async function updateDemoLeadConfig(params: {
   };
   if (leadConfig !== undefined) {
     try {
-      payload.leadConfig =
-        typeof leadConfig === "string" ? leadConfig : JSON.stringify(leadConfig);
+      payload.leadConfig = typeof leadConfig === "string" ? leadConfig : JSON.stringify(leadConfig);
     } catch (e) {
       console.warn("[api/demos] Failed to stringify leadConfig; omitting", e);
     }
+  }
+  if (typeof leadUseGlobal === "boolean") {
+    payload.leadUseGlobal = leadUseGlobal;
   }
   const res = await models.Demo.update(payload);
   console.log("[api/demos] updateDemoLeadConfig res", res);
   if (!res?.data || (res as any)?.errors?.length) {
     throw new Error(
       `updateDemoLeadConfig failed: ${(res as any)?.errors?.map((e: any) => e?.message).join(", ") || "no data returned"}`
+    );
+  }
+}
+
+// Global lead settings helpers
+export async function getLeadSettings(): Promise<any | undefined> {
+  const ownerId = await getOwnerId();
+  if (!ownerId) return undefined;
+  const models = getModels();
+  if (!(models as any).LeadSettings?.get) return undefined;
+  const res = await (models as any).LeadSettings.get({ ownerId });
+  return (res as any)?.data;
+}
+
+export async function upsertLeadSettings(leadConfig: any): Promise<void> {
+  const ownerId = await getOwnerId();
+  if (!ownerId) throw new Error("Not signed in");
+  const models = getModels();
+  const payload: any = { ownerId, updatedAt: new Date().toISOString() };
+  try {
+    payload.leadConfig = typeof leadConfig === "string" ? leadConfig : JSON.stringify(leadConfig);
+  } catch (e) {
+    console.warn("[api/demos] Failed to stringify leadSettings.leadConfig; omitting", e);
+  }
+  // Try create then update on condition fail
+  try {
+    const res = await (models as any).LeadSettings.create(payload);
+    if (!(res as any)?.data && (res as any)?.errors?.length) throw new Error("create failed");
+  } catch {
+    const upd = await (models as any).LeadSettings.update(payload);
+    if (!(upd as any)?.data && (upd as any)?.errors?.length) throw new Error("update failed");
+  }
+}
+
+// Lead templates API
+export async function listLeadTemplates(): Promise<
+  Array<{ templateId: string; name: string; leadConfig: any; updatedAt?: string }>
+> {
+  const ownerId = await getOwnerId();
+  if (!ownerId) return [];
+  const models = getModels();
+  if (!(models as any).LeadTemplate?.list) return [];
+  let items: any[] = [];
+  let nextToken: any = undefined;
+  do {
+    const res = await (models as any).LeadTemplate.list({ filter: { ownerId: { eq: ownerId } }, nextToken });
+    items = items.concat((res as any)?.data ?? []);
+    nextToken = (res as any)?.nextToken;
+  } while (nextToken);
+  return items.map((i: any) => ({
+    templateId: i.templateId,
+    name: i.name,
+    leadConfig: i.leadConfig,
+    updatedAt: i.updatedAt,
+  }));
+}
+
+export async function saveLeadTemplate(name: string, leadConfig: any): Promise<void> {
+  const ownerId = await getOwnerId();
+  if (!ownerId) throw new Error("Not signed in");
+  const models = getModels();
+  const now = new Date().toISOString();
+  const templateId = crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}`;
+  const payload: any = {
+    ownerId,
+    templateId,
+    name,
+    leadConfig: typeof leadConfig === "string" ? leadConfig : JSON.stringify(leadConfig),
+    createdAt: now,
+    updatedAt: now,
+  };
+  const res = await (models as any).LeadTemplate.create(payload);
+  if (!(res as any)?.data && (res as any)?.errors?.length) throw new Error("saveLeadTemplate failed");
+}
+
+// List captured leads for a demo (owner-only)
+export async function listLeadSubmissions(demoId: string): Promise<
+  Array<{
+    demoId: string;
+    itemSK: string;
+    ownerId?: string;
+    email?: string;
+    fields?: any;
+    pageUrl?: string;
+    stepIndex?: number;
+    source?: string;
+    userAgent?: string;
+    referrer?: string;
+    createdAt?: string;
+  }>
+> {
+  // Explicit ownership verification: only the owner of the demo can list its leads
+  const currentOwnerId = await getOwnerId();
+  if (!currentOwnerId) {
+    const err = new Error("Forbidden: not signed in");
+    (err as any).status = 401;
+    throw err;
+  }
+
+  // Try to resolve demo ownerId from private Demo first, then fallback to PublicDemo mirror
+  let demoOwnerId: string | undefined;
+  try {
+    const models = getModels();
+    if ((models as any).Demo?.get) {
+      const metaRes = await (models as any).Demo.get({ demoId, itemSK: "METADATA" });
+      demoOwnerId = (metaRes as any)?.data?.ownerId;
+    }
+  } catch {}
+  if (!demoOwnerId) {
+    try {
+      const pubClient = generateClient({ authMode: "apiKey" as any });
+      const pubModels: any = (pubClient as any).models;
+      if (pubModels?.PublicDemo?.get) {
+        const metaRes = await pubModels.PublicDemo.get({ demoId, itemSK: "METADATA" });
+        demoOwnerId = (metaRes as any)?.data?.ownerId;
+      } else if (pubModels?.PublicDemo?.list) {
+        const listRes = await pubModels.PublicDemo.list({ filter: { demoId: { eq: demoId }, itemSK: { eq: "METADATA" } } });
+        demoOwnerId = (listRes as any)?.data?.[0]?.ownerId;
+      }
+    } catch {}
+  }
+  if (!demoOwnerId || demoOwnerId !== currentOwnerId) {
+    const err = new Error("Forbidden: not the owner of this demo");
+    (err as any).status = 403;
+    throw err;
+  }
+
+  const models = getModels();
+  if (!(models as any).LeadSubmission?.list) return [];
+  let items: any[] = [];
+  let nextToken: any = undefined;
+  do {
+    const res = await (models as any).LeadSubmission.list({ filter: { demoId: { eq: demoId } }, nextToken });
+    const page = (res as any)?.data ?? [];
+    items = items.concat(page);
+    nextToken = (res as any)?.nextToken;
+  } while (nextToken);
+  return items;
+}
+
+// Public create: store a lead submission under demoId (apiKey auth)
+export async function createLeadSubmissionPublic(params: {
+  demoId: string;
+  email?: string;
+  fields?: any;
+  pageUrl?: string;
+  stepIndex?: number;
+  source?: string;
+  userAgent?: string;
+  referrer?: string;
+  createdAt?: string;
+}): Promise<void> {
+  // Derive ownerId server-side via secure mutation when available; do NOT accept from client
+  const now = params.createdAt || new Date().toISOString();
+  const itemSK = `LEAD#${now}`;
+
+  // Try secure custom mutation first
+  try {
+    const client = generateClient({ authMode: "apiKey" as any });
+    const mutations: any = (client as any).mutations || {};
+    if (mutations?.createLeadSubmission) {
+      const res = await mutations.createLeadSubmission({
+        demoId: params.demoId,
+        email: params.email,
+        fields: params.fields ? JSON.stringify(params.fields) : undefined,
+        pageUrl: params.pageUrl,
+        stepIndex: params.stepIndex,
+        source: params.source,
+        userAgent: params.userAgent,
+        referrer: params.referrer,
+        itemSK,
+        createdAt: now,
+      });
+      const errs = (res as any)?.errors as any[] | undefined;
+      if (errs && errs.length) throw new Error(errs.map((e: any) => e?.message).join(", "));
+      return;
+    }
+  } catch (e) {
+    console.warn("[api/demos] secure mutation createLeadSubmission unavailable/failed; falling back", e);
+  }
+
+  // Fallback: derive ownerId from PublicDemo and write via model create
+  const pubClient = generateClient({ authMode: "apiKey" as any });
+  const pubModels: any = (pubClient as any).models;
+  if (!pubModels) throw new Error("Amplify Data models unavailable for public client");
+  let ownerId: string | undefined;
+  try {
+    const metaRes = await pubModels.PublicDemo.get({ demoId: params.demoId, itemSK: "METADATA" });
+    ownerId = (metaRes as any)?.data?.ownerId;
+  } catch {
+    const listRes = await pubModels.PublicDemo.list({ filter: { demoId: { eq: params.demoId }, itemSK: { eq: "METADATA" } } });
+    ownerId = (listRes as any)?.data?.[0]?.ownerId;
+  }
+  if (!ownerId) throw new Error("Lead submission failed: demo not found or owner unavailable");
+
+  const payload: any = {
+    demoId: params.demoId,
+    itemSK,
+    ownerId, // derived, not client-provided
+    email: params.email,
+    fields: params.fields ? JSON.stringify(params.fields) : undefined,
+    pageUrl: params.pageUrl,
+    stepIndex: params.stepIndex,
+    source: params.source,
+    userAgent: params.userAgent,
+    referrer: params.referrer,
+    createdAt: now,
+  };
+  Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
+
+  const models: any = pubModels;
+  if (!models?.LeadSubmission) throw new Error("LeadSubmission model not available");
+  const res = await models.LeadSubmission.create(payload);
+  if (!res?.data || (res as any)?.errors?.length) {
+    throw new Error(
+      `createLeadSubmissionPublic failed: ${(res as any)?.errors?.map((e: any) => e?.message).join(", ") || "no data"}`
     );
   }
 }
@@ -102,6 +321,7 @@ export async function createPublicDemoMetadata(params: {
   updatedAt?: string;
   leadStepIndex?: number | null;
   leadConfig?: any;
+  hotspotStyle?: any;
 }): Promise<void> {
   const models = getModels();
   if (!models.PublicDemo) {
@@ -135,6 +355,14 @@ export async function createPublicDemoMetadata(params: {
       console.warn("[api/demos] Failed to stringify public leadConfig; omitting", e);
     }
   }
+  if (params.hotspotStyle !== undefined) {
+    try {
+      payload.hotspotStyle =
+        typeof params.hotspotStyle === "string" ? params.hotspotStyle : JSON.stringify(params.hotspotStyle);
+    } catch (e) {
+      console.warn("[api/demos] Failed to stringify public hotspotStyle; omitting", e);
+    }
+  }
 
   const res = await models.PublicDemo.create(payload);
   const errs = (res as any)?.errors as any[] | undefined;
@@ -145,9 +373,9 @@ export async function createPublicDemoMetadata(params: {
       const upd = await models.PublicDemo.update(payload);
       if (!upd?.data || (upd as any)?.errors?.length) {
         throw new Error(
-          `createPublicDemoMetadata->update fallback failed: ${(upd as any)?.errors
-            ?.map((e: any) => e?.message)
-            .join(", ") || "no data returned"}`
+          `createPublicDemoMetadata->update fallback failed: ${
+            (upd as any)?.errors?.map((e: any) => e?.message).join(", ") || "no data returned"
+          }`
         );
       }
       return;
@@ -252,15 +480,26 @@ export async function mirrorDemoToPublic(
   }
   const meta = items.find((it: any) => it.itemSK === "METADATA");
   if (meta) {
+    // Resolve effective lead config: global vs local
+    let effectiveLeadConfig: any =
+      overrides && "leadConfig" in overrides ? overrides.leadConfig : (meta as any).leadConfig;
+    try {
+      if ((meta as any).leadUseGlobal === true && (overrides === undefined || !("leadConfig" in overrides))) {
+        const global = await getLeadSettings();
+        if (global && global.leadConfig) effectiveLeadConfig = global.leadConfig;
+      }
+    } catch (e) {
+      console.warn("[api/demos] mirror: failed to resolve global lead settings (non-fatal)", e);
+    }
     await createPublicDemoMetadata({
       demoId,
       name: overrides?.name ?? meta.name,
       createdAt: meta.createdAt,
       updatedAt: now,
       leadStepIndex:
-        overrides && "leadStepIndex" in overrides ? overrides.leadStepIndex ?? null : (meta.leadStepIndex ?? null),
-      leadConfig:
-        overrides && "leadConfig" in overrides ? overrides.leadConfig ?? undefined : (meta.leadConfig ?? undefined),
+        overrides && "leadStepIndex" in overrides ? (overrides.leadStepIndex ?? null) : (meta.leadStepIndex ?? null),
+      leadConfig: effectiveLeadConfig ?? undefined,
+      hotspotStyle: (meta as any).hotspotStyle ?? undefined,
     });
   } else {
     console.warn("[api/demos] mirrorDemoToPublic: METADATA missing");
@@ -340,6 +579,7 @@ export async function setDemoStatus(demoId: string, status: "DRAFT" | "PUBLISHED
           updatedAt: now,
           leadStepIndex: metadata.leadStepIndex ?? null,
           leadConfig: metadata.leadConfig ?? undefined,
+          hotspotStyle: metadata.hotspotStyle ?? undefined,
         });
       }
       const steps = items.filter((it: any) => typeof it.itemSK === "string" && it.itemSK.startsWith("STEP#"));

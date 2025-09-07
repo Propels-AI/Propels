@@ -49,8 +49,24 @@ describe("DemoEditorPage loader behavior", () => {
 
   it("hydrates tooltipStyle from METADATA.hotspotStyle when present", async () => {
     (await listDemoItems())!.mockResolvedValue([
-      { itemSK: "METADATA", name: "Demo A", status: "DRAFT", hotspotStyle: JSON.stringify({ dotSize: 18, dotColor: "#123456", dotStrokePx: 3, dotStrokeColor: "#abcdef", animation: "pulse" }) },
-      { itemSK: "STEP#s1", s3Key: "https://cdn.example.com/s1.png", pageUrl: "https://ex.com", hotspots: JSON.stringify([{ id: "h1", width: 10, height: 10 }]) },
+      {
+        itemSK: "METADATA",
+        name: "Demo A",
+        status: "DRAFT",
+        hotspotStyle: JSON.stringify({
+          dotSize: 18,
+          dotColor: "#123456",
+          dotStrokePx: 3,
+          dotStrokeColor: "#abcdef",
+          animation: "pulse",
+        }),
+      },
+      {
+        itemSK: "STEP#s1",
+        s3Key: "https://cdn.example.com/s1.png",
+        pageUrl: "https://ex.com",
+        hotspots: JSON.stringify([{ id: "h1", width: 10, height: 10 }]),
+      },
     ]);
 
     renderWithDemoId("demo-1");
@@ -61,7 +77,8 @@ describe("DemoEditorPage loader behavior", () => {
     // We avoid asserting specific color inputs here to keep this test resilient to UI structure.
 
     // Animation select reflects pulse
-    const select = screen.getByRole("combobox") as HTMLSelectElement;
+    const label = screen.getByText(/Animation \(applies to all steps\)/i);
+    const select = label.parentElement!.querySelector("select") as HTMLSelectElement;
     expect(select.value).toBe("pulse");
   });
 
@@ -73,7 +90,16 @@ describe("DemoEditorPage loader behavior", () => {
         s3Key: "https://cdn.example.com/s1.png",
         pageUrl: "https://ex.com",
         hotspots: JSON.stringify([
-          { id: "h1", width: 10, height: 10, dotSize: 22, dotColor: "#654321", dotStrokePx: 4, dotStrokeColor: "#fedcba", animation: "breathe" },
+          {
+            id: "h1",
+            width: 10,
+            height: 10,
+            dotSize: 22,
+            dotColor: "#654321",
+            dotStrokePx: 4,
+            dotStrokeColor: "#fedcba",
+            animation: "breathe",
+          },
         ]),
       },
     ]);
@@ -83,7 +109,8 @@ describe("DemoEditorPage loader behavior", () => {
     await waitFor(() => expect(screen.getByText(/22 px/i)).toBeInTheDocument());
     // Skip color input assertions to avoid coupling to UI details.
 
-    const select = screen.getByRole("combobox") as HTMLSelectElement;
+    const label = screen.getByText(/Animation \(applies to all steps\)/i);
+    const select = label.parentElement!.querySelector("select") as HTMLSelectElement;
     expect(select.value).toBe("breathe");
   });
 });

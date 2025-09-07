@@ -14,6 +14,13 @@ export type Hotspot = {
   animation?: "none" | "pulse" | "breathe" | "fade";
   dotStrokePx?: number; // border width in px
   dotStrokeColor?: string; // border color
+  // Tooltip text bubble styling
+  tooltipBgColor?: string;
+  tooltipTextColor?: string;
+  tooltipTextSizePx?: number;
+  // Tooltip text bubble offset relative to the dot center (normalized)
+  tooltipOffsetXNorm?: number;
+  tooltipOffsetYNorm?: number;
 };
 
 export type HotspotOverlayProps = {
@@ -21,12 +28,22 @@ export type HotspotOverlayProps = {
   hotspots?: Hotspot[];
   className?: string;
   onHotspotClick?: (id: string) => void;
+  enableBubbleDrag?: boolean;
+  onBubbleDrag?: (id: string, dxNorm: number, dyNorm: number) => void;
 };
 
-export const HotspotOverlay: React.FC<HotspotOverlayProps> = ({ imageUrl, hotspots = [], className, onHotspotClick }) => {
+export const HotspotOverlay: React.FC<HotspotOverlayProps> = ({
+  imageUrl,
+  hotspots = [],
+  className,
+  onHotspotClick,
+  enableBubbleDrag = false,
+  onBubbleDrag,
+}) => {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const [box, setBox] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  const dragRef = useRef<{ id: string; centerX: number; centerY: number; el: HTMLDivElement } | null>(null);
 
   useEffect(() => {
     const id = "propels-tooltip-animations";
@@ -58,7 +75,10 @@ export const HotspotOverlay: React.FC<HotspotOverlayProps> = ({ imageUrl, hotspo
     const containerH = rect.height;
     const imageAspect = naturalW / naturalH;
     const containerAspect = containerW / containerH;
-    let renderW = 0, renderH = 0, left = 0, top = 0;
+    let renderW = 0,
+      renderH = 0,
+      left = 0,
+      top = 0;
     if (containerAspect > imageAspect) {
       // pillarbox
       renderH = containerH;
@@ -82,6 +102,42 @@ export const HotspotOverlay: React.FC<HotspotOverlayProps> = ({ imageUrl, hotspo
     return () => window.removeEventListener("resize", onResize);
   }, [imageUrl]);
 
+  useEffect(() => {
+    if (!enableBubbleDrag) return;
+    const onMove = (e: MouseEvent) => {
+      if (!dragRef.current || !box) return;
+      const rect = wrapperRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      const dxPx = mouseX - dragRef.current.centerX;
+      const dyPx = mouseY - dragRef.current.centerY;
+      const dxNorm = Math.max(-1, Math.min(1, dxPx / box.width));
+      const dyNorm = Math.max(-1, Math.min(1, dyPx / box.height));
+      onBubbleDrag?.(dragRef.current.id, dxNorm, dyNorm);
+    };
+    const onUp = () => {
+      // Ensure cursor-grabbing is removed even if mouseup occurs outside the element
+      if (dragRef.current?.el) {
+        try {
+          dragRef.current.el.classList.remove("cursor-grabbing");
+        } catch {}
+      }
+      dragRef.current = null;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    const start = () => {
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    };
+    (dragRef as any).start = start;
+    return () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+  }, [enableBubbleDrag, onBubbleDrag, box]);
+
   const normalizeTooltip = (v: any): string => {
     if (v == null) return "";
     if (typeof v === "string") return v;
@@ -100,26 +156,39 @@ export const HotspotOverlay: React.FC<HotspotOverlayProps> = ({ imageUrl, hotspo
           if (s) return s;
         }
       } catch {}
-      try { return JSON.stringify(v); } catch { return String(v); }
+      try {
+        return JSON.stringify(v);
+      } catch {
+        return String(v);
+      }
     }
     return "";
   };
 
   const first = hotspots[0] || {};
-  const stepStyleDefaults = useMemo(() => ({
-    dotSize: Number(first.dotSize ?? 12),
-    dotColor: String(first.dotColor ?? "#2563eb"),
-    dotStrokePx: Number(first.dotStrokePx ?? 2),
-    dotStrokeColor: String(first.dotStrokeColor ?? "#ffffff"),
-    animation: (first.animation ?? "none") as "none" | "pulse" | "breathe" | "fade",
-  }), [first]);
+  const stepStyleDefaults = useMemo(
+    () => ({
+      dotSize: Number(first.dotSize ?? 12),
+      dotColor: String(first.dotColor ?? "#2563eb"),
+      dotStrokePx: Number(first.dotStrokePx ?? 2),
+      dotStrokeColor: String(first.dotStrokeColor ?? "#ffffff"),
+      animation: (first.animation ?? "none") as "none" | "pulse" | "breathe" | "fade",
+    }),
+    [first]
+  );
 
   return (
     <div ref={wrapperRef} className={className}>
       <div className="relative w-full h-full">
         {imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img ref={imgRef} src={imageUrl} alt="Step" className="absolute inset-0 w-full h-full object-contain" onLoad={measure} />
+          <img
+            ref={imgRef}
+            src={imageUrl}
+            alt="Step"
+            className="absolute inset-0 w-full h-full object-contain"
+            onLoad={measure}
+          />
         ) : (
           <span className="text-gray-500">No image</span>
         )}
@@ -149,21 +218,91 @@ export const HotspotOverlay: React.FC<HotspotOverlayProps> = ({ imageUrl, hotspo
           const color = (h as any).dotColor || stepStyleDefaults.dotColor || "#2563eb";
           const anim = (h as any).animation || stepStyleDefaults.animation || "none";
           const animStyle: React.CSSProperties =
-            anim === "pulse" ? {} :
-            anim === "breathe" ? { animation: "propels-breathe 1.8s ease-in-out infinite" } :
-            anim === "fade" ? { animation: "propels-fade 1.4s ease-in-out infinite" } : {};
+            anim === "pulse"
+              ? {}
+              : anim === "breathe"
+                ? { animation: "propels-breathe 1.8s ease-in-out infinite" }
+                : anim === "fade"
+                  ? { animation: "propels-fade 1.4s ease-in-out infinite" }
+                  : {};
 
           const stroke = Math.max(0, Number((h as any).dotStrokePx ?? stepStyleDefaults.dotStrokePx ?? 2));
           const strokeColor = (h as any).dotStrokeColor ?? stepStyleDefaults.dotStrokeColor ?? "#ffffff";
+
+          const bubbleBg = (h as any).tooltipBgColor ?? (stepStyleDefaults as any).tooltipBgColor ?? "#2563eb";
+          const bubbleText = (h as any).tooltipTextColor ?? (stepStyleDefaults as any).tooltipTextColor ?? "#ffffff";
+          const bubbleSizePx = Number(
+            (h as any).tooltipTextSizePx ?? (stepStyleDefaults as any).tooltipTextSizePx ?? 12
+          );
+
+          // Compute bubble position relative to the dot center and optional offsets
+          let bubbleLeft = 0;
+          let bubbleTop = 0;
+          let bubbleLeftLocal = 0;
+          let bubbleTopLocal = 0;
+          if (box && typeof h.xNorm === "number" && typeof h.yNorm === "number") {
+            const left = box.left + h.xNorm * box.width - dotSize / 2;
+            const top = box.top + h.yNorm * box.height - dotSize / 2;
+            const centerX = left + dotSize / 2;
+            const centerY = top + dotSize / 2;
+            const dxNorm = (h as any).tooltipOffsetXNorm;
+            const dyNorm = (h as any).tooltipOffsetYNorm;
+            const dxPx = typeof dxNorm === "number" ? dxNorm * box.width : dotSize / 2 + 6;
+            const dyPx = typeof dyNorm === "number" ? dyNorm * box.height : 0;
+            bubbleLeft = centerX + dxPx;
+            bubbleTop = centerY + dyPx;
+            bubbleLeftLocal = bubbleLeft - left;
+            bubbleTopLocal = bubbleTop - top;
+          } else if (!box && typeof h.x === "number" && typeof h.y === "number") {
+            const centerX = Number(h.x) + dotSize / 2;
+            const centerY = Number(h.y) + dotSize / 2;
+            bubbleLeft = centerX + (dotSize / 2 + 6);
+            bubbleTop = centerY + 0;
+            bubbleLeftLocal = bubbleLeft - Number(h.x);
+            bubbleTopLocal = bubbleTop - Number(h.y);
+          }
 
           return (
             <div key={h.id} className="absolute group" style={style} onClick={() => onHotspotClick?.(h.id)}>
               <div
                 className={`rounded-full shadow ${anim === "pulse" ? "animate-pulse" : ""}`}
-                style={{ width: dotSize, height: dotSize, backgroundColor: color, borderStyle: "solid", borderWidth: stroke, borderColor: strokeColor, ...animStyle }}
+                style={{
+                  width: dotSize,
+                  height: dotSize,
+                  backgroundColor: color,
+                  borderStyle: "solid",
+                  borderWidth: stroke,
+                  borderColor: strokeColor,
+                  ...animStyle,
+                }}
               />
               {hasTooltip && (
-                <div className="absolute left-full ml-1.5 top-1/2 -translate-y-1/2 whitespace-pre px-2 py-1 text-xs text-white bg-blue-600 rounded shadow opacity-100 pointer-events-none">
+                <div
+                  className={`absolute whitespace-pre px-2 py-1 rounded shadow opacity-100 ${enableBubbleDrag ? "cursor-grab" : ""}`}
+                  style={{
+                    backgroundColor: bubbleBg,
+                    color: bubbleText,
+                    fontSize: `${bubbleSizePx}px`,
+                    left: bubbleLeftLocal,
+                    top: bubbleTopLocal,
+                    transform: "translate(-50%, -50%)",
+                  }}
+                  onMouseDown={(e) => {
+                    if (!enableBubbleDrag || !box) return;
+                    e.stopPropagation();
+                    (e.currentTarget as HTMLDivElement).classList.add("cursor-grabbing");
+                    const left = box.left + (h.xNorm ?? 0) * box.width - dotSize / 2;
+                    const top = box.top + (h.yNorm ?? 0) * box.height - dotSize / 2;
+                    const centerX = left + dotSize / 2;
+                    const centerY = top + dotSize / 2;
+                    dragRef.current = { id: h.id, centerX, centerY, el: e.currentTarget as HTMLDivElement };
+                    (dragRef as any).start?.();
+                  }}
+                  onMouseUp={(e) => {
+                    if (!enableBubbleDrag) return;
+                    (e.currentTarget as HTMLDivElement).classList.remove("cursor-grabbing");
+                  }}
+                >
                   {tooltipText}
                 </div>
               )}
