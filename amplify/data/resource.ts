@@ -13,6 +13,7 @@ const schema = a.schema({
       statusUpdatedAt: a.string().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
       s3Key: a.string().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
       hotspots: a.json().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
+      hotspotStyle: a.json().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
       order: a.integer().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
       pageUrl: a.string().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
       thumbnailS3Key: a.string().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
@@ -44,6 +45,7 @@ const schema = a.schema({
       thumbnailS3Key: a.string(),
       pageUrl: a.string(),
       hotspots: a.json(),
+      hotspotStyle: a.json(),
       // Public mirror of lead config (demo-level)
       leadStepIndex: a.integer(),
       // Public mirror of flexible config

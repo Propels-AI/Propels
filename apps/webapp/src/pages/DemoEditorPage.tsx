@@ -555,11 +555,12 @@ export function DemoEditorPage() {
         }
         if (demoStatus === "PUBLISHED") {
           try {
-            const { leadStepIndex: leadIdxNow, leadConfig: leadCfgNow } = extractLeadConfig(steps);
+            const { leadStepIndex: leadIdxNow } = extractLeadConfig(steps);
+            // Use the full lead form configuration that the editor manages so fields are preserved in PublicDemo
             await mirrorDemoToPublic(demoIdParam, {
               name: demoName || undefined,
               leadStepIndex: leadIdxNow,
-              leadConfig: leadCfgNow,
+              leadConfig: leadFormConfig,
             });
           } catch (mirrorErr) {
             console.error("Mirror to public failed (will still keep private saved).", mirrorErr);

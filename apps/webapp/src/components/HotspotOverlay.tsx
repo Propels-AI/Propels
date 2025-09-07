@@ -43,7 +43,7 @@ export const HotspotOverlay: React.FC<HotspotOverlayProps> = ({
   const wrapperRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const [box, setBox] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
-  const dragRef = useRef<{ id: string; centerX: number; centerY: number } | null>(null);
+  const dragRef = useRef<{ id: string; centerX: number; centerY: number; el: HTMLDivElement } | null>(null);
 
   useEffect(() => {
     const id = "propels-tooltip-animations";
@@ -117,6 +117,12 @@ export const HotspotOverlay: React.FC<HotspotOverlayProps> = ({
       onBubbleDrag?.(dragRef.current.id, dxNorm, dyNorm);
     };
     const onUp = () => {
+      // Ensure cursor-grabbing is removed even if mouseup occurs outside the element
+      if (dragRef.current?.el) {
+        try {
+          dragRef.current.el.classList.remove("cursor-grabbing");
+        } catch {}
+      }
       dragRef.current = null;
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
@@ -289,7 +295,7 @@ export const HotspotOverlay: React.FC<HotspotOverlayProps> = ({
                     const top = box.top + (h.yNorm ?? 0) * box.height - dotSize / 2;
                     const centerX = left + dotSize / 2;
                     const centerY = top + dotSize / 2;
-                    dragRef.current = { id: h.id, centerX, centerY };
+                    dragRef.current = { id: h.id, centerX, centerY, el: e.currentTarget as HTMLDivElement };
                     (dragRef as any).start?.();
                   }}
                   onMouseUp={(e) => {

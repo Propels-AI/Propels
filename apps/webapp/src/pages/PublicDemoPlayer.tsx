@@ -42,7 +42,7 @@ export default function PublicDemoPlayer() {
   const [metaName, setMetaName] = useState<string | undefined>();
   const [leadStepIndex, setLeadStepIndex] = useState<number | null>(null);
   const [leadBg, setLeadBg] = useState<"white" | "black">("white");
-  const [ownerId, setOwnerId] = useState<string | undefined>(undefined);
+  const [leadConfig, setLeadConfig] = useState<any>(undefined);
   const [steps, setSteps] = useState<PublicStep[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [itemsRaw, setItemsRaw] = useState<any[]>([]);
@@ -77,7 +77,6 @@ export default function PublicDemoPlayer() {
         const metadata = items.find((it: any) => it.itemSK === "METADATA");
         console.debug("[PublicDemoPlayer] metadata", metadata);
         setMetaName(metadata?.name);
-        setOwnerId(metadata?.ownerId);
         // Read lead config (public mirror)
         const lIdx = typeof metadata?.leadStepIndex === "number" ? metadata.leadStepIndex : null;
         setLeadStepIndex(lIdx);
@@ -85,7 +84,13 @@ export default function PublicDemoPlayer() {
         let lBg: "white" | "black" = "white";
         if (metadata?.leadConfig) {
           try {
-            const cfg = typeof metadata.leadConfig === "string" ? JSON.parse(metadata.leadConfig) : metadata.leadConfig;
+            const cfgRaw = metadata.leadConfig;
+            let cfg: any = typeof cfgRaw === "string" ? JSON.parse(cfgRaw) : cfgRaw;
+            // Defensive: handle double-encoded JSON
+            if (typeof cfg === "string") {
+              try { cfg = JSON.parse(cfg); } catch {}
+            }
+            setLeadConfig(cfg);
             if (cfg && typeof cfg.bg === "string") {
               lBg = cfg.bg === "black" ? "black" : "white";
             }
@@ -304,7 +309,7 @@ error: ${error ?? "<none>"}
           <div className="w-full max-w-[1280px] aspect-[1280/800] bg-white border rounded-xl flex items-center justify-center relative overflow-hidden">
             <LeadCaptureOverlay
               bg={leadBg}
-              config={undefined as any}
+              config={leadConfig as any}
               onSubmit={async (form) => {
                 try {
                   await createLeadSubmissionPublic({
@@ -316,13 +321,17 @@ error: ${error ?? "<none>"}
                     source: "public",
                     userAgent: navigator.userAgent,
                     referrer: document.referrer,
-                    ownerId,
                   });
                 } catch (e) {
                   console.warn("Lead submission failed", e);
                 }
               }}
             />
+            {!Array.isArray((leadConfig as any)?.fields) && (
+              <div className="absolute top-2 right-2 z-20 text-xs px-2 py-1 rounded bg-amber-100 text-amber-800 border border-amber-300 shadow">
+                Showing default lead form (no fields in config)
+              </div>
+            )}
           </div>
         ) : (
           <DemoPreview

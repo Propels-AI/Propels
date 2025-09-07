@@ -161,6 +161,42 @@ export async function listLeadSubmissions(demoId: string): Promise<
     createdAt?: string;
   }>
 > {
+  // Explicit ownership verification: only the owner of the demo can list its leads
+  const currentOwnerId = await getOwnerId();
+  if (!currentOwnerId) {
+    const err = new Error("Forbidden: not signed in");
+    (err as any).status = 401;
+    throw err;
+  }
+
+  // Try to resolve demo ownerId from private Demo first, then fallback to PublicDemo mirror
+  let demoOwnerId: string | undefined;
+  try {
+    const models = getModels();
+    if ((models as any).Demo?.get) {
+      const metaRes = await (models as any).Demo.get({ demoId, itemSK: "METADATA" });
+      demoOwnerId = (metaRes as any)?.data?.ownerId;
+    }
+  } catch {}
+  if (!demoOwnerId) {
+    try {
+      const pubClient = generateClient({ authMode: "apiKey" as any });
+      const pubModels: any = (pubClient as any).models;
+      if (pubModels?.PublicDemo?.get) {
+        const metaRes = await pubModels.PublicDemo.get({ demoId, itemSK: "METADATA" });
+        demoOwnerId = (metaRes as any)?.data?.ownerId;
+      } else if (pubModels?.PublicDemo?.list) {
+        const listRes = await pubModels.PublicDemo.list({ filter: { demoId: { eq: demoId }, itemSK: { eq: "METADATA" } } });
+        demoOwnerId = (listRes as any)?.data?.[0]?.ownerId;
+      }
+    } catch {}
+  }
+  if (!demoOwnerId || demoOwnerId !== currentOwnerId) {
+    const err = new Error("Forbidden: not the owner of this demo");
+    (err as any).status = 403;
+    throw err;
+  }
+
   const models = getModels();
   if (!(models as any).LeadSubmission?.list) return [];
   let items: any[] = [];
@@ -177,7 +213,6 @@ export async function listLeadSubmissions(demoId: string): Promise<
 // Public create: store a lead submission under demoId (apiKey auth)
 export async function createLeadSubmissionPublic(params: {
   demoId: string;
-  ownerId?: string;
   email?: string;
   fields?: any;
   pageUrl?: string;
@@ -187,15 +222,53 @@ export async function createLeadSubmissionPublic(params: {
   referrer?: string;
   createdAt?: string;
 }): Promise<void> {
-  const client = generateClient({ authMode: "apiKey" as any });
-  const models: any = (client as any).models;
-  if (!models?.LeadSubmission) throw new Error("LeadSubmission model not available");
+  // Derive ownerId server-side via secure mutation when available; do NOT accept from client
   const now = params.createdAt || new Date().toISOString();
   const itemSK = `LEAD#${now}`;
+
+  // Try secure custom mutation first
+  try {
+    const client = generateClient({ authMode: "apiKey" as any });
+    const mutations: any = (client as any).mutations || {};
+    if (mutations?.createLeadSubmission) {
+      const res = await mutations.createLeadSubmission({
+        demoId: params.demoId,
+        email: params.email,
+        fields: params.fields ? JSON.stringify(params.fields) : undefined,
+        pageUrl: params.pageUrl,
+        stepIndex: params.stepIndex,
+        source: params.source,
+        userAgent: params.userAgent,
+        referrer: params.referrer,
+        itemSK,
+        createdAt: now,
+      });
+      const errs = (res as any)?.errors as any[] | undefined;
+      if (errs && errs.length) throw new Error(errs.map((e: any) => e?.message).join(", "));
+      return;
+    }
+  } catch (e) {
+    console.warn("[api/demos] secure mutation createLeadSubmission unavailable/failed; falling back", e);
+  }
+
+  // Fallback: derive ownerId from PublicDemo and write via model create
+  const pubClient = generateClient({ authMode: "apiKey" as any });
+  const pubModels: any = (pubClient as any).models;
+  if (!pubModels) throw new Error("Amplify Data models unavailable for public client");
+  let ownerId: string | undefined;
+  try {
+    const metaRes = await pubModels.PublicDemo.get({ demoId: params.demoId, itemSK: "METADATA" });
+    ownerId = (metaRes as any)?.data?.ownerId;
+  } catch {
+    const listRes = await pubModels.PublicDemo.list({ filter: { demoId: { eq: params.demoId }, itemSK: { eq: "METADATA" } } });
+    ownerId = (listRes as any)?.data?.[0]?.ownerId;
+  }
+  if (!ownerId) throw new Error("Lead submission failed: demo not found or owner unavailable");
+
   const payload: any = {
     demoId: params.demoId,
     itemSK,
-    ownerId: params.ownerId,
+    ownerId, // derived, not client-provided
     email: params.email,
     fields: params.fields ? JSON.stringify(params.fields) : undefined,
     pageUrl: params.pageUrl,
@@ -206,6 +279,9 @@ export async function createLeadSubmissionPublic(params: {
     createdAt: now,
   };
   Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
+
+  const models: any = pubModels;
+  if (!models?.LeadSubmission) throw new Error("LeadSubmission model not available");
   const res = await models.LeadSubmission.create(payload);
   if (!res?.data || (res as any)?.errors?.length) {
     throw new Error(

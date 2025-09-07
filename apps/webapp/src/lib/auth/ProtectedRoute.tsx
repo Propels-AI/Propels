@@ -1,4 +1,5 @@
 import React from "react";
+import { Navigate } from "react-router-dom";
 import { useAuth } from "@/lib/providers/AuthProvider";
 
 export function useAuthCheck() {
@@ -16,10 +17,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   }
 
-  if (!isAuthenticated) {
-    window.location.href = "/sign-in";
-    return null;
-  }
+  if (!isAuthenticated) return <Navigate to="/sign-in" replace />;
 
   return <>{children}</>;
 }

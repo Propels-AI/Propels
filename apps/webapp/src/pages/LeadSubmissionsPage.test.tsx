@@ -3,6 +3,11 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import LeadSubmissionsPage from "./LeadSubmissionsPage";
 
+vi.mock("@/lib/providers/AuthProvider", () => ({
+  useAuth: () => ({ user: { username: "tester" }, isLoading: false }),
+  AuthProvider: ({ children }: any) => children,
+}));
+
 vi.mock("@/lib/api/demos", () => ({
   listLeadSubmissions: vi.fn(),
 }));

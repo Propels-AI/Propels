@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { listLeadSubmissions } from "@/lib/api/demos";
+import { ProtectedRoute } from "@/lib/auth/ProtectedRoute";
 
-export default function LeadSubmissionsPage() {
+function LeadSubmissionsPageInner() {
   const { demoId } = useParams();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | undefined>();
@@ -132,5 +133,13 @@ export default function LeadSubmissionsPage() {
         </table>
       </div>
     </div>
+  );
+}
+
+export default function LeadSubmissionsPage() {
+  return (
+    <ProtectedRoute>
+      <LeadSubmissionsPageInner />
+    </ProtectedRoute>
   );
 }
