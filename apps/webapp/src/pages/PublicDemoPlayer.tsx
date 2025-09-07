@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
-import { listPublicDemoItems } from "@/lib/api/demos";
+import { listPublicDemoItems, listDemoItems } from "@/lib/api/demos";
 import { DemoPreview } from "@/components/DemoPreview";
 import { createLeadSubmissionPublic } from "@/lib/api/demos";
 import LeadCaptureOverlay from "@/components/LeadCaptureOverlay";
@@ -99,6 +99,22 @@ export default function PublicDemoPlayer() {
           lBg = metadata?.leadBg === "black" ? "black" : "white";
         }
         setLeadBg(lBg);
+        // If lead config has no fields (public mirror may be stale), attempt private fallback
+        try {
+          if (!Array.isArray((metadata?.leadConfig as any)?.fields)) {
+            const privateItems = await listDemoItems(demoId);
+            const privateMeta = (privateItems || []).find((it: any) => it.itemSK === "METADATA");
+            let cfg: any = privateMeta?.leadConfig;
+            if (cfg) {
+              try { cfg = typeof cfg === "string" ? JSON.parse(cfg) : cfg; } catch {}
+              if (typeof cfg === "string") { try { cfg = JSON.parse(cfg); } catch {} }
+              if (cfg && Array.isArray(cfg.fields)) {
+                setLeadConfig((prev: any) => (prev && Array.isArray(prev.fields) ? prev : cfg));
+                if (cfg.bg === "black" || cfg.bg === "white") setLeadBg(cfg.bg);
+              }
+            }
+          }
+        } catch {}
         // Read hotspot style defaults from METADATA
         try {
           const rawStyle = metadata?.hotspotStyle;
