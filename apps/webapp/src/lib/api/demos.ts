@@ -962,11 +962,6 @@ export async function listDemoItems(demoId: string) {
   }
 }
 
-// (moved getOwnerId above)
-
-// -----------------
-// TanStack Query hooks (moved to hooks.ts)
-// -----------------
 export { useListMyDemos, useDemoItems, useLeadSubmissions, usePublicDemoItems } from "./hooks";
 
 export async function listMyDemos(
