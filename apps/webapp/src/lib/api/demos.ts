@@ -2,8 +2,6 @@ import { generateClient } from "aws-amplify/data";
 import { getCurrentUser, fetchAuthSession } from "aws-amplify/auth";
 
 function getModels() {
-  // Use explicit userPool auth for private Demo reads/writes to avoid intermittent apiKey fallbacks
-  console.debug("[api/demos] creating data client via generateClient({ authMode: 'userPool' })...");
   const client = generateClient({ authMode: "userPool" as any });
   const models: any = (client as any).models;
   if (!models) {
@@ -12,7 +10,6 @@ function getModels() {
   return models;
 }
 
-// Persist editor hotspot styling config to METADATA so the editor can restore it later
 export async function updateDemoStyleConfig(params: {
   demoId: string;
   hotspotStyle: {
@@ -31,9 +28,7 @@ export async function updateDemoStyleConfig(params: {
   };
   try {
     payload.hotspotStyle = JSON.stringify(hotspotStyle);
-  } catch (e) {
-    console.warn("[api/demos] Failed to stringify hotspotStyle; omitting", e);
-  }
+  } catch (e) {}
   const res = await models.Demo.update(payload);
   if (!res?.data || (res as any)?.errors?.length) {
     throw new Error(
@@ -57,16 +52,18 @@ export async function updateDemoLeadConfig(params: {
   };
   if (leadConfig !== undefined) {
     try {
-      payload.leadConfig = typeof leadConfig === "string" ? leadConfig : JSON.stringify(leadConfig);
-    } catch (e) {
-      console.warn("[api/demos] Failed to stringify leadConfig; omitting", e);
-    }
+      const lc = typeof leadConfig === "string" ? JSON.parse(leadConfig) : leadConfig;
+      const hasFields = Array.isArray(lc?.fields) && lc.fields.length > 0;
+      if (hasFields) {
+        payload.leadConfig = typeof leadConfig === "string" ? leadConfig : JSON.stringify(leadConfig);
+      } else {
+      }
+    } catch (e) {}
   }
   if (typeof leadUseGlobal === "boolean") {
     payload.leadUseGlobal = leadUseGlobal;
   }
   const res = await models.Demo.update(payload);
-  console.log("[api/demos] updateDemoLeadConfig res", res);
   if (!res?.data || (res as any)?.errors?.length) {
     throw new Error(
       `updateDemoLeadConfig failed: ${(res as any)?.errors?.map((e: any) => e?.message).join(", ") || "no data returned"}`
@@ -74,7 +71,6 @@ export async function updateDemoLeadConfig(params: {
   }
 }
 
-// Global lead settings helpers
 export async function getLeadSettings(): Promise<any | undefined> {
   const ownerId = await getOwnerId();
   if (!ownerId) return undefined;
@@ -91,10 +87,7 @@ export async function upsertLeadSettings(leadConfig: any): Promise<void> {
   const payload: any = { ownerId, updatedAt: new Date().toISOString() };
   try {
     payload.leadConfig = typeof leadConfig === "string" ? leadConfig : JSON.stringify(leadConfig);
-  } catch (e) {
-    console.warn("[api/demos] Failed to stringify leadSettings.leadConfig; omitting", e);
-  }
-  // Try create then update on condition fail
+  } catch (e) {}
   try {
     const res = await (models as any).LeadSettings.create(payload);
     if (!(res as any)?.data && (res as any)?.errors?.length) throw new Error("create failed");
@@ -104,7 +97,6 @@ export async function upsertLeadSettings(leadConfig: any): Promise<void> {
   }
 }
 
-// Lead templates API
 export async function listLeadTemplates(): Promise<
   Array<{ templateId: string; name: string; leadConfig: any; updatedAt?: string }>
 > {
@@ -145,7 +137,6 @@ export async function saveLeadTemplate(name: string, leadConfig: any): Promise<v
   if (!(res as any)?.data && (res as any)?.errors?.length) throw new Error("saveLeadTemplate failed");
 }
 
-// List captured leads for a demo (owner-only)
 export async function listLeadSubmissions(demoId: string): Promise<
   Array<{
     demoId: string;
@@ -161,7 +152,6 @@ export async function listLeadSubmissions(demoId: string): Promise<
     createdAt?: string;
   }>
 > {
-  // Explicit ownership verification: only the owner of the demo can list its leads
   const currentOwnerId = await getOwnerId();
   if (!currentOwnerId) {
     const err = new Error("Forbidden: not signed in");
@@ -169,7 +159,6 @@ export async function listLeadSubmissions(demoId: string): Promise<
     throw err;
   }
 
-  // Try to resolve demo ownerId from private Demo first, then fallback to PublicDemo mirror
   let demoOwnerId: string | undefined;
   try {
     const models = getModels();
@@ -186,7 +175,9 @@ export async function listLeadSubmissions(demoId: string): Promise<
         const metaRes = await pubModels.PublicDemo.get({ demoId, itemSK: "METADATA" });
         demoOwnerId = (metaRes as any)?.data?.ownerId;
       } else if (pubModels?.PublicDemo?.list) {
-        const listRes = await pubModels.PublicDemo.list({ filter: { demoId: { eq: demoId }, itemSK: { eq: "METADATA" } } });
+        const listRes = await pubModels.PublicDemo.list({
+          filter: { demoId: { eq: demoId }, itemSK: { eq: "METADATA" } },
+        });
         demoOwnerId = (listRes as any)?.data?.[0]?.ownerId;
       }
     } catch {}
@@ -210,7 +201,6 @@ export async function listLeadSubmissions(demoId: string): Promise<
   return items;
 }
 
-// Public create: store a lead submission under demoId (apiKey auth)
 export async function createLeadSubmissionPublic(params: {
   demoId: string;
   email?: string;
@@ -222,11 +212,9 @@ export async function createLeadSubmissionPublic(params: {
   referrer?: string;
   createdAt?: string;
 }): Promise<void> {
-  // Derive ownerId server-side via secure mutation when available; do NOT accept from client
   const now = params.createdAt || new Date().toISOString();
   const itemSK = `LEAD#${now}`;
 
-  // Try secure custom mutation first
   try {
     const client = generateClient({ authMode: "apiKey" as any });
     const mutations: any = (client as any).mutations || {};
@@ -247,11 +235,8 @@ export async function createLeadSubmissionPublic(params: {
       if (errs && errs.length) throw new Error(errs.map((e: any) => e?.message).join(", "));
       return;
     }
-  } catch (e) {
-    console.warn("[api/demos] secure mutation createLeadSubmission unavailable/failed; falling back", e);
-  }
+  } catch (e) {}
 
-  // Fallback: derive ownerId from PublicDemo and write via model create
   const pubClient = generateClient({ authMode: "apiKey" as any });
   const pubModels: any = (pubClient as any).models;
   if (!pubModels) throw new Error("Amplify Data models unavailable for public client");
@@ -260,7 +245,9 @@ export async function createLeadSubmissionPublic(params: {
     const metaRes = await pubModels.PublicDemo.get({ demoId: params.demoId, itemSK: "METADATA" });
     ownerId = (metaRes as any)?.data?.ownerId;
   } catch {
-    const listRes = await pubModels.PublicDemo.list({ filter: { demoId: { eq: params.demoId }, itemSK: { eq: "METADATA" } } });
+    const listRes = await pubModels.PublicDemo.list({
+      filter: { demoId: { eq: params.demoId }, itemSK: { eq: "METADATA" } },
+    });
     ownerId = (listRes as any)?.data?.[0]?.ownerId;
   }
   if (!ownerId) throw new Error("Lead submission failed: demo not found or owner unavailable");
@@ -268,7 +255,7 @@ export async function createLeadSubmissionPublic(params: {
   const payload: any = {
     demoId: params.demoId,
     itemSK,
-    ownerId, // derived, not client-provided
+    ownerId,
     email: params.email,
     fields: params.fields ? JSON.stringify(params.fields) : undefined,
     pageUrl: params.pageUrl,
@@ -291,7 +278,6 @@ export async function createLeadSubmissionPublic(params: {
 }
 
 function getPublicModels() {
-  console.debug("[api/demos] creating PUBLIC data client via generateClient({ authMode: 'apiKey' })...");
   const client = generateClient({ authMode: "apiKey" as any });
   const models: any = (client as any).models;
   if (!models) {
@@ -303,14 +289,35 @@ function getPublicModels() {
 }
 
 function getPublicDemoModelsForPrivate() {
-  // Public API access to private Demo model (schema allows public read)
-  console.debug("[api/demos] creating PUBLIC client for private Demo via generateClient({ authMode: 'apiKey' })...");
   const client = generateClient({ authMode: "apiKey" as any });
   const models: any = (client as any).models;
   if (!models) {
     throw new Error("Amplify Data models unavailable for public Demo client");
   }
   return models;
+}
+
+export async function listPrivateDemoItemsPublic(demoId: string): Promise<any[]> {
+  const models = getPublicDemoModelsForPrivate();
+  if (!models.Demo) {
+    throw new Error("Demo model is not available. Backend schema not deployed or outputs not updated.");
+  }
+  let items: any[] = [];
+  let nextToken: any = undefined;
+  do {
+    const res = await models.Demo.list({ filter: { demoId: { eq: demoId } }, nextToken });
+    const page = (res as any)?.data ?? [];
+    items = items.concat(page);
+    nextToken = (res as any)?.nextToken;
+  } while (nextToken);
+  for (const it of items) {
+    if (typeof (it as any).hotspots === "string") {
+      try {
+        (it as any).hotspots = JSON.parse((it as any).hotspots);
+      } catch {}
+    }
+  }
+  return items;
 }
 
 export async function createPublicDemoMetadata(params: {
@@ -345,31 +352,25 @@ export async function createPublicDemoMetadata(params: {
     updatedAt: params.updatedAt ?? new Date().toISOString(),
   };
   Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
-  // Attach lead fields when provided
   if (params.leadStepIndex !== undefined) payload.leadStepIndex = params.leadStepIndex;
   if (params.leadConfig !== undefined) {
     try {
       payload.leadConfig =
         typeof params.leadConfig === "string" ? params.leadConfig : JSON.stringify(params.leadConfig);
-    } catch (e) {
-      console.warn("[api/demos] Failed to stringify public leadConfig; omitting", e);
-    }
+    } catch (e) {}
   }
   if (params.hotspotStyle !== undefined) {
     try {
       payload.hotspotStyle =
         typeof params.hotspotStyle === "string" ? params.hotspotStyle : JSON.stringify(params.hotspotStyle);
-    } catch (e) {
-      console.warn("[api/demos] Failed to stringify public hotspotStyle; omitting", e);
-    }
+    } catch (e) {}
   }
 
   const res = await models.PublicDemo.create(payload);
   const errs = (res as any)?.errors as any[] | undefined;
   if (!res?.data || (errs && errs.length)) {
     const message = errs?.map((e: any) => e?.message).join(", ") || "no data returned";
-    // If item already exists (ConditionalCheckFailed), fallback to update to be idempotent
-    if (/ConditionalCheckFailed/i.test(message)) {
+    if (/ConditionalCheckFailed/i.test(message) || /conditional request failed/i.test(message)) {
       const upd = await models.PublicDemo.update(payload);
       if (!upd?.data || (upd as any)?.errors?.length) {
         throw new Error(
@@ -403,32 +404,44 @@ export async function createPublicDemoStep(params: {
   let ownerId = params.ownerId;
   if (!ownerId) {
     try {
-      const u = await getCurrentUser();
-      ownerId = (u as any)?.username || (u as any)?.userId;
-    } catch {}
-  }
-  const payload: Record<string, any> = {
-    demoId: params.demoId,
-    itemSK: `STEP#${params.stepId}`,
-    ownerId,
-    s3Key: params.s3Key,
-    order: params.order,
-    pageUrl: params.pageUrl,
-    thumbnailS3Key: params.thumbnailS3Key,
-  };
-  if (params.hotspots !== undefined) {
-    try {
-      payload.hotspots = typeof params.hotspots === "string" ? params.hotspots : JSON.stringify(params.hotspots);
-    } catch (e) {
-      console.warn("[api/demos] Failed to stringify public hotspots; omitting", e);
+      const me = await getCurrentUser();
+      ownerId = (me as any)?.userId || (me as any)?.username;
+    } catch {
+      // ignore
     }
   }
+  const payload: any = {
+    demoId: params.demoId,
+    itemSK: `STEP#${params.stepId}`,
+    s3Key: params.s3Key,
+    pageUrl: params.pageUrl,
+    order: params.order,
+    hotspots: Array.isArray(params.hotspots)
+      ? JSON.stringify(params.hotspots)
+      : params.hotspots && typeof params.hotspots === "object"
+        ? JSON.stringify(params.hotspots)
+        : typeof params.hotspots === "string"
+          ? params.hotspots
+          : undefined,
+    ownerId,
+  };
   Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
   const res = await models.PublicDemo.create(payload);
-  if (!res?.data || (res as any)?.errors?.length) {
-    throw new Error(
-      `createPublicDemoStep failed: ${(res as any)?.errors?.map((e: any) => e?.message).join(", ") || "no data returned"}`
-    );
+  const errs = (res as any)?.errors as any[] | undefined;
+  if (!res?.data || (errs && errs.length)) {
+    const message = errs?.map((e: any) => e?.message).join(", ") || "no data returned";
+    if (/ConditionalCheckFailed/i.test(message)) {
+      const upd = await models.PublicDemo.update(payload);
+      if (!upd?.data || (upd as any)?.errors?.length) {
+        throw new Error(
+          `createPublicDemoStep->update fallback failed: ${
+            (upd as any)?.errors?.map((e: any) => e?.message).join(", ") || "no data returned"
+          }`
+        );
+      }
+      return;
+    }
+    throw new Error(`createPublicDemoStep failed: ${message}`);
   }
 }
 
@@ -456,7 +469,7 @@ export async function listPublicDemoItems(demoId: string) {
 }
 
 export async function deletePublicDemoItems(demoId: string) {
-  const models = getModels();
+  const models = getPublicModels();
   if (!models.PublicDemo) {
     throw new Error("PublicDemo model is not available. Backend schema not deployed or outputs not updated.");
   }
@@ -467,20 +480,29 @@ export async function deletePublicDemoItems(demoId: string) {
   }
 }
 
+export async function hasPublicMirror(demoId: string): Promise<boolean> {
+  try {
+    const models = getPublicModels();
+    if (!models.PublicDemo) return false;
+    const res = await models.PublicDemo.list({ filter: { demoId: { eq: demoId } } });
+    const items = (res as any)?.data ?? [];
+    return items.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 export async function mirrorDemoToPublic(
   demoId: string,
   overrides?: { name?: string; leadStepIndex?: number | null; leadConfig?: any }
 ): Promise<void> {
-  console.log("[api/demos] mirrorDemoToPublic START", { demoId, overrides });
   const now = new Date().toISOString();
   const items = await listDemoItems(demoId);
   if (!Array.isArray(items) || items.length === 0) {
-    console.warn("[api/demos] mirrorDemoToPublic: no private items found");
     return;
   }
   const meta = items.find((it: any) => it.itemSK === "METADATA");
   if (meta) {
-    // Resolve effective lead config: global vs local
     let effectiveLeadConfig: any =
       overrides && "leadConfig" in overrides ? overrides.leadConfig : (meta as any).leadConfig;
     try {
@@ -488,9 +510,7 @@ export async function mirrorDemoToPublic(
         const global = await getLeadSettings();
         if (global && global.leadConfig) effectiveLeadConfig = global.leadConfig;
       }
-    } catch (e) {
-      console.warn("[api/demos] mirror: failed to resolve global lead settings (non-fatal)", e);
-    }
+    } catch (e) {}
     await createPublicDemoMetadata({
       demoId,
       name: overrides?.name ?? meta.name,
@@ -502,10 +522,8 @@ export async function mirrorDemoToPublic(
       hotspotStyle: (meta as any).hotspotStyle ?? undefined,
     });
   } else {
-    console.warn("[api/demos] mirrorDemoToPublic: METADATA missing");
   }
   const steps = items.filter((it: any) => typeof it.itemSK === "string" && it.itemSK.startsWith("STEP#"));
-  console.log("[api/demos] mirrorDemoToPublic: steps=", steps.length);
   for (const step of steps) {
     let hotspots: any = undefined;
     if (typeof step.hotspots === "string") {
@@ -525,7 +543,6 @@ export async function mirrorDemoToPublic(
       hotspots,
     });
   }
-  console.log("[api/demos] mirrorDemoToPublic DONE");
 }
 
 export async function renameDemo(demoId: string, name: string): Promise<void> {
@@ -537,9 +554,7 @@ export async function renameDemo(demoId: string, name: string): Promise<void> {
     name,
     updatedAt: now,
   } as any;
-  console.log("[api/demos] renameDemo ->", payload);
   const res = await models.Demo.update(payload);
-  console.log("[api/demos] renameDemo res", res);
   if (!res?.data || (res as any)?.errors?.length) {
     throw new Error(
       `renameDemo failed: ${(res as any)?.errors?.map((e: any) => e?.message).join(", ") || "no data returned"}`
@@ -557,9 +572,7 @@ export async function setDemoStatus(demoId: string, status: "DRAFT" | "PUBLISHED
     statusUpdatedAt: now,
     updatedAt: now,
   } as any;
-  console.log("[api/demos] setDemoStatus ->", payload);
   const res = await models.Demo.update(payload);
-  console.log("[api/demos] setDemoStatus res", res);
   if (!res?.data || (res as any)?.errors?.length) {
     throw new Error(
       `setDemoStatus failed: ${(res as any)?.errors?.map((e: any) => e?.message).join(", ") || "no data returned"}`
@@ -572,18 +585,24 @@ export async function setDemoStatus(demoId: string, status: "DRAFT" | "PUBLISHED
       if (!Array.isArray(items)) return;
       const metadata = items.find((it: any) => it.itemSK === "METADATA");
       if (metadata) {
+        let effectiveLeadConfig: any = (metadata as any).leadConfig;
+        try {
+          if ((metadata as any).leadUseGlobal === true && !effectiveLeadConfig) {
+            const global = await getLeadSettings();
+            if (global && global.leadConfig) effectiveLeadConfig = global.leadConfig;
+          }
+        } catch (e) {}
         await createPublicDemoMetadata({
           demoId,
           name: metadata.name,
           createdAt: metadata.createdAt,
           updatedAt: now,
           leadStepIndex: metadata.leadStepIndex ?? null,
-          leadConfig: metadata.leadConfig ?? undefined,
+          leadConfig: effectiveLeadConfig ?? undefined,
           hotspotStyle: metadata.hotspotStyle ?? undefined,
         });
       }
       const steps = items.filter((it: any) => typeof it.itemSK === "string" && it.itemSK.startsWith("STEP#"));
-      console.log("[api/demos] setDemoStatus: steps to mirror:", steps.length);
       for (const step of steps) {
         let hotspots: any = undefined;
         if (typeof step.hotspots === "string") {
@@ -603,28 +622,20 @@ export async function setDemoStatus(demoId: string, status: "DRAFT" | "PUBLISHED
           hotspots,
         });
       }
-      console.log("[api/demos] setDemoStatus: client mirror complete");
     } else if (status === "DRAFT") {
-      console.log("[api/demos] setDemoStatus: removing from PublicDemo (unpublish)...");
       await deletePublicDemoItems(demoId);
     }
-  } catch (mirrorErr) {
-    console.error("[api/demos] setDemoStatus mirror error:", mirrorErr);
-  }
+  } catch (mirrorErr) {}
 }
 
 export async function deleteDemo(demoId: string): Promise<void> {
   const models = getModels();
-  console.log("[api/demos] deleteDemo -> list items for", demoId);
   const listRes = await models.Demo.list({ filter: { demoId: { eq: demoId } } });
   const items: any[] = listRes?.data || [];
-  console.log("[api/demos] deleteDemo found", items.length, "items");
   for (const it of items) {
     try {
-      const delRes = await models.Demo.delete({ demoId: it.demoId, itemSK: it.itemSK });
-      console.log("[api/demos] deleted", { demoId: it.demoId, itemSK: it.itemSK, res: delRes });
+      await models.Demo.delete({ demoId: it.demoId, itemSK: it.itemSK });
     } catch (e) {
-      console.error("[api/demos] delete item failed", { demoId: it.demoId, itemSK: it.itemSK }, e);
       throw e;
     }
   }
@@ -643,7 +654,7 @@ export type Hotspot = {
 
 export async function createDemoMetadata(params: {
   demoId: string;
-  ownerId?: string; // owner comes from auth context; still persisted as attribute
+  ownerId?: string;
   name?: string;
   status?: "DRAFT" | "PUBLISHED";
 }): Promise<void> {
@@ -660,7 +671,6 @@ export async function createDemoMetadata(params: {
     updatedAt: now,
     statusUpdatedAt: now,
   });
-  console.log("[api/demos] createDemoMetadata result", res);
   if (!res?.data || (res as any)?.errors?.length) {
     throw new Error(
       `createDemoMetadata failed: ${(res as any)?.errors?.map((e: any) => e?.message).join(", ") || "no data returned"}`
@@ -692,9 +702,7 @@ export async function createDemoStep(params: {
   if (Array.isArray(hotspots) && hotspots.length > 0) {
     try {
       payload.hotspots = JSON.stringify(hotspots);
-    } catch (e) {
-      console.warn("[api/demos] Failed to stringify hotspots; omitting", e);
-    }
+    } catch (e) {}
   }
   Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
 
@@ -721,9 +729,7 @@ export async function updateDemoStepHotspots(params: {
   if (Array.isArray(hotspots)) {
     try {
       payload.hotspots = JSON.stringify(hotspots);
-    } catch (e) {
-      console.warn("[api/demos] Failed to stringify hotspots for update; omitting", e);
-    }
+    } catch (e) {}
   }
   const res = await models.Demo.update(payload);
   console.log("[api/demos] updateDemoStepHotspots result", { stepId, res });
@@ -735,16 +741,11 @@ export async function updateDemoStepHotspots(params: {
 }
 
 export async function listDemoItems(demoId: string) {
-  console.debug("[api/demos] listDemoItems ->", { demoId });
   try {
-    // Ensure auth session is ready so userPool reads return full fields
     try {
       await fetchAuthSession();
-    } catch (e) {
-      console.warn("[api/demos] fetchAuthSession failed; will attempt public read", e);
-    }
+    } catch (e) {}
     try {
-      // Debug: log current identity used for owner-based auth
       try {
         const u = await getCurrentUser();
         console.debug("[api/demos] identity (username,userId):", (u as any)?.username, (u as any)?.userId);
@@ -764,13 +765,10 @@ export async function listDemoItems(demoId: string) {
         nextToken = (res as any)?.nextToken;
       } while (nextToken);
       if (Array.isArray(items) && items.length > 0) return items;
-      // Probe: try direct METADATA get via userPool to see if item exists but list is filtered
       try {
         if ((models as any).Demo?.get) {
           const metaRes = await (models as any).Demo.get({ demoId, itemSK: "METADATA" });
-          console.debug("[api/demos] probe get(METADATA) (userPool):", metaRes);
           const meta = (metaRes as any)?.data;
-          // If we can get METADATA directly, fetch steps via beginsWith filter and aggregate
           if (meta) {
             let stepItems: any[] = [];
             let ntSteps: any = undefined;
@@ -783,18 +781,13 @@ export async function listDemoItems(demoId: string) {
               stepItems = stepItems.concat(page);
               ntSteps = (stepRes as any)?.nextToken;
             } while (ntSteps);
-            console.debug("[api/demos] step list via beginsWith count:", stepItems.length);
             if (stepItems.length > 0) {
               return [meta, ...stepItems];
             }
-            // If no steps, at least return METADATA so the editor can render shell
             return [meta];
           }
         }
-      } catch (probeErr) {
-        console.warn("[api/demos] probe get(METADATA) (userPool) failed", probeErr);
-      }
-      // Fallback A: if userPool returned zero items (e.g., ownerId mismatch), try public apiKey read on private Demo
+      } catch (probeErr) {}
       try {
         const pubDemoModels = getPublicDemoModelsForPrivate();
         let pubItems: any[] = [];
@@ -804,41 +797,24 @@ export async function listDemoItems(demoId: string) {
           pubItems = pubItems.concat((pubRes as any)?.data ?? []);
           nextTokenPub = (pubRes as any)?.nextToken;
         } while (nextTokenPub);
-        console.debug("[api/demos] listDemoItems res (Demo via apiKey fallback after empty):", {
-          count: pubItems?.length,
-        });
         if (Array.isArray(pubItems) && pubItems.length > 0) return pubItems;
-        // Probe: try direct METADATA get via apiKey client
         try {
           if ((pubDemoModels as any).Demo?.get) {
-            const metaResPub = await (pubDemoModels as any).Demo.get({ demoId, itemSK: "METADATA" });
-            console.debug("[api/demos] probe get(METADATA) (apiKey/private Demo):", metaResPub);
+            await (pubDemoModels as any).Demo.get({ demoId, itemSK: "METADATA" });
           }
-        } catch (probePubErr) {
-          console.warn("[api/demos] probe get(METADATA) (apiKey/private Demo) failed", probePubErr);
-        }
-      } catch (publicDemoFallbackErr) {
-        console.warn("[api/demos] Demo apiKey fallback after empty failed", publicDemoFallbackErr);
-      }
-      // Fallback B: finally, try PublicDemo mirror if available
+        } catch (probePubErr) {}
+      } catch (publicDemoFallbackErr) {}
       try {
         const pubItems = await listPublicDemoItems(demoId);
-        console.debug("[api/demos] listDemoItems res (PublicDemo fallback after empty):", {
-          count: pubItems?.length,
-        });
         return pubItems;
       } catch (publicAfterEmptyErr) {
-        console.warn("[api/demos] PublicDemo fallback after empty failed", publicAfterEmptyErr);
         return items;
       }
     } catch (userErr) {
-      console.warn("[api/demos] userPool read failed; trying PublicDemo", userErr);
       const pubItems = await listPublicDemoItems(demoId);
-      console.debug("[api/demos] listDemoItems res (PublicDemo after error):", { count: pubItems?.length });
       return pubItems;
     }
   } catch (e) {
-    console.error("[api/demos] listDemoItems error", e);
     throw e;
   }
 }
@@ -846,7 +822,6 @@ export async function listDemoItems(demoId: string) {
 export async function getOwnerId(): Promise<string | undefined> {
   try {
     const user = await getCurrentUser();
-    // Prefer username to match default owner auth identity claim; fallback to userId (sub)
     return (user as any)?.username || user?.userId;
   } catch {
     return undefined;
@@ -857,12 +832,9 @@ export async function listMyDemos(
   status?: "DRAFT" | "PUBLISHED"
 ): Promise<Array<{ id: string; name?: string; status?: string; createdAt?: string; updatedAt?: string }>> {
   try {
-    // Ensure credentials are ready for owner-based reads
     try {
       await fetchAuthSession();
-    } catch (e) {
-      console.warn("[api/demos] listMyDemos: fetchAuthSession failed (continuing)", e);
-    }
+    } catch (e) {}
     const ownerId = await getOwnerId();
     console.debug("[api/demos] listMyDemos ownerId:", ownerId, "status:", status ?? "(any)");
     if (!ownerId) {
@@ -876,7 +848,6 @@ export async function listMyDemos(
     if (status) {
       filter.status = { eq: status };
     }
-    // Paginate through all pages; first page can be empty even when later pages contain data
     let all: any[] = [];
     let nextToken: any = undefined;
     do {
@@ -886,7 +857,6 @@ export async function listMyDemos(
       all = all.concat(page);
       nextToken = (res as any)?.nextToken;
     } while (nextToken);
-    // Map and sort by updatedAt desc (fallback createdAt)
     const mapped = all.map((it: any) => ({
       id: it.demoId,
       name: it.name,
@@ -901,7 +871,6 @@ export async function listMyDemos(
     });
     return mapped;
   } catch (e: any) {
-    console.error("[api/demos] listMyDemos error:", e);
     const err = new Error(
       `Failed to list demos. ${e?.message || e?.toString?.() || "Unknown error"}. Is Amplify configured and user signed in?`
     );

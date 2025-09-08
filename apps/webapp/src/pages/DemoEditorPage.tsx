@@ -1,36 +1,27 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useKeyboardShortcut } from "@/hooks/useKeyboardShortcut";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { syncAnonymousDemo, type EditedDraft } from "../lib/services/syncAnonymousDemo";
 import { useAuth } from "@/lib/providers/AuthProvider";
 import { useSearchParams, useNavigate } from "react-router-dom";
+import { deleteDemo, renameDemo, setDemoStatus } from "@/lib/api/demos";
 import {
-  deleteDemo,
-  listDemoItems,
-  renameDemo,
-  setDemoStatus,
   updateDemoStepHotspots,
-  mirrorDemoToPublic,
-  deletePublicDemoItems,
   updateDemoLeadConfig,
   updateDemoStyleConfig,
-  listLeadTemplates,
-  saveLeadTemplate,
-} from "@/lib/api/demos";
-import { getUrl } from "aws-amplify/storage";
+  mirrorDemoToPublic,
+  deletePublicDemoItems,
+} from "@/features/editor/services/editorPersistence";
+import { useEditorData } from "@/features/editor/hooks/useEditorData";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { PasswordlessAuth } from "@/components/auth/PasswordlessAuth";
 import { toast } from "sonner";
 import { Loader2, Copy } from "lucide-react";
 import LeadCaptureOverlay from "@/components/LeadCaptureOverlay";
-import StepsBar from "@/components/StepsBar";
+import EditorHeader from "@/features/editor/components/EditorHeader";
+import LeadFormEditor from "@/features/editor/components/LeadFormEditor";
 import HotspotOverlay from "@/components/HotspotOverlay";
-import {
-  deriveTooltipStyleFromHotspots,
-  type HotspotsMap,
-  type TooltipStyle,
-} from "@/lib/editor/deriveTooltipStyleFromHotspots";
+import { type HotspotsMap, type TooltipStyle } from "@/lib/editor/deriveTooltipStyleFromHotspots";
 import { applyGlobalStyleToHotspots } from "@/lib/editor/applyGlobalStyleToHotspots";
 import { extractLeadConfig } from "@/lib/editor/extractLeadConfig";
 import { Dialog as UIDialog, DialogContent as UIDialogContent } from "@/components/ui/dialog";
@@ -83,6 +74,9 @@ export function DemoEditorPage() {
   const [shareOpen, setShareOpen] = useState(false);
   // Retry counter for backend load (handle eventual consistency right after creation)
   const loadAttemptsRef = useRef<number>(0);
+
+  // New: hook to load data for saved demos (backend path)
+  const ed = useEditorData(demoIdParam || undefined);
 
   const [isDrawing, setIsDrawing] = useState(false);
   const [startPos, setStartPos] = useState({ x: 0, y: 0 });
@@ -165,171 +159,6 @@ export function DemoEditorPage() {
   const currentHotspots: Hotspot[] = currentStepId ? (hotspotsByStep[currentStepId] ?? []) : [];
 
   useEffect(() => {
-    const loadFromBackend = async (demoId: string) => {
-      try {
-        setLoadingSteps(true);
-        const items = await listDemoItems(demoId);
-        const meta = (items || []).find((it: any) => String(it.itemSK) === "METADATA");
-        if (meta) {
-          setDemoName(meta.name || "");
-          setDemoStatusLocal((meta.status as any) === "PUBLISHED" ? "PUBLISHED" : "DRAFT");
-          try {
-            if ((meta as any).leadConfig) {
-              const cfg =
-                typeof (meta as any).leadConfig === "string"
-                  ? JSON.parse((meta as any).leadConfig)
-                  : (meta as any).leadConfig;
-              if (cfg && typeof cfg === "object") setLeadFormConfig(cfg);
-            }
-          } catch {}
-          try {
-            const raw = (meta as any).hotspotStyle;
-            if (raw) {
-              const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
-              if (parsed && typeof parsed === "object") {
-                setTooltipStyle((prev) => ({
-                  dotSize: Number(parsed.dotSize ?? prev.dotSize ?? 12),
-                  dotColor: String(parsed.dotColor ?? prev.dotColor ?? "#2563eb"),
-                  dotStrokePx: Number(parsed.dotStrokePx ?? prev.dotStrokePx ?? 2),
-                  dotStrokeColor: String(parsed.dotStrokeColor ?? prev.dotStrokeColor ?? "#ffffff"),
-                  animation: (parsed.animation ?? prev.animation ?? "none") as any,
-                  tooltipBgColor: String(parsed.tooltipBgColor ?? prev.tooltipBgColor ?? "#2563eb"),
-                  tooltipTextColor: String(parsed.tooltipTextColor ?? prev.tooltipTextColor ?? "#ffffff"),
-                  tooltipTextSizePx: Number(parsed.tooltipTextSizePx ?? prev.tooltipTextSizePx ?? 12),
-                }));
-              }
-            }
-          } catch {}
-        }
-        const stepItems = (items || []).filter((it: any) => String(it.itemSK || "").startsWith("STEP#"));
-        stepItems.sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0));
-        const urls: Array<{
-          id: string;
-          pageUrl: string;
-          screenshotUrl: string;
-        }> = [];
-        const hotspotsMap: Record<string, Hotspot[]> = {};
-        for (const si of stepItems) {
-          try {
-            const raw: string | undefined = si.s3Key;
-            if (!raw) continue;
-            const isUrl = /^(https?:)?\/\//i.test(raw);
-            let screenshotUrl: string | undefined;
-            if (isUrl) {
-              screenshotUrl = raw;
-            } else {
-              const s = String(raw);
-              let access: "guest" | "protected" | "private" = "guest";
-              let keyForStorage = s;
-              if (s.startsWith("public/")) {
-                access = "guest";
-                keyForStorage = s.replace(/^public\//, "");
-              } else if (s.startsWith("protected/")) {
-                access = "protected";
-                keyForStorage = s.replace(/^protected\/[^/]+\//, "");
-              } else if (s.startsWith("private/")) {
-                access = "private";
-                keyForStorage = s.replace(/^private\/[^/]+\//, "");
-              }
-              try {
-                const { url } = await getUrl({ key: keyForStorage, options: { accessLevel: access as any } } as any);
-                screenshotUrl = url.toString();
-              } catch (err) {
-                console.error("[Editor] Storage.getUrl failed", { raw, keyForStorage, access }, err);
-              }
-            }
-            if (!screenshotUrl) continue;
-            urls.push({
-              id: String(si.itemSK).slice("STEP#".length),
-              pageUrl: si.pageUrl || "",
-              screenshotUrl,
-            });
-            if (si.hotspots) {
-              try {
-                const parsed = typeof si.hotspots === "string" ? JSON.parse(si.hotspots) : si.hotspots;
-                if (Array.isArray(parsed)) hotspotsMap[String(si.itemSK).slice("STEP#".length)] = parsed as Hotspot[];
-              } catch (_e) {}
-            }
-          } catch (e) {
-            console.error("[Editor] Failed to resolve S3 URL", { itemSK: si?.itemSK, s3Key: si?.s3Key }, e);
-          }
-        }
-        if (!stepItems.length && loadAttemptsRef.current < 10) {
-          loadAttemptsRef.current += 1;
-          const delayMs = 300 + loadAttemptsRef.current * 300; // ~0.6s..3.3s
-          setTimeout(() => {
-            loadFromBackend(demoId);
-          }, delayMs);
-          return;
-        }
-        if (stepItems.length > 0 && !urls.length && loadAttemptsRef.current < 10) {
-          loadAttemptsRef.current += 1;
-          const delayMs = 500 + loadAttemptsRef.current * 400;
-          setTimeout(() => loadFromBackend(demoId), delayMs);
-          return;
-        }
-        try {
-          const hasMetaStyle = Boolean((meta as any)?.hotspotStyle);
-          if (!hasMetaStyle) {
-            const derived = deriveTooltipStyleFromHotspots(
-              hotspotsMap as HotspotsMap,
-              {
-                dotSize: 12,
-                dotColor: "#2563eb",
-                dotStrokePx: 2,
-                dotStrokeColor: "#ffffff",
-                animation: "none",
-                tooltipBgColor: "#2563eb",
-                tooltipTextColor: "#ffffff",
-                tooltipTextSizePx: 12,
-              } as TooltipStyle
-            );
-            if (derived) {
-              setTooltipStyle((prev) => ({
-                dotSize: Number(derived.dotSize ?? prev.dotSize ?? 12),
-                dotColor: String(derived.dotColor ?? prev.dotColor ?? "#2563eb"),
-                dotStrokePx: Number(derived.dotStrokePx ?? prev.dotStrokePx ?? 2),
-                dotStrokeColor: String(derived.dotStrokeColor ?? prev.dotStrokeColor ?? "#ffffff"),
-                animation: (derived.animation ?? prev.animation ?? "none") as any,
-                tooltipBgColor: String(derived.tooltipBgColor ?? prev.tooltipBgColor ?? "#2563eb"),
-                tooltipTextColor: String(derived.tooltipTextColor ?? prev.tooltipTextColor ?? "#ffffff"),
-                tooltipTextSizePx: Number(derived.tooltipTextSizePx ?? prev.tooltipTextSizePx ?? 12),
-              }));
-            }
-          }
-        } catch {}
-        try {
-          let leadIdxSaved: number | null | undefined = (meta as any)?.leadStepIndex;
-          let leadBgSaved: "white" | "black" = "white";
-          if ((meta as any)?.leadConfig) {
-            try {
-              const cfg =
-                typeof (meta as any).leadConfig === "string"
-                  ? JSON.parse((meta as any).leadConfig)
-                  : (meta as any).leadConfig;
-              if (cfg && (cfg.bg === "white" || cfg.bg === "black")) leadBgSaved = cfg.bg;
-            } catch {}
-          }
-          if (typeof leadIdxSaved === "number" && leadIdxSaved >= 0 && leadIdxSaved <= urls.length) {
-            const leadStep = {
-              id: "LEAD-SAVED",
-              pageUrl: "",
-              screenshotUrl: undefined as unknown as string,
-              isLeadCapture: true as const,
-              leadBg: leadBgSaved,
-            } as any;
-            urls.splice(leadIdxSaved, 0, leadStep);
-          }
-        } catch {}
-        setSteps(urls);
-        setHotspotsByStep(hotspotsMap);
-        setSelectedStepIndex(0);
-      } catch (e) {
-        console.error("[Editor] Failed to load demo from backend", e);
-      } finally {
-        setLoadingSteps(false);
-      }
-    };
 
     const loadFromExtension = async () => {
       try {
@@ -447,12 +276,24 @@ export function DemoEditorPage() {
     };
 
     loadAttemptsRef.current = 0;
-    if (demoIdParam) {
-      loadFromBackend(demoIdParam);
-    } else {
+    if (!demoIdParam) {
       loadFromExtension();
     }
   }, [demoIdParam]);
+
+  // Sync local UI state from useEditorData when editing a saved demo
+  useEffect(() => {
+    if (!demoIdParam) return;
+    setLoadingSteps(ed.loading);
+    if (ed.loading) return;
+    setDemoName(ed.demoName || "");
+    setDemoStatusLocal(ed.demoStatus);
+    setSteps(ed.steps as any);
+    setHotspotsByStep(ed.hotspotsByStep as any);
+    if (ed.leadFormConfig) setLeadFormConfig(ed.leadFormConfig);
+    setTooltipStyle((prev) => ({ ...prev, ...ed.tooltipStyle }));
+    setSelectedStepIndex(0);
+  }, [demoIdParam, ed.loading, ed.demoName, ed.demoStatus, ed.steps, ed.hotspotsByStep, ed.leadFormConfig, ed.tooltipStyle]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -539,12 +380,25 @@ export function DemoEditorPage() {
         });
         await Promise.all(updates);
         try {
-          const { leadStepIndex } = extractLeadConfig(steps);
+          const extracted = extractLeadConfig(steps);
+          const leadConfigToSave: any = (extracted as any)?.leadConfig ?? (leadFormConfig as any);
+          console.info("[Editor Save] lead config about to persist", {
+            leadStepIndex: extracted.leadStepIndex,
+            leadFormConfig: leadConfigToSave,
+            leadFormFieldsCount: Array.isArray((leadConfigToSave as any)?.fields)
+              ? (leadConfigToSave as any).fields.length
+              : undefined,
+          });
           await updateDemoLeadConfig({
             demoId: demoIdParam,
-            leadStepIndex: leadStepIndex !== null ? leadStepIndex : null,
-            leadConfig: leadFormConfig as any,
+            leadStepIndex: extracted.leadStepIndex !== null ? extracted.leadStepIndex : null,
+            leadConfig: leadConfigToSave,
           });
+          if (!Array.isArray((leadConfigToSave as any)?.fields) || (leadConfigToSave as any).fields.length === 0) {
+            console.warn(
+              "[Editor Save] leadFormConfig has no fields at save time — public preview will show defaults until fields are saved"
+            );
+          }
         } catch (e) {
           console.error("Failed to persist lead config (non-fatal)", e);
         }
@@ -555,13 +409,21 @@ export function DemoEditorPage() {
         }
         if (demoStatus === "PUBLISHED") {
           try {
-            const { leadStepIndex: leadIdxNow } = extractLeadConfig(steps);
-            // Use the full lead form configuration that the editor manages so fields are preserved in PublicDemo
-            await mirrorDemoToPublic(demoIdParam, {
+            const extractedNow = extractLeadConfig(steps);
+            const leadConfigToMirror: any = (extractedNow as any)?.leadConfig ?? (leadFormConfig as any);
+            const mirrorPayload = {
               name: demoName || undefined,
-              leadStepIndex: leadIdxNow,
-              leadConfig: leadFormConfig,
+              leadStepIndex: extractedNow.leadStepIndex,
+              leadConfig: leadConfigToMirror,
+            } as const;
+            console.info("[Editor Save] mirroring to PublicDemo", {
+              ...mirrorPayload,
+              leadFormFieldsCount: Array.isArray((leadConfigToMirror as any)?.fields)
+                ? (leadConfigToMirror as any).fields.length
+                : undefined,
             });
+            // Use the full lead form configuration that the editor manages so fields are preserved in PublicDemo
+            await mirrorDemoToPublic(demoIdParam, mirrorPayload as any);
           } catch (mirrorErr) {
             console.error("Mirror to public failed (will still keep private saved).", mirrorErr);
           }
@@ -612,6 +474,11 @@ export function DemoEditorPage() {
         const dy = y - centerY;
         const inside = dx * dx + dy * dy <= radius * radius;
         if (inside) {
+          // Prevent native selection/drag while moving the hotspot dot
+          e.preventDefault();
+          try {
+            document.body.style.userSelect = "none";
+          } catch {}
           setIsDraggingHotspot(true);
           setDragHotspotId(existing.id);
           dragStartRef.current = { x: e.clientX, y: e.clientY };
@@ -666,6 +533,10 @@ export function DemoEditorPage() {
       const id = dragHotspotId;
       setDragHotspotId(null);
       dragStartRef.current = null;
+      // Restore selection once dragging ends
+      try {
+        document.body.style.userSelect = "";
+      } catch {}
       if (start && id) {
         const moved = Math.hypot(e.clientX - start.x, e.clientY - start.y);
         if (moved < 3) {
@@ -812,205 +683,120 @@ export function DemoEditorPage() {
   return (
     <div className="min-h-screen flex">
       <div className="flex-1 p-8">
-        <div className="mb-3 flex items-center gap-2">
-          <Input
-            value={demoName}
-            placeholder="Untitled Demo"
-            onChange={(e) => setDemoName(e.target.value)}
-            className="h-8 text-sm w-64"
-          />
-          {demoIdParam && (
-            <button
-              onClick={async () => {
-                if (!demoIdParam) return;
+        <EditorHeader
+          demoId={demoIdParam || undefined}
+          demoName={demoName}
+          onChangeName={(name) => setDemoName(name)}
+          savingTitle={savingTitle}
+          savingDemo={savingDemo}
+          demoStatus={demoStatus}
+          togglingStatus={togglingStatus}
+          deleting={deleting}
+          loadingSteps={loadingSteps}
+          stepsCount={steps.length}
+          isPreviewing={isPreviewing}
+          previewableCount={previewableIndices.length}
+          currentPreviewIndex={Math.max(0, previewableIndices.indexOf(selectedStepIndex))}
+          onSelectPreviewIndex={(pos) => {
+            const targetIdx = previewableIndices[pos] ?? selectedStepIndex;
+            setSelectedStepIndex(targetIdx);
+          }}
+          onPrevPreview={gotoPrevAnnotated}
+          onNextPreview={gotoNextAnnotated}
+          onSaveTitle={async () => {
+            if (!demoIdParam) return;
+            try {
+              setSavingTitle(true);
+              await renameDemo(demoIdParam, demoName || "");
+            } catch (e) {
+              console.error("Failed to rename demo", e);
+              alert("Failed to save title. Please try again.");
+            } finally {
+              setSavingTitle(false);
+            }
+          }}
+          onToggleStatus={async () => {
+            if (!demoIdParam) return;
+            const next = demoStatus === "PUBLISHED" ? "DRAFT" : "PUBLISHED";
+            try {
+              setTogglingStatus(true);
+              if (next === "PUBLISHED") {
                 try {
-                  setSavingTitle(true);
-                  await renameDemo(demoIdParam, demoName || "");
+                  const { leadStepIndex, leadConfig } = extractLeadConfig(steps);
+                  if (leadStepIndex !== null) {
+                    await updateDemoLeadConfig({ demoId: demoIdParam, leadStepIndex, leadConfig: leadConfig as any });
+                  } else {
+                    await updateDemoLeadConfig({ demoId: demoIdParam, leadStepIndex: null });
+                  }
                 } catch (e) {
-                  console.error("Failed to rename demo", e);
-                  alert("Failed to save title. Please try again.");
-                } finally {
-                  setSavingTitle(false);
+                  console.error("Failed to persist lead config before publish (non-fatal)", e);
                 }
-              }}
-              disabled={savingTitle || savingDemo}
-              className={`text-sm py-1.5 px-2 rounded border ${savingTitle ? "opacity-60" : ""}`}
-            >
-              {savingTitle ? "Saving..." : "Save Title"}
-            </button>
-          )}
-        </div>
-        <div className="mb-4 flex items-center gap-3">
-          {demoIdParam && (
-            <>
-              <div className="flex items-center gap-2 mr-4">
-                <span
-                  className={`px-2 py-1 rounded text-xs font-medium ${
-                    demoStatus === "PUBLISHED" ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
-                  }`}
-                >
-                  {demoStatus}
-                </span>
-                <button
-                  onClick={async () => {
-                    if (!demoIdParam) return;
-                    const next = demoStatus === "PUBLISHED" ? "DRAFT" : "PUBLISHED";
-                    try {
-                      setTogglingStatus(true);
-                      if (next === "PUBLISHED") {
-                        try {
-                          const { leadStepIndex, leadConfig } = extractLeadConfig(steps);
-                          if (leadStepIndex !== null) {
-                            await updateDemoLeadConfig({
-                              demoId: demoIdParam,
-                              leadStepIndex,
-                              leadConfig: leadConfig as any,
-                            });
-                          } else {
-                            await updateDemoLeadConfig({ demoId: demoIdParam, leadStepIndex: null });
-                          }
-                        } catch (e) {
-                          console.error("Failed to persist lead config before publish (non-fatal)", e);
-                        }
-                      }
-                      await setDemoStatus(demoIdParam, next);
-                      setDemoStatusLocal(next);
-                      if (next === "PUBLISHED") {
-                        setShareOpen(true);
-                      }
-                    } catch (e) {
-                      console.error("Failed to update status", e);
-                      alert("Failed to update status. Please try again.");
-                    } finally {
-                      setTogglingStatus(false);
-                    }
-                  }}
-                  disabled={togglingStatus || savingDemo}
-                  className={`text-sm py-1.5 px-2 rounded border bg-white hover:bg-gray-50 ${
-                    togglingStatus ? "opacity-60" : ""
-                  }`}
-                >
-                  {demoStatus === "PUBLISHED" ? "Unpublish" : "Publish"}
-                </button>
-                <button
-                  onClick={async () => {
-                    if (!demoIdParam) return;
-                    const ok = confirm("Delete this demo? This cannot be undone.");
-                    if (!ok) return;
-                    try {
-                      setDeleting(true);
-                      await deleteDemo(demoIdParam);
-                      window.location.href = "/dashboard";
-                    } catch (e) {
-                      console.error("Failed to delete demo", e);
-                      alert("Failed to delete demo. Please try again.");
-                    } finally {
-                      setDeleting(false);
-                    }
-                  }}
-                  disabled={deleting || savingDemo}
-                  className={`text-sm py-1.5 px-2 rounded border bg-red-600 text-white hover:bg-red-700 ${
-                    deleting ? "opacity-70" : ""
-                  }`}
-                >
-                  {deleting ? "Deleting..." : "Delete"}
-                </button>
-              </div>
-            </>
-          )}
-          <button
-            onClick={() => {
-              const demoId = demoIdParam;
-              if (!demoId) {
-                alert("Save your demo first to preview in blog.");
-                return;
               }
-              const url = `/preview-blog?demoId=${encodeURIComponent(demoId)}`;
-              window.open(url, "_blank", "noopener,noreferrer");
-            }}
-            className={`text-sm py-2 px-3 rounded border bg-white border-gray-300`}
-            title="Open blog preview"
-          >
-            Blog Preview
-          </button>
-          {demoIdParam && demoStatus === "PUBLISHED" && (
-            <>
-              <button
-                onClick={async () => {
-                  try {
-                    const url = `${window.location.origin}/p/${demoIdParam}`;
-                    await navigator.clipboard.writeText(url);
-                    toast.success("Copied public URL");
-                  } catch (e) {
-                    try {
-                      prompt("Copy public URL", `${window.location.origin}/p/${demoIdParam}`);
-                    } catch {}
-                  }
-                }}
-                className="text-sm py-2 px-3 rounded border bg-white border-gray-300"
-                title="Copy public page URL"
-              >
-                Copy URL
-              </button>
-              <button
-                onClick={async () => {
-                  try {
-                    const code = `<iframe src="${window.location.origin}/embed/${demoIdParam}?ar=16:9" style="width:100%;aspect-ratio:16/9;border:0;" allow="fullscreen"></iframe>`;
-                    await navigator.clipboard.writeText(code);
-                    toast.success("Copied embed code");
-                  } catch (e) {
-                    try {
-                      prompt(
-                        "Copy iframe embed code",
-                        `<iframe src=\"${window.location.origin}/embed/${demoIdParam}?ar=16:9\" style=\"width:100%;aspect-ratio:16/9;border:0;\" allow=\"fullscreen\"></iframe>`
-                      );
-                    } catch {}
-                  }
-                }}
-                className="text-sm py-2 px-3 rounded border bg-white border-gray-300"
-                title="Copy iframe embed code"
-              >
-                Copy Embed
-              </button>
-            </>
-          )}
-          <button
-            onClick={handleSave}
-            disabled={savingDemo}
-            className={`text-sm py-2 px-3 rounded ${
-              savingDemo ? "bg-blue-400 cursor-not-allowed text-white" : "bg-blue-600 hover:bg-blue-700 text-white"
-            }`}
-          >
-            {savingDemo ? "Saving..." : "Save"}
-          </button>
-
-          {loadingSteps && <span className="text-xs text-gray-400">Loading steps…</span>}
-          {!loadingSteps && steps.length > 0 && (
-            <span className="text-xs text-gray-600">Loaded {steps.length} captured steps</span>
-          )}
-          {isPreviewing && (
-            <div className="flex items-center justify-center gap-3">
-              <button onClick={gotoPrevAnnotated} className="text-sm py-1 px-2 rounded border bg-white border-gray-300">
-                Prev
-              </button>
-              <div className="w-64">
-                <StepsBar
-                  total={previewableIndices.length}
-                  current={Math.max(0, previewableIndices.indexOf(selectedStepIndex))}
-                  onSelect={(pos) => {
-                    const targetIdx = previewableIndices[pos] ?? selectedStepIndex;
-                    setSelectedStepIndex(targetIdx);
-                  }}
-                  className="mx-auto"
-                  size="sm"
-                />
-              </div>
-              <button onClick={gotoNextAnnotated} className="text-sm py-1 px-2 rounded border bg-white border-gray-300">
-                Next
-              </button>
-            </div>
-          )}
-        </div>
+              await setDemoStatus(demoIdParam, next);
+              setDemoStatusLocal(next);
+              if (next === "PUBLISHED") setShareOpen(true);
+            } catch (e) {
+              console.error("Failed to update status", e);
+              alert("Failed to update status. Please try again.");
+            } finally {
+              setTogglingStatus(false);
+            }
+          }}
+          onDelete={async () => {
+            if (!demoIdParam) return;
+            const ok = confirm("Delete this demo? This cannot be undone.");
+            if (!ok) return;
+            try {
+              setDeleting(true);
+              await deleteDemo(demoIdParam);
+              window.location.href = "/dashboard";
+            } catch (e) {
+              console.error("Failed to delete demo", e);
+              alert("Failed to delete demo. Please try again.");
+            } finally {
+              setDeleting(false);
+            }
+          }}
+          onOpenBlogPreview={() => {
+            const demoId = demoIdParam;
+            if (!demoId) {
+              alert("Save your demo first to preview in blog.");
+              return;
+            }
+            const url = `/preview-blog?demoId=${encodeURIComponent(demoId)}`;
+            window.open(url, "_blank", "noopener,noreferrer");
+          }}
+          onCopyPublicUrl={async () => {
+            try {
+              const url = demoIdParam ? `${window.location.origin}/p/${demoIdParam}` : "";
+              await navigator.clipboard.writeText(url);
+              toast.success("Copied public URL");
+            } catch (e) {
+              try {
+                prompt("Copy public URL", demoIdParam ? `${window.location.origin}/p/${demoIdParam}` : "");
+              } catch {}
+            }
+          }}
+          onCopyEmbed={async () => {
+            try {
+              const code = demoIdParam
+                ? `<iframe src="${window.location.origin}/embed/${demoIdParam}?ar=16:9" style="width:100%;aspect-ratio:16/9;border:0;" allow="fullscreen"></iframe>`
+                : "";
+              await navigator.clipboard.writeText(code);
+              toast.success("Copied embed code");
+            } catch (e) {
+              try {
+                prompt(
+                  "Copy iframe embed code",
+                  demoIdParam
+                    ? `<iframe src=\"${window.location.origin}/embed/${demoIdParam}?ar=16:9\" style=\"width:100%;aspect-ratio:16/9;border:0;\" allow=\"fullscreen\"></iframe>`
+                    : ""
+                );
+              } catch {}
+            }
+          }}
+          onSave={handleSave}
+        />
         <div
           ref={imageRef}
           className="bg-gray-200 border rounded-xl w-full min-h-[320px] flex items-center justify-center relative overflow-hidden"
@@ -1077,9 +863,11 @@ export function DemoEditorPage() {
                   } catch {}
                 }}
                 onError={() => setImageLoading(false)}
-                className={`absolute inset-0 w-full h-full object-contain ${
+                className={`absolute inset-0 w-full h-full object-contain select-none ${
                   imageLoading ? "opacity-50" : "opacity-100"
                 }`}
+                draggable={false}
+                onDragStart={(e) => e.preventDefault()}
               />
             )
           ) : demoIdParam && !loadingSteps ? (
@@ -1223,6 +1011,11 @@ export function DemoEditorPage() {
                         // Enable dragging bubble in edit mode (not preview)
                         if (isPreviewing) return;
                         e.stopPropagation();
+                        // Prevent text/image selection while dragging the bubble
+                        e.preventDefault();
+                        try {
+                          document.body.style.userSelect = "none";
+                        } catch {}
                         const rect = imageRef.current?.getBoundingClientRect();
                         if (!rect || !naturalSize) return;
                         const startX = e.clientX;
@@ -1249,6 +1042,10 @@ export function DemoEditorPage() {
                         const onUp = () => {
                           document.removeEventListener("mousemove", onMove);
                           document.removeEventListener("mouseup", onUp);
+                          // Restore selection after bubble drag ends
+                          try {
+                            document.body.style.userSelect = "";
+                          } catch {}
                         };
                         document.addEventListener("mousemove", onMove);
                         document.addEventListener("mouseup", onUp);
@@ -1547,85 +1344,7 @@ export function DemoEditorPage() {
           )}
         </div>
 
-        <div className="pt-4 border-t mt-6">
-          <h3 className="text-lg font-semibold mb-3">Lead Form</h3>
-          <div className="space-y-3 text-sm">
-            <div className="space-y-2">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs text-gray-600 mb-1">Title</label>
-                  <input
-                    className="w-full border rounded px-2 py-1"
-                    value={leadFormConfig.title || ""}
-                    onChange={(e) => setLeadFormConfig((p: any) => ({ ...p, title: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-600 mb-1">CTA Text</label>
-                  <input
-                    className="w-full border rounded px-2 py-1"
-                    value={leadFormConfig.ctaText || ""}
-                    onChange={(e) => setLeadFormConfig((p: any) => ({ ...p, ctaText: e.target.value }))}
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs text-gray-600 mb-1">Subtitle</label>
-                <textarea
-                  className="w-full border rounded px-2 py-1 h-16"
-                  value={leadFormConfig.subtitle || ""}
-                  onChange={(e) => setLeadFormConfig((p: any) => ({ ...p, subtitle: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-1">
-                <div className="text-xs text-gray-600">Fields</div>
-                {[
-                  { key: "email", label: "Email", type: "email", required: true },
-                  { key: "name", label: "Name", type: "text" },
-                  { key: "phone", label: "Phone", type: "tel" },
-                  { key: "position", label: "Position", type: "text" },
-                  { key: "message", label: "Message", type: "textarea" },
-                  { key: "custom", label: "Custom", type: "text" },
-                ].map((f) => {
-                  const list: any[] = Array.isArray(leadFormConfig.fields) ? leadFormConfig.fields : [];
-                  const exists = list.find((x) => x.key === f.key);
-                  const enabled = !!exists;
-                  return (
-                    <label key={f.key} className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        className="accent-blue-600"
-                        checked={enabled}
-                        disabled={f.key === "email"}
-                        onChange={(e) => {
-                          setLeadFormConfig((p: any) => {
-                            const current: any[] = Array.isArray(p.fields) ? [...p.fields] : [];
-                            if (e.target.checked) {
-                              if (!current.find((x) => x.key === f.key))
-                                current.push({ key: f.key, type: f.type, label: f.label });
-                            } else {
-                              const idx = current.findIndex((x) => x.key === f.key);
-                              if (idx >= 0) current.splice(idx, 1);
-                            }
-                            // Ensure email is present & required
-                            if (!current.find((x) => x.key === "email"))
-                              current.unshift({ key: "email", type: "email", label: "Email", required: true });
-                            return { ...p, fields: current };
-                          });
-                        }}
-                      />
-                      <span>{f.label}</span>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <TemplatePicker getConfig={() => leadFormConfig} applyConfig={(cfg) => setLeadFormConfig(cfg)} />
-            </div>
-          </div>
-        </div>
+        <LeadFormEditor leadFormConfig={leadFormConfig as any} setLeadFormConfig={setLeadFormConfig as any} />
       </div>
       <Dialog
         open={authOpen}
@@ -1744,76 +1463,9 @@ export function DemoEditorPage() {
         </UIDialogContent>
       </UIDialog>
       {/* Lightweight template picker actions */}
-      <></>
+  <></>
     </div>
   );
 }
 
 export default DemoEditorPage;
-
-function TemplatePicker(props: { getConfig: () => any; applyConfig: (cfg: any) => void }) {
-  const { getConfig, applyConfig } = props;
-  const [loading, setLoading] = useState(false);
-  const [templates, setTemplates] = useState<Array<{ templateId: string; name: string; leadConfig: any }>>([]);
-  const [name, setName] = useState("");
-
-  const load = async () => {
-    try {
-      setLoading(true);
-      const list = await listLeadTemplates();
-      setTemplates(list);
-    } catch {
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        <Button variant="outline" className="h-8" onClick={load} disabled={loading}>
-          {loading ? "Loading…" : "Load templates"}
-        </Button>
-        <select
-          onChange={(e) => {
-            const t = templates.find((x) => x.templateId === e.target.value);
-            if (t?.leadConfig) {
-              const cfg = typeof t.leadConfig === "string" ? JSON.parse(t.leadConfig) : t.leadConfig;
-              applyConfig(cfg);
-            }
-          }}
-          className="border rounded px-2 py-1 text-xs bg-white"
-        >
-          <option value="">Select template…</option>
-          {templates.map((t) => (
-            <option key={t.templateId} value={t.templateId}>
-              {t.name}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="flex items-center gap-2">
-        <Input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Template name"
-          className="h-8 text-xs w-48"
-        />
-        <Button
-          variant="outline"
-          className="h-8"
-          onClick={async () => {
-            if (!name.trim()) return;
-            try {
-              await saveLeadTemplate(name.trim(), getConfig());
-              setName("");
-              await load();
-            } catch {}
-          }}
-        >
-          Save as template
-        </Button>
-      </div>
-    </div>
-  );
-}

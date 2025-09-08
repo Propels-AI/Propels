@@ -1,138 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
-import { listPublicDemoItems, createLeadSubmissionPublic, listDemoItems } from "@/lib/api/demos";
+import { createLeadSubmissionPublic } from "@/lib/api/demos";
 import HotspotOverlay from "@/components/HotspotOverlay";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import LeadCaptureOverlay from "@/components/LeadCaptureOverlay";
-import { getUrl as storageGetUrl } from "aws-amplify/storage";
+import { usePublicDemo } from "@/features/public/hooks/usePublicDemo";
+import { useImageResolver } from "@/features/public/hooks/useImageResolver";
 import outputs from "../../../../amplify_outputs.json";
 
-type PublicStep = {
-  itemSK: string;
-  order?: number;
-  s3Key?: string;
-  thumbnailS3Key?: string;
-  pageUrl?: string;
-  hotspots?: Array<{
-    id: string;
-    x?: number;
-    y?: number;
-    width: number;
-    height: number;
-    xNorm?: number;
-    yNorm?: number;
-    tooltip?: string;
-    targetStep?: number;
-    dotSize?: number;
-    dotColor?: string;
-    animation?: "none" | "pulse" | "breathe" | "fade";
-    dotStrokePx?: number;
-    dotStrokeColor?: string;
-  }>;
-};
+// type removed after refactor (now handled by usePublicDemo)
 
 export default function PublicDemoEmbed() {
   const { demoId } = useParams();
   const location = useLocation();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | undefined>();
-  const [leadStepIndex, setLeadStepIndex] = useState<number | null>(null);
-  const [leadBg, setLeadBg] = useState<"white" | "black">("white");
-  const [leadConfig, setLeadConfig] = useState<any>(undefined);
-  const [steps, setSteps] = useState<PublicStep[]>([]);
+  const { loading, error, leadStepIndex, leadBg, leadConfig, steps, hotspotStyleDefaults } = usePublicDemo(demoId);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [hotspotStyleDefaults, setHotspotStyleDefaults] = useState<{
-    dotSize: number;
-    dotColor: string;
-    dotStrokePx: number;
-    dotStrokeColor: string;
-    animation: "none" | "pulse" | "breathe" | "fade";
-  }>({ dotSize: 12, dotColor: "#2563eb", dotStrokePx: 2, dotStrokeColor: "#ffffff", animation: "none" });
-
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      if (!demoId) return;
-      setLoading(true);
-      setError(undefined);
-      try {
-        const items = await listPublicDemoItems(demoId);
-        if (cancelled) return;
-        const metadata = items.find((it: any) => it.itemSK === "METADATA");
-        const lIdx = typeof metadata?.leadStepIndex === "number" ? metadata.leadStepIndex : null;
-        setLeadStepIndex(lIdx);
-        let lBg: "white" | "black" = "white";
-        if (metadata?.leadConfig) {
-          try {
-            const raw = metadata.leadConfig;
-            let cfg: any = typeof raw === "string" ? JSON.parse(raw) : raw;
-            // Defensive: handle double-encoded JSON
-            if (typeof cfg === "string") {
-              try { cfg = JSON.parse(cfg); } catch {}
-            }
-            if (cfg && typeof cfg.bg === "string") lBg = cfg.bg === "black" ? "black" : "white";
-            setLeadConfig(cfg);
-          } catch {}
-        } else {
-          lBg = metadata?.leadBg === "black" ? "black" : "white";
-        }
-        setLeadBg(lBg);
-        // If public mirror has no fields in leadConfig, try to fetch from private Demo METADATA as fallback
-        try {
-          if (!Array.isArray((metadata?.leadConfig as any)?.fields)) {
-            const privateItems = await listDemoItems(demoId);
-            const privateMeta = (privateItems || []).find((it: any) => it.itemSK === "METADATA");
-            let cfg: any = privateMeta?.leadConfig;
-            if (cfg) {
-              try { cfg = typeof cfg === "string" ? JSON.parse(cfg) : cfg; } catch {}
-              if (typeof cfg === "string") { try { cfg = JSON.parse(cfg); } catch {} }
-              if (cfg && Array.isArray(cfg.fields)) {
-                setLeadConfig((prev: any) => (prev && Array.isArray(prev.fields) ? prev : cfg));
-                if (cfg.bg === "black" || cfg.bg === "white") setLeadBg(cfg.bg);
-              }
-            }
-          }
-        } catch {}
-        try {
-          const rawStyle = metadata?.hotspotStyle;
-          if (rawStyle) {
-            const parsed = typeof rawStyle === "string" ? JSON.parse(rawStyle) : rawStyle;
-            if (parsed && typeof parsed === "object") {
-              setHotspotStyleDefaults({
-                dotSize: Number(parsed.dotSize ?? 12),
-                dotColor: String(parsed.dotColor ?? "#2563eb"),
-                dotStrokePx: Number(parsed.dotStrokePx ?? 2),
-                dotStrokeColor: String(parsed.dotStrokeColor ?? "#ffffff"),
-                animation: (parsed.animation ?? "none") as any,
-              });
-            }
-          }
-        } catch {}
-
-        const stepItems: PublicStep[] = items
-          .filter((it: any) => typeof it.itemSK === "string" && it.itemSK.startsWith("STEP#"))
-          .map((it: any) => ({
-            itemSK: it.itemSK,
-            order: it.order,
-            s3Key: it.s3Key,
-            thumbnailS3Key: it.thumbnailS3Key,
-            pageUrl: it.pageUrl,
-            hotspots: it.hotspots ?? [],
-          }));
-        stepItems.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-        setSteps(stepItems);
-        setCurrentIndex(0);
-      } catch (e: any) {
-        setError(e?.message || "Failed to load demo");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [demoId]);
 
   let displayTotal = steps.length + (leadStepIndex !== null ? 1 : 0);
   const isLeadDisplayIndex = leadStepIndex !== null && currentIndex === leadStepIndex;
@@ -143,8 +25,6 @@ export default function PublicDemoEmbed() {
   const currentRealIndex = isLeadDisplayIndex ? -1 : mapDisplayToReal(currentIndex);
   const current = currentRealIndex >= 0 ? steps[currentRealIndex] : undefined;
 
-  const [resolvedSrc, setResolvedSrc] = useState<string | undefined>(undefined);
-  const [naturalAspect, setNaturalAspect] = useState<string | null>(null);
   const forcedAspect: string | null = useMemo(() => {
     try {
       const ar = new URLSearchParams(location.search).get("ar");
@@ -173,90 +53,14 @@ export default function PublicDemoEmbed() {
         : undefined;
     return finalSrc;
   }, [current]);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function resolve() {
-      const raw = current?.s3Key || current?.thumbnailS3Key;
-      const hasDirect = typeof imageSrc === "string" && imageSrc.length > 0;
-      if (!raw) {
-        setResolvedSrc(undefined);
-        return;
-      }
-      if (hasDirect) {
-        setResolvedSrc(imageSrc);
-        try {
-          const img = new Image();
-          img.onload = () => {
-            if (cancelled) return;
-            const w = img.naturalWidth || img.width || 0;
-            const h = img.naturalHeight || img.height || 0;
-            if (w > 0 && h > 0) setNaturalAspect(`${w} / ${h}`);
-          };
-          img.src = imageSrc as string;
-        } catch {}
-        return;
-      }
-      try {
-        const isPublicPrefixed = String(raw).startsWith("public/");
-        const keyForStorage = isPublicPrefixed ? String(raw).replace(/^public\//, "") : String(raw);
-        const { url } = await storageGetUrl({ key: keyForStorage, options: { accessLevel: "guest" as any } });
-        if (!cancelled) {
-          const u = url.toString();
-          setResolvedSrc(u);
-          try {
-            const img = new Image();
-            img.onload = () => {
-              if (cancelled) return;
-              const w = img.naturalWidth || img.width || 0;
-              const h = img.naturalHeight || img.height || 0;
-              if (w > 0 && h > 0) setNaturalAspect(`${w} / ${h}`);
-            };
-            img.src = u;
-          } catch {}
-        }
-        return;
-      } catch (e) {}
-      try {
-        const bucket = (outputs as any)?.storage?.bucket;
-        const region = (outputs as any)?.aws_region || (outputs as any)?.awsRegion || (outputs as any)?.region;
-        if (bucket && region) {
-          const s3Url = `https://${bucket}.s3.${region}.amazonaws.com/${String(raw).replace(/^\//, "")}`;
-          if (!cancelled) {
-            setResolvedSrc(s3Url);
-            try {
-              const img = new Image();
-              img.onload = () => {
-                if (cancelled) return;
-                const w = img.naturalWidth || img.width || 0;
-                const h = img.naturalHeight || img.height || 0;
-                if (w > 0 && h > 0) setNaturalAspect(`${w} / ${h}`);
-              };
-              img.src = s3Url;
-            } catch {}
-          }
-          return;
-        }
-      } catch {}
-      if (!cancelled) {
-        setResolvedSrc(raw);
-        try {
-          const img = new Image();
-          img.onload = () => {
-            if (cancelled) return;
-            const w = img.naturalWidth || img.width || 0;
-            const h = img.naturalHeight || img.height || 0;
-            if (w > 0 && h > 0) setNaturalAspect(`${w} / ${h}`);
-          };
-          img.src = raw as string;
-        } catch {}
-      }
-    }
-    resolve();
-    return () => {
-      cancelled = true;
-    };
-  }, [current, imageSrc]);
+  const bucket = (outputs as any)?.storage?.bucket;
+  const region = (outputs as any)?.aws_region || (outputs as any)?.awsRegion || (outputs as any)?.region;
+  const { resolvedSrc, naturalAspect } = useImageResolver(
+    current?.s3Key || current?.thumbnailS3Key,
+    imageSrc,
+    true,
+    { bucket, region }
+  );
 
   const currentHotspots = useMemo(() => {
     if (currentRealIndex < 0) return [] as any[];
@@ -268,6 +72,12 @@ export default function PublicDemoEmbed() {
       dotStrokePx: h.dotStrokePx ?? hotspotStyleDefaults.dotStrokePx,
       dotStrokeColor: h.dotStrokeColor ?? hotspotStyleDefaults.dotStrokeColor,
       animation: (h.animation ?? hotspotStyleDefaults.animation) as any,
+      // Tooltip bubble styling & offsets defaults from METADATA.hotspotStyle
+      tooltipBgColor: (h as any).tooltipBgColor ?? hotspotStyleDefaults.tooltipBgColor,
+      tooltipTextColor: (h as any).tooltipTextColor ?? hotspotStyleDefaults.tooltipTextColor,
+      tooltipTextSizePx: (h as any).tooltipTextSizePx ?? hotspotStyleDefaults.tooltipTextSizePx,
+      tooltipOffsetXNorm: (h as any).tooltipOffsetXNorm ?? hotspotStyleDefaults.tooltipOffsetXNorm,
+      tooltipOffsetYNorm: (h as any).tooltipOffsetYNorm ?? hotspotStyleDefaults.tooltipOffsetYNorm,
     }));
   }, [steps, currentRealIndex, hotspotStyleDefaults]);
 

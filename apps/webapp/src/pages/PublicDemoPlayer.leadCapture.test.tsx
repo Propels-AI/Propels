@@ -5,6 +5,7 @@ import PublicDemoPlayer from "./PublicDemoPlayer";
 
 vi.mock("@/lib/api/demos", () => ({
   listPublicDemoItems: vi.fn(),
+  listPrivateDemoItemsPublic: vi.fn(),
   createLeadSubmissionPublic: vi.fn(),
 }));
 
@@ -15,12 +16,17 @@ vi.mock("aws-amplify/storage", () => ({
 const api = async () => await import("@/lib/api/demos");
 const listPublicDemoItems = async () =>
   (await import("@/lib/api/demos")).listPublicDemoItems as unknown as ReturnType<typeof vi.fn>;
+const listPrivateDemoItemsPublic = async () =>
+  (await import("@/lib/api/demos")).listPrivateDemoItemsPublic as unknown as ReturnType<typeof vi.fn>;
 
 const origError = console.error;
 const origWarn = console.warn;
 const origDebug = console.debug;
 
 describe("Public lead capture", () => {
+  beforeEach(async () => {
+    (await listPrivateDemoItemsPublic())!.mockResolvedValue([]);
+  });
   beforeEach(() => {
     vi.restoreAllMocks();
     console.error = vi.fn();
