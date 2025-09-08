@@ -3,11 +3,19 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 vi.mock("aws-amplify/data", () => {
   const generateClient = vi.fn(() => ({
     models: {
-      Demo: {
+      // Private single-table model
+      AppData: {
         get: vi.fn(() => ({ data: { ownerId: "owner-A" } })),
       },
-      LeadSubmission: {
+      // Public read model
+      PublicMirror: {
+        get: vi.fn(() => ({ data: { ownerId: "owner-A" } })),
         list: vi.fn(() => ({ data: [] })),
+      },
+      // Public create model for leads
+      LeadIntake: {
+        list: vi.fn(() => ({ data: [] })),
+        create: vi.fn(() => ({ data: { ok: true } })),
       },
     },
   }));

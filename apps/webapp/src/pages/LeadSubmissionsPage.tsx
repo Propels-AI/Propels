@@ -1,37 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useParams } from "react-router-dom";
-import { listLeadSubmissions } from "@/lib/api/demos";
+import { useLeadSubmissions } from "@/lib/api/demos";
 import { ProtectedRoute } from "@/lib/auth/ProtectedRoute";
 
 function LeadSubmissionsPageInner() {
   const { demoId } = useParams();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | undefined>();
-  const [rows, setRows] = useState<any[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (!demoId) return;
-      setLoading(true);
-      setError(undefined);
-      try {
-        const data = await listLeadSubmissions(demoId);
-        if (!cancelled) setRows(data);
-      } catch (e: any) {
-        if (!cancelled) setError(e?.message || "Failed to load leads");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [demoId]);
+  const { data, isLoading, error } = useLeadSubmissions(demoId || "");
 
   // Normalize rows: parse fields if it is a JSON string
   const normalizedRows = useMemo(() => {
-    return rows.map((r) => {
+    return (data ?? []).map((r) => {
       let parsed = r?.fields;
       if (typeof parsed === "string") {
         try {
@@ -40,7 +18,7 @@ function LeadSubmissionsPageInner() {
       }
       return { ...r, fields: parsed };
     });
-  }, [rows]);
+  }, [data]);
 
   const columns = useMemo(() => {
     // Base columns that we always consider
@@ -129,8 +107,8 @@ function LeadSubmissionsPageInner() {
   };
 
   if (!demoId) return <div className="p-6">Missing demoId</div>;
-  if (loading) return <div className="p-6">Loading…</div>;
-  if (error) return <div className="p-6 text-red-600">{error}</div>;
+  if (isLoading) return <div className="p-6">Loading…</div>;
+  if (error) return <div className="p-6 text-red-600">{(error as any)?.message || String(error)}</div>;
 
   return (
     <div className="p-6">
@@ -168,7 +146,7 @@ function LeadSubmissionsPageInner() {
                 </tr>
               );
             })}
-            {rows.length === 0 && (
+            {(data?.length ?? 0) === 0 && (
               <tr>
                 <td className="p-4 text-gray-500" colSpan={10}>
                   No leads captured yet.

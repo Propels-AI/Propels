@@ -348,7 +348,7 @@ export function DemoEditorPage() {
   }, []);
 
   const handleSave = async () => {
-    const { leadStepIndex: leadIdxDraft } = extractLeadConfig(steps);
+    const { leadStepIndex: leadIdxDraft } = extractLeadConfig(steps, leadFormConfig);
     const draft: EditedDraft = {
       draftId: (crypto as any).randomUUID ? (crypto as any).randomUUID() : `${Date.now()}`,
       createdAt: new Date().toISOString(),
@@ -380,7 +380,7 @@ export function DemoEditorPage() {
         });
         await Promise.all(updates);
         try {
-          const extracted = extractLeadConfig(steps);
+          const extracted = extractLeadConfig(steps, leadFormConfig);
           const leadConfigToSave: any = (extracted as any)?.leadConfig ?? (leadFormConfig as any);
           console.info("[Editor Save] lead config about to persist", {
             leadStepIndex: extracted.leadStepIndex,
@@ -409,7 +409,7 @@ export function DemoEditorPage() {
         }
         if (demoStatus === "PUBLISHED") {
           try {
-            const extractedNow = extractLeadConfig(steps);
+            const extractedNow = extractLeadConfig(steps, leadFormConfig);
             const leadConfigToMirror: any = (extractedNow as any)?.leadConfig ?? (leadFormConfig as any);
             const mirrorPayload = {
               name: demoName || undefined,
@@ -722,7 +722,7 @@ export function DemoEditorPage() {
               setTogglingStatus(true);
               if (next === "PUBLISHED") {
                 try {
-                  const { leadStepIndex, leadConfig } = extractLeadConfig(steps);
+                  const { leadStepIndex, leadConfig } = extractLeadConfig(steps, leadFormConfig);
                   if (leadStepIndex !== null) {
                     await updateDemoLeadConfig({ demoId: demoIdParam, leadStepIndex, leadConfig: leadConfig as any });
                   } else {
@@ -732,7 +732,9 @@ export function DemoEditorPage() {
                   console.error("Failed to persist lead config before publish (non-fatal)", e);
                 }
               }
+              console.info("[editor] calling setDemoStatus with:", { demoId: demoIdParam, status: next });
               await setDemoStatus(demoIdParam, next);
+              console.info("[editor] setDemoStatus completed for:", { demoId: demoIdParam, status: next });
               setDemoStatusLocal(next);
               if (next === "PUBLISHED") setShareOpen(true);
             } catch (e) {

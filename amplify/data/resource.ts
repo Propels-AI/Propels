@@ -1,41 +1,80 @@
 import { type ClientSchema, a, defineData } from "@aws-amplify/backend";
 
+// - AppData (private, userPool): single-table modeling for owner data (demos, steps, leads, templates, settings, versions)
+//   PK/SK with rich prefixes, GSIs for owner listings. Strictly NO public access on this table.
+// - PublicMirror (public, apiKey read-only): minimal mirror of demos for public consumption (embed/player)
+// - LeadIntake (public, apiKey create-only): write path for anonymous/public lead submissions
+
 const schema = a.schema({
-  Demo: a
+  AppData: a
     .model({
-      demoId: a.string().required(),
-      itemSK: a.string().required(),
-      ownerId: a.string().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
-      name: a.string().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
+      // Core keys
+      PK: a.string().required(),
+      SK: a.string().required(),
+
+      // Common attributes
+      entityType: a.string(),
+      ownerId: a.string(),
+      createdAt: a.datetime(),
+      updatedAt: a.datetime(),
+
+      // Demo metadata fields
+      name: a.string(),
       status: a.enum(["DRAFT", "PUBLISHED"]),
-      createdAt: a.datetime().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
-      updatedAt: a.datetime().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
-      statusUpdatedAt: a.string().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
-      s3Key: a.string().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
-      hotspots: a.json().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
-      hotspotStyle: a.json().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
-      order: a.integer().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
-      pageUrl: a.string().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
-      thumbnailS3Key: a.string().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
-      // Lead capture (demo-level virtual step)
-      leadStepIndex: a.integer().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
-      // Future-proof flexible lead configuration (style, colors, blur, etc.)
-      // Example: { style: "solid" | "blur" | "dim", bg: "white" | "black" | "#RRGGBB", opacity: 0.0-1.0 }
-      leadConfig: a.json().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
-      // If true, this demo uses the owner's global lead settings instead of local leadConfig
-      leadUseGlobal: a.boolean().authorization((allow) => [allow.ownerDefinedIn("ownerId")]),
+      statusUpdatedAt: a.string(),
+      leadStepIndex: a.integer(),
+      leadConfig: a.json(),
+      leadUseGlobal: a.boolean(),
+      hotspotStyle: a.json(),
+
+      // Demo step fields
+      s3Key: a.string(),
+      thumbnailS3Key: a.string(),
+      pageUrl: a.string(),
+      order: a.integer(),
+      hotspots: a.json(),
+
+      // Lead submission fields (owner-readable copy)
+      email: a.string(),
+      fields: a.json(),
+      stepIndex: a.integer(),
+      source: a.string(),
+      userAgent: a.string(),
+      referrer: a.string(),
+
+      // Owner settings/templates
+      templateId: a.string(),
+      nameTemplate: a.string(),
+
+      // GSI attributes
+      GSI1PK: a.string(),
+      GSI1SK: a.string(),
+      GSI2PK: a.string(),
+      GSI2SK: a.string(),
+      GSI3PK: a.string(),
+      GSI3SK: a.string(),
+
+      // Versioning helper
+      currentVersion: a.integer(),
     })
-    .identifier(["demoId", "itemSK"])
-    .secondaryIndexes((index) => [index("ownerId").sortKeys(["statusUpdatedAt"]).name("byOwnerStatus")])
+    .identifier(["PK", "SK"]) // single-table keys
+    .secondaryIndexes((index) => [
+      index("GSI1PK").sortKeys(["GSI1SK"]).name("GSI1_byOwnerStatus"),
+      index("GSI2PK").sortKeys(["GSI2SK"]).name("GSI2_leadsByOwner"),
+      index("GSI3PK").sortKeys(["GSI3SK"]).name("GSI3_templatesByOwner"),
+    ])
     .authorization((allow) => [
       allow.ownerDefinedIn("ownerId").to(["create", "read", "update", "delete"]),
-      allow.publicApiKey().to(["read"]),
+      // NO public access here to ensure strict least-privilege on owner data
     ]),
 
-  PublicDemo: a
+  // PUBLIC read-only mirror for demos
+  PublicMirror: a
     .model({
-      demoId: a.string().required(),
-      itemSK: a.string().required(),
+      PK: a.string().required(), // "PUB#<demoId>"
+      SK: a.string().required(), // "METADATA" | "STEP#..."
+
+      // minimal mirror attributes
       ownerId: a.string(),
       name: a.string(),
       createdAt: a.datetime(),
@@ -46,46 +85,20 @@ const schema = a.schema({
       pageUrl: a.string(),
       hotspots: a.json(),
       hotspotStyle: a.json(),
-      // Public mirror of lead config (demo-level)
       leadStepIndex: a.integer(),
-      // Public mirror of flexible config
       leadConfig: a.json(),
     })
-    .identifier(["demoId", "itemSK"])
+    .identifier(["PK", "SK"])
     .authorization((allow) => [
-      allow.publicApiKey().to(["read"]),
-      allow.ownerDefinedIn("ownerId").to(["create", "update", "delete"]),
+      allow.publicApiKey().to(["read"]), // public can only read
+      allow.ownerDefinedIn("ownerId").to(["create", "update", "delete"]), // owners manage the mirror
     ]),
 
-  // Global lead settings per owner
-  LeadSettings: a
-    .model({
-      ownerId: a.string().required(),
-      leadConfig: a.json(),
-      updatedAt: a.datetime(),
-    })
-    .identifier(["ownerId"])
-    .authorization((allow) => [allow.ownerDefinedIn("ownerId").to(["create", "read", "update", "delete"])]),
-
-  // Owner-scoped reusable lead form templates
-  LeadTemplate: a
-    .model({
-      ownerId: a.string().required(),
-      templateId: a.string().required(),
-      name: a.string().required(),
-      leadConfig: a.json(),
-      createdAt: a.datetime(),
-      updatedAt: a.datetime(),
-    })
-    .identifier(["ownerId", "templateId"])
-    .secondaryIndexes((index) => [index("ownerId").sortKeys(["updatedAt"]).name("templatesByOwner")])
-    .authorization((allow) => [allow.ownerDefinedIn("ownerId").to(["create", "read", "update", "delete"])]),
-
-  // Captured lead submissions (owner-readable)
-  LeadSubmission: a
+  // PUBLIC create path for leads (anonymous submissions)
+  LeadIntake: a
     .model({
       demoId: a.string().required(),
-      itemSK: a.string().required(), // LEAD#<iso>
+      itemSK: a.string().required(), // "LEAD#<ISO>"
       ownerId: a.string(),
       email: a.string(),
       fields: a.json(),
@@ -96,22 +109,12 @@ const schema = a.schema({
       referrer: a.string(),
       createdAt: a.datetime(),
     })
-    .identifier(["demoId", "itemSK"])
+    .identifier(["demoId", "itemSK"]) // simple, isolated write path
     .secondaryIndexes((index) => [index("ownerId").sortKeys(["createdAt"]).name("leadsByOwner")])
     .authorization((allow) => [
-      allow.publicApiKey().to(["create"]),
-      allow.ownerDefinedIn("ownerId").to(["read", "delete"]),
+      allow.publicApiKey().to(["create"]), // public create only
+      allow.ownerDefinedIn("ownerId").to(["read", "delete"]), // owner can read/delete their leads
     ]),
-
-  Waitlist: a
-    .model({
-      source: a.string().required(),
-      timestampEmail: a.string().required(),
-      email: a.string().required(),
-      createdAt: a.datetime(),
-    })
-    .identifier(["source", "timestampEmail"])
-    .authorization((allow) => [allow.publicApiKey().to(["create"])]),
 });
 
 export type Schema = ClientSchema<typeof schema>;
