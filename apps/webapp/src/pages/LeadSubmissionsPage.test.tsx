@@ -9,11 +9,15 @@ vi.mock("@/lib/providers/AuthProvider", () => ({
 }));
 
 vi.mock("@/lib/api/demos", () => ({
-  listLeadSubmissions: vi.fn(),
+  useLeadSubmissions: vi.fn(() => ({
+    data: [],
+    isLoading: false,
+    error: null,
+  })),
 }));
 
-const listLeadSubmissions = async () =>
-  (await import("@/lib/api/demos")).listLeadSubmissions as unknown as ReturnType<typeof vi.fn>;
+const useLeadSubmissions = async () =>
+  (await import("@/lib/api/demos")).useLeadSubmissions as unknown as ReturnType<typeof vi.fn>;
 
 describe("LeadSubmissionsPage", () => {
   const origError = console.error;
@@ -39,7 +43,8 @@ describe("LeadSubmissionsPage", () => {
   };
 
   it("shows only columns that have any values", async () => {
-    (await listLeadSubmissions())!.mockResolvedValue([
+    (await useLeadSubmissions())!.mockReturnValue({
+      data: [
       {
         demoId: "demo-1",
         itemSK: "LEAD#1",
@@ -59,7 +64,10 @@ describe("LeadSubmissionsPage", () => {
         source: "embed",
         createdAt: "2025-01-02T00:00:00.000Z",
       },
-    ]);
+    ],
+    isLoading: false,
+    error: null,
+  });
 
     renderAt("demo-1");
 

@@ -1,13 +1,65 @@
 import { generateClient } from "aws-amplify/data";
 import { getCurrentUser, fetchAuthSession } from "aws-amplify/auth";
 
-function getModels() {
+const pkDemo = (demoId: string) => `DEMO#${demoId}`;
+const pkPub = (demoId: string) => `PUB#${demoId}`;
+const pkOwner = (ownerId: string) => `OWNER#${ownerId}`;
+
+export async function getOwnerId(): Promise<string | undefined> {
+  try {
+    const user = await getCurrentUser();
+    return (user as any)?.username || (user as any)?.userId || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function getPrivateModels() {
   const client = generateClient({ authMode: "userPool" as any });
   const models: any = (client as any).models;
   if (!models) {
-    throw new Error("Amplify Data models unavailable after generateClient(). Check Amplify.configure outputs.data");
+    throw new Error("Amplify Data models unavailable after generateClient() for private models");
   }
-  return models;
+  if (!(models as any).AppData) {
+    throw new Error("AppData model unavailable. Did you push the new schema?");
+  }
+  return models as any;
+}
+
+function getPublicMirrorWriteModels() {
+  const client = generateClient({ authMode: "userPool" as any });
+  const models: any = (client as any).models;
+  if (!models || !(models as any).PublicMirror) {
+    throw new Error("PublicMirror model unavailable for write. Did you push the new schema?");
+  }
+  return models as any;
+}
+
+function getPublicMirrorModels() {
+  const client = generateClient({ authMode: "apiKey" as any });
+  const models: any = (client as any).models;
+  if (!models || !(models as any).PublicMirror) {
+    throw new Error("PublicMirror model unavailable. Did you push the new schema?");
+  }
+  return models as any;
+}
+
+function getLeadIntakeWriteModels() {
+  const client = generateClient({ authMode: "apiKey" as any });
+  const models: any = (client as any).models;
+  if (!models || !(models as any).LeadIntake) {
+    throw new Error("LeadIntake model unavailable. Did you push the new schema?");
+  }
+  return models as any;
+}
+
+function getLeadIntakeReadModels() {
+  const client = generateClient({ authMode: "userPool" as any });
+  const models: any = (client as any).models;
+  if (!models || !(models as any).LeadIntake) {
+    throw new Error("LeadIntake model unavailable. Did you push the new schema?");
+  }
+  return models as any;
 }
 
 export async function updateDemoStyleConfig(params: {
@@ -21,15 +73,15 @@ export async function updateDemoStyleConfig(params: {
   };
 }): Promise<void> {
   const { demoId, hotspotStyle } = params;
-  const models = getModels();
+  const models = getPrivateModels();
   const payload: any = {
-    demoId,
-    itemSK: "METADATA",
+    PK: pkDemo(demoId),
+    SK: "METADATA",
   };
   try {
     payload.hotspotStyle = JSON.stringify(hotspotStyle);
   } catch (e) {}
-  const res = await models.Demo.update(payload);
+  const res = await models.AppData.update(payload);
   if (!res?.data || (res as any)?.errors?.length) {
     throw new Error(
       `updateDemoStyleConfig failed: ${(res as any)?.errors?.map((e: any) => e?.message).join(", ") || "no data returned"}`
@@ -44,12 +96,8 @@ export async function updateDemoLeadConfig(params: {
   leadUseGlobal?: boolean;
 }): Promise<void> {
   const { demoId, leadStepIndex, leadConfig, leadUseGlobal } = params;
-  const models = getModels();
-  const payload: any = {
-    demoId,
-    itemSK: "METADATA",
-    leadStepIndex,
-  };
+  const models = getPrivateModels();
+  const payload: any = { PK: pkDemo(demoId), SK: "METADATA", leadStepIndex };
   if (leadConfig !== undefined) {
     try {
       const lc = typeof leadConfig === "string" ? JSON.parse(leadConfig) : leadConfig;
@@ -63,7 +111,7 @@ export async function updateDemoLeadConfig(params: {
   if (typeof leadUseGlobal === "boolean") {
     payload.leadUseGlobal = leadUseGlobal;
   }
-  const res = await models.Demo.update(payload);
+  const res = await models.AppData.update(payload);
   if (!res?.data || (res as any)?.errors?.length) {
     throw new Error(
       `updateDemoLeadConfig failed: ${(res as any)?.errors?.map((e: any) => e?.message).join(", ") || "no data returned"}`
@@ -74,25 +122,24 @@ export async function updateDemoLeadConfig(params: {
 export async function getLeadSettings(): Promise<any | undefined> {
   const ownerId = await getOwnerId();
   if (!ownerId) return undefined;
-  const models = getModels();
-  if (!(models as any).LeadSettings?.get) return undefined;
-  const res = await (models as any).LeadSettings.get({ ownerId });
+  const models = getPrivateModels();
+  const res = await (models as any).AppData.get({ PK: pkOwner(ownerId), SK: "LEADSETTINGS" });
   return (res as any)?.data;
 }
 
 export async function upsertLeadSettings(leadConfig: any): Promise<void> {
   const ownerId = await getOwnerId();
   if (!ownerId) throw new Error("Not signed in");
-  const models = getModels();
-  const payload: any = { ownerId, updatedAt: new Date().toISOString() };
+  const models = getPrivateModels();
+  const payload: any = { PK: pkOwner(ownerId), SK: "LEADSETTINGS", ownerId, updatedAt: new Date().toISOString() };
   try {
     payload.leadConfig = typeof leadConfig === "string" ? leadConfig : JSON.stringify(leadConfig);
   } catch (e) {}
   try {
-    const res = await (models as any).LeadSettings.create(payload);
+    const res = await (models as any).AppData.create(payload);
     if (!(res as any)?.data && (res as any)?.errors?.length) throw new Error("create failed");
   } catch {
-    const upd = await (models as any).LeadSettings.update(payload);
+    const upd = await (models as any).AppData.update(payload);
     if (!(upd as any)?.data && (upd as any)?.errors?.length) throw new Error("update failed");
   }
 }
@@ -102,18 +149,20 @@ export async function listLeadTemplates(): Promise<
 > {
   const ownerId = await getOwnerId();
   if (!ownerId) return [];
-  const models = getModels();
-  if (!(models as any).LeadTemplate?.list) return [];
+  const models = getPrivateModels();
   let items: any[] = [];
   let nextToken: any = undefined;
   do {
-    const res = await (models as any).LeadTemplate.list({ filter: { ownerId: { eq: ownerId } }, nextToken });
+    const res = await (models as any).AppData.list({
+      filter: { PK: { eq: pkOwner(ownerId) }, SK: { beginsWith: "TEMPLATE#" } },
+      nextToken,
+    });
     items = items.concat((res as any)?.data ?? []);
     nextToken = (res as any)?.nextToken;
   } while (nextToken);
   return items.map((i: any) => ({
-    templateId: i.templateId,
-    name: i.name,
+    templateId: i.SK?.split("TEMPLATE#")[1] ?? i.templateId,
+    name: i.nameTemplate ?? i.name,
     leadConfig: i.leadConfig,
     updatedAt: i.updatedAt,
   }));
@@ -122,18 +171,21 @@ export async function listLeadTemplates(): Promise<
 export async function saveLeadTemplate(name: string, leadConfig: any): Promise<void> {
   const ownerId = await getOwnerId();
   if (!ownerId) throw new Error("Not signed in");
-  const models = getModels();
+  const models = getPrivateModels();
   const now = new Date().toISOString();
   const templateId = crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}`;
   const payload: any = {
+    PK: pkOwner(ownerId),
+    SK: `TEMPLATE#${templateId}`,
     ownerId,
-    templateId,
-    name,
+    nameTemplate: name,
     leadConfig: typeof leadConfig === "string" ? leadConfig : JSON.stringify(leadConfig),
     createdAt: now,
     updatedAt: now,
+    GSI3PK: `OWNER#${ownerId}#TEMPLATE`,
+    GSI3SK: `TS#${now}`,
   };
-  const res = await (models as any).LeadTemplate.create(payload);
+  const res = await (models as any).AppData.create(payload);
   if (!(res as any)?.data && (res as any)?.errors?.length) throw new Error("saveLeadTemplate failed");
 }
 
@@ -158,28 +210,17 @@ export async function listLeadSubmissions(demoId: string): Promise<
     (err as any).status = 401;
     throw err;
   }
-
   let demoOwnerId: string | undefined;
   try {
-    const models = getModels();
-    if ((models as any).Demo?.get) {
-      const metaRes = await (models as any).Demo.get({ demoId, itemSK: "METADATA" });
-      demoOwnerId = (metaRes as any)?.data?.ownerId;
-    }
+    const models = getPrivateModels();
+    const metaRes = await (models as any).AppData.get({ PK: pkDemo(demoId), SK: "METADATA" });
+    demoOwnerId = (metaRes as any)?.data?.ownerId;
   } catch {}
   if (!demoOwnerId) {
     try {
-      const pubClient = generateClient({ authMode: "apiKey" as any });
-      const pubModels: any = (pubClient as any).models;
-      if (pubModels?.PublicDemo?.get) {
-        const metaRes = await pubModels.PublicDemo.get({ demoId, itemSK: "METADATA" });
-        demoOwnerId = (metaRes as any)?.data?.ownerId;
-      } else if (pubModels?.PublicDemo?.list) {
-        const listRes = await pubModels.PublicDemo.list({
-          filter: { demoId: { eq: demoId }, itemSK: { eq: "METADATA" } },
-        });
-        demoOwnerId = (listRes as any)?.data?.[0]?.ownerId;
-      }
+      const pubModels = getPublicMirrorModels();
+      const metaRes = await (pubModels as any).PublicMirror.get({ PK: pkPub(demoId), SK: "METADATA" });
+      demoOwnerId = (metaRes as any)?.data?.ownerId;
     } catch {}
   }
   if (!demoOwnerId || demoOwnerId !== currentOwnerId) {
@@ -188,12 +229,11 @@ export async function listLeadSubmissions(demoId: string): Promise<
     throw err;
   }
 
-  const models = getModels();
-  if (!(models as any).LeadSubmission?.list) return [];
+  const li = getLeadIntakeReadModels();
   let items: any[] = [];
   let nextToken: any = undefined;
   do {
-    const res = await (models as any).LeadSubmission.list({ filter: { demoId: { eq: demoId } }, nextToken });
+    const res = await (li as any).LeadIntake.list({ filter: { demoId: { eq: demoId } }, nextToken });
     const page = (res as any)?.data ?? [];
     items = items.concat(page);
     nextToken = (res as any)?.nextToken;
@@ -215,43 +255,15 @@ export async function createLeadSubmissionPublic(params: {
   const now = params.createdAt || new Date().toISOString();
   const itemSK = `LEAD#${now}`;
 
-  try {
-    const client = generateClient({ authMode: "apiKey" as any });
-    const mutations: any = (client as any).mutations || {};
-    if (mutations?.createLeadSubmission) {
-      const res = await mutations.createLeadSubmission({
-        demoId: params.demoId,
-        email: params.email,
-        fields: params.fields ? JSON.stringify(params.fields) : undefined,
-        pageUrl: params.pageUrl,
-        stepIndex: params.stepIndex,
-        source: params.source,
-        userAgent: params.userAgent,
-        referrer: params.referrer,
-        itemSK,
-        createdAt: now,
-      });
-      const errs = (res as any)?.errors as any[] | undefined;
-      if (errs && errs.length) throw new Error(errs.map((e: any) => e?.message).join(", "));
-      return;
-    }
-  } catch (e) {}
-
-  const pubClient = generateClient({ authMode: "apiKey" as any });
-  const pubModels: any = (pubClient as any).models;
-  if (!pubModels) throw new Error("Amplify Data models unavailable for public client");
+  const pubModels = getPublicMirrorModels();
   let ownerId: string | undefined;
   try {
-    const metaRes = await pubModels.PublicDemo.get({ demoId: params.demoId, itemSK: "METADATA" });
+    const metaRes = await (pubModels as any).PublicMirror.get({ PK: pkPub(params.demoId), SK: "METADATA" });
     ownerId = (metaRes as any)?.data?.ownerId;
-  } catch {
-    const listRes = await pubModels.PublicDemo.list({
-      filter: { demoId: { eq: params.demoId }, itemSK: { eq: "METADATA" } },
-    });
-    ownerId = (listRes as any)?.data?.[0]?.ownerId;
-  }
+  } catch {}
   if (!ownerId) throw new Error("Lead submission failed: demo not found or owner unavailable");
 
+  const li = getLeadIntakeWriteModels();
   const payload: any = {
     demoId: params.demoId,
     itemSK,
@@ -265,11 +277,26 @@ export async function createLeadSubmissionPublic(params: {
     referrer: params.referrer,
     createdAt: now,
   };
-  Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
+  const sanitizeJson = (v: any) => {
+    try {
+      return v === undefined ? undefined : JSON.parse(JSON.stringify(v));
+    } catch {
+      return undefined;
+    }
+  };
+  const fs = sanitizeJson(payload.fields);
+  if (
+    fs === undefined ||
+    fs === null ||
+    (typeof fs === "object" && !Array.isArray(fs) && Object.keys(fs).length === 0)
+  ) {
+    delete payload.fields;
+  } else {
+    payload.fields = fs;
+  }
+  Object.keys(payload).forEach((k) => (payload[k] === undefined ? delete payload[k] : undefined));
 
-  const models: any = pubModels;
-  if (!models?.LeadSubmission) throw new Error("LeadSubmission model not available");
-  const res = await models.LeadSubmission.create(payload);
+  const res = await (li as any).LeadIntake.create(payload);
   if (!res?.data || (res as any)?.errors?.length) {
     throw new Error(
       `createLeadSubmissionPublic failed: ${(res as any)?.errors?.map((e: any) => e?.message).join(", ") || "no data"}`
@@ -277,36 +304,15 @@ export async function createLeadSubmissionPublic(params: {
   }
 }
 
-function getPublicModels() {
-  const client = generateClient({ authMode: "apiKey" as any });
-  const models: any = (client as any).models;
-  if (!models) {
-    throw new Error(
-      "Amplify Data models unavailable after generateClient() for public. Check Amplify.configure outputs.data"
-    );
-  }
-  return models;
-}
-
-function getPublicDemoModelsForPrivate() {
-  const client = generateClient({ authMode: "apiKey" as any });
-  const models: any = (client as any).models;
-  if (!models) {
-    throw new Error("Amplify Data models unavailable for public Demo client");
-  }
-  return models;
-}
-
 export async function listPrivateDemoItemsPublic(demoId: string): Promise<any[]> {
-  const models = getPublicDemoModelsForPrivate();
-  if (!models.Demo) {
-    throw new Error("Demo model is not available. Backend schema not deployed or outputs not updated.");
-  }
+  const models = getPublicMirrorModels();
   let items: any[] = [];
   let nextToken: any = undefined;
   do {
-    const res = await models.Demo.list({ filter: { demoId: { eq: demoId } }, nextToken });
-    const page = (res as any)?.data ?? [];
+    const res = await (models as any).PublicMirror.list({ filter: { PK: { eq: pkPub(demoId) } }, nextToken });
+    const page = ((res as any)?.data ?? []).map((it: any) =>
+      it && it.itemSK === undefined && typeof it.SK === "string" ? { ...it, itemSK: it.SK } : it
+    );
     items = items.concat(page);
     nextToken = (res as any)?.nextToken;
   } while (nextToken);
@@ -314,6 +320,16 @@ export async function listPrivateDemoItemsPublic(demoId: string): Promise<any[]>
     if (typeof (it as any).hotspots === "string") {
       try {
         (it as any).hotspots = JSON.parse((it as any).hotspots);
+      } catch {}
+    }
+    if (typeof (it as any).leadConfig === "string") {
+      try {
+        (it as any).leadConfig = JSON.parse((it as any).leadConfig);
+      } catch {}
+    }
+    if (typeof (it as any).hotspotStyle === "string") {
+      try {
+        (it as any).hotspotStyle = JSON.parse((it as any).hotspotStyle);
       } catch {}
     }
   }
@@ -330,57 +346,113 @@ export async function createPublicDemoMetadata(params: {
   leadConfig?: any;
   hotspotStyle?: any;
 }): Promise<void> {
-  const models = getModels();
-  if (!models.PublicDemo) {
-    throw new Error(
-      "PublicDemo model is not available. Did you run 'amplify push' and regenerate amplify_outputs.json?"
-    );
-  }
+  const models = getPublicMirrorWriteModels();
+  console.info("[mirror] PublicMirror models:", models);
   let ownerId = params.ownerId;
   if (!ownerId) {
     try {
+      await fetchAuthSession();
       const u = await getCurrentUser();
       ownerId = (u as any)?.username || (u as any)?.userId;
     } catch {}
   }
-  const payload: any = {
-    demoId: params.demoId,
-    itemSK: "METADATA",
+  if (!ownerId) {
+    throw new Error("createPublicDemoMetadata requires authenticated ownerId");
+  }
+  console.info("[mirror] Using ownerId:", ownerId);
+  // Load existing to decide between update-first or create
+  let existing: any = undefined;
+  try {
+    const readModels = getPublicMirrorModels();
+    const ex = await (readModels as any).PublicMirror.get({ PK: pkPub(params.demoId), SK: "METADATA" });
+    existing = (ex as any)?.data ?? undefined;
+  } catch {}
+
+  const base: any = {
+    PK: pkPub(params.demoId),
+    SK: "METADATA",
     ownerId,
-    name: params.name,
-    createdAt: params.createdAt ?? new Date().toISOString(),
+    name: params.name ?? existing?.name,
+    createdAt: params.createdAt ?? existing?.createdAt ?? new Date().toISOString(),
     updatedAt: params.updatedAt ?? new Date().toISOString(),
   };
-  Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
-  if (params.leadStepIndex !== undefined) payload.leadStepIndex = params.leadStepIndex;
-  if (params.leadConfig !== undefined) {
+  if (params.leadStepIndex !== undefined) base.leadStepIndex = params.leadStepIndex;
+  else if (existing && existing.leadStepIndex !== undefined) base.leadStepIndex = existing.leadStepIndex;
+  if (params.leadConfig !== undefined) base.leadConfig = params.leadConfig;
+  else if (existing && existing.leadConfig !== undefined) base.leadConfig = existing.leadConfig;
+  if (params.hotspotStyle !== undefined) base.hotspotStyle = params.hotspotStyle;
+  else if (existing && existing.hotspotStyle !== undefined) base.hotspotStyle = existing.hotspotStyle;
+
+  if (base.name === null) delete base.name;
+  if (base.leadStepIndex === null) delete base.leadStepIndex;
+  const leadProvided = Object.prototype.hasOwnProperty.call(params, "leadConfig");
+  const styleProvided = Object.prototype.hasOwnProperty.call(params, "hotspotStyle");
+  const sanitizeJson = (v: any) => {
     try {
-      payload.leadConfig =
-        typeof params.leadConfig === "string" ? params.leadConfig : JSON.stringify(params.leadConfig);
-    } catch (e) {}
+      return v === undefined ? undefined : JSON.parse(JSON.stringify(v));
+    } catch {
+      return undefined;
+    }
+  };
+  const lc = sanitizeJson(base.leadConfig);
+  if (leadProvided) {
+    if (lc === undefined || lc === null) {
+      delete base.leadConfig;
+    } else {
+      base.leadConfig = typeof base.leadConfig === "string" ? base.leadConfig : JSON.stringify(lc);
+    }
+  } else {
+    if (
+      lc === undefined ||
+      lc === null ||
+      (typeof lc === "object" && !Array.isArray(lc) && Object.keys(lc).length === 0)
+    ) {
+      delete base.leadConfig;
+    } else {
+      base.leadConfig = typeof base.leadConfig === "string" ? base.leadConfig : JSON.stringify(lc);
+    }
   }
-  if (params.hotspotStyle !== undefined) {
-    try {
-      payload.hotspotStyle =
-        typeof params.hotspotStyle === "string" ? params.hotspotStyle : JSON.stringify(params.hotspotStyle);
-    } catch (e) {}
+  const hs = sanitizeJson(base.hotspotStyle);
+  if (styleProvided) {
+    if (hs === undefined || hs === null) {
+      delete base.hotspotStyle;
+    } else {
+      base.hotspotStyle = typeof base.hotspotStyle === "string" ? base.hotspotStyle : JSON.stringify(hs);
+    }
+  } else {
+    if (
+      hs === undefined ||
+      hs === null ||
+      (typeof hs === "object" && !Array.isArray(hs) && Object.keys(hs).length === 0)
+    ) {
+      delete base.hotspotStyle;
+    } else {
+      base.hotspotStyle = typeof base.hotspotStyle === "string" ? base.hotspotStyle : JSON.stringify(hs);
+    }
+  }
+  Object.keys(base).forEach((k) => (base[k] === undefined ? delete base[k] : undefined));
+
+  if (existing) {
+    const merged = { ...existing, ...base } as any;
+    console.info("[mirror] Updating PublicMirror METADATA with merged payload:", merged);
+    const upd = await (models as any).PublicMirror.update(merged);
+    console.info("[mirror] PublicMirror.update response:", upd);
+    const uerrs = (upd as any)?.errors as any[] | undefined;
+    if (!upd?.data || (uerrs && uerrs.length)) {
+      throw new Error(
+        `createPublicDemoMetadata->update failed: ${uerrs?.map((e: any) => e?.message).join(", ") || "no data returned"}`
+      );
+    }
+    return;
   }
 
-  const res = await models.PublicDemo.create(payload);
+  console.info("[mirror] Creating PublicMirror METADATA with payload:", base);
+  const res = await (models as any).PublicMirror.create(base);
+  console.info("[mirror] PublicMirror.create response:", res);
   const errs = (res as any)?.errors as any[] | undefined;
   if (!res?.data || (errs && errs.length)) {
     const message = errs?.map((e: any) => e?.message).join(", ") || "no data returned";
-    if (/ConditionalCheckFailed/i.test(message) || /conditional request failed/i.test(message)) {
-      const upd = await models.PublicDemo.update(payload);
-      if (!upd?.data || (upd as any)?.errors?.length) {
-        throw new Error(
-          `createPublicDemoMetadata->update fallback failed: ${
-            (upd as any)?.errors?.map((e: any) => e?.message).join(", ") || "no data returned"
-          }`
-        );
-      }
-      return;
-    }
+    console.error("[mirror] PublicMirror.create failed:", message, errs);
     throw new Error(`createPublicDemoMetadata failed: ${message}`);
   }
 }
@@ -395,27 +467,27 @@ export async function createPublicDemoStep(params: {
   hotspots?: any;
   ownerId?: string;
 }): Promise<void> {
-  const models = getModels();
-  if (!models.PublicDemo) {
-    throw new Error(
-      "PublicDemo model is not available. Did you run 'amplify push' and regenerate amplify_outputs.json?"
-    );
-  }
+  const models = getPublicMirrorWriteModels();
   let ownerId = params.ownerId;
   if (!ownerId) {
     try {
+      await fetchAuthSession();
       const me = await getCurrentUser();
       ownerId = (me as any)?.userId || (me as any)?.username;
     } catch {
       // ignore
     }
   }
+  if (!ownerId) {
+    throw new Error("createPublicDemoStep requires authenticated ownerId");
+  }
   const payload: any = {
-    demoId: params.demoId,
-    itemSK: `STEP#${params.stepId}`,
+    PK: pkPub(params.demoId),
+    SK: `STEP#${params.stepId}`,
     s3Key: params.s3Key,
     pageUrl: params.pageUrl,
     order: params.order,
+    thumbnailS3Key: params.thumbnailS3Key,
     hotspots: Array.isArray(params.hotspots)
       ? JSON.stringify(params.hotspots)
       : params.hotspots && typeof params.hotspots === "object"
@@ -426,12 +498,24 @@ export async function createPublicDemoStep(params: {
     ownerId,
   };
   Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
-  const res = await models.PublicDemo.create(payload);
+  const res = await (models as any).PublicMirror.create(payload);
   const errs = (res as any)?.errors as any[] | undefined;
   if (!res?.data || (errs && errs.length)) {
     const message = errs?.map((e: any) => e?.message).join(", ") || "no data returned";
-    if (/ConditionalCheckFailed/i.test(message)) {
-      const upd = await models.PublicDemo.update(payload);
+    // Handle both GraphQL-style and DynamoDB-style conditional errors
+    if (/ConditionalCheckFailed/i.test(message) || /conditional request failed/i.test(message)) {
+      // Preserve existing fields when updating to avoid dropping image/pageUrl/ownerId
+      let prev: any = {};
+      try {
+        const readModels = getPublicMirrorModels();
+        const ex = await (readModels as any).PublicMirror.get({
+          PK: pkPub(params.demoId),
+          SK: `STEP#${params.stepId}`,
+        });
+        prev = (ex as any)?.data ?? {};
+      } catch {}
+      const merged = { ...prev, ...payload } as any;
+      const upd = await (models as any).PublicMirror.update(merged);
       if (!upd?.data || (upd as any)?.errors?.length) {
         throw new Error(
           `createPublicDemoStep->update fallback failed: ${
@@ -446,15 +530,14 @@ export async function createPublicDemoStep(params: {
 }
 
 export async function listPublicDemoItems(demoId: string) {
-  const models = getPublicModels();
-  if (!models.PublicDemo) {
-    throw new Error("PublicDemo model is not available. Backend schema not deployed or outputs not updated.");
-  }
+  const models = getPublicMirrorModels();
   let items: any[] = [];
   let nextToken: any = undefined;
   do {
-    const res = await models.PublicDemo.list({ filter: { demoId: { eq: demoId } }, nextToken });
-    const page = (res as any)?.data ?? [];
+    const res = await (models as any).PublicMirror.list({ filter: { PK: { eq: pkPub(demoId) } }, nextToken });
+    const page = ((res as any)?.data ?? []).map((it: any) =>
+      it && it.itemSK === undefined && typeof it.SK === "string" ? { ...it, itemSK: it.SK } : it
+    );
     items = items.concat(page);
     nextToken = (res as any)?.nextToken;
   } while (nextToken);
@@ -464,27 +547,34 @@ export async function listPublicDemoItems(demoId: string) {
         (it as any).hotspots = JSON.parse((it as any).hotspots);
       } catch {}
     }
+    if (typeof (it as any).leadConfig === "string") {
+      try {
+        (it as any).leadConfig = JSON.parse((it as any).leadConfig);
+      } catch {}
+    }
+    if (typeof (it as any).hotspotStyle === "string") {
+      try {
+        (it as any).hotspotStyle = JSON.parse((it as any).hotspotStyle);
+      } catch {}
+    }
   }
   return items;
 }
 
 export async function deletePublicDemoItems(demoId: string) {
-  const models = getPublicModels();
-  if (!models.PublicDemo) {
-    throw new Error("PublicDemo model is not available. Backend schema not deployed or outputs not updated.");
-  }
-  const listRes = await models.PublicDemo.list({ filter: { demoId: { eq: demoId } } });
+  const readModels = getPublicMirrorModels();
+  const listRes = await (readModels as any).PublicMirror.list({ filter: { PK: { eq: pkPub(demoId) } } });
   const items: any[] = listRes?.data || [];
   for (const it of items) {
-    await models.PublicDemo.delete({ demoId: it.demoId, itemSK: it.itemSK });
+    const writeModels = getPublicMirrorWriteModels();
+    await (writeModels as any).PublicMirror.delete({ PK: it.PK, SK: it.SK });
   }
 }
 
 export async function hasPublicMirror(demoId: string): Promise<boolean> {
   try {
-    const models = getPublicModels();
-    if (!models.PublicDemo) return false;
-    const res = await models.PublicDemo.list({ filter: { demoId: { eq: demoId } } });
+    const models = getPublicMirrorModels();
+    const res = await (models as any).PublicMirror.list({ filter: { PK: { eq: pkPub(demoId) } } });
     const items = (res as any)?.data ?? [];
     return items.length > 0;
   } catch {
@@ -501,7 +591,21 @@ export async function mirrorDemoToPublic(
   if (!Array.isArray(items) || items.length === 0) {
     return;
   }
-  const meta = items.find((it: any) => it.itemSK === "METADATA");
+  let meta = items.find(
+    (it: any) =>
+      (typeof it.SK === "string" && it.SK === "METADATA") || (typeof it.itemSK === "string" && it.itemSK === "METADATA")
+  );
+  if (!meta) {
+    // Fallback to a direct read in case list results didn't include METADATA
+    try {
+      const models = getPrivateModels();
+      const res = await (models as any).AppData.get({ PK: pkDemo(demoId), SK: "METADATA" });
+      meta = (res as any)?.data ?? undefined;
+      console.info("[mirror/save] fallback METADATA read:", meta ? { name: meta.name } : null);
+    } catch (e) {
+      console.warn("[mirror/save] fallback METADATA read failed", e);
+    }
+  }
   if (meta) {
     let effectiveLeadConfig: any =
       overrides && "leadConfig" in overrides ? overrides.leadConfig : (meta as any).leadConfig;
@@ -523,38 +627,51 @@ export async function mirrorDemoToPublic(
     });
   } else {
   }
-  const steps = items.filter((it: any) => typeof it.itemSK === "string" && it.itemSK.startsWith("STEP#"));
+  const steps = items.filter(
+    (it: any) =>
+      (typeof it.SK === "string" && it.SK.startsWith("STEP#")) ||
+      (typeof it.itemSK === "string" && it.itemSK.startsWith("STEP#"))
+  );
   for (const step of steps) {
+    // Fetch freshest version of the step to avoid eventual-consistency from list
+    let freshStep: any = step;
+    try {
+      const models = getPrivateModels();
+      const sk = (step.SK ?? step.itemSK) as string;
+      const direct = await (models as any).AppData.get({ PK: pkDemo(demoId), SK: sk });
+      freshStep = (direct as any)?.data ?? step;
+    } catch {}
+
     let hotspots: any = undefined;
-    if (typeof step.hotspots === "string") {
+    if (typeof freshStep.hotspots === "string") {
       try {
-        hotspots = JSON.parse(step.hotspots);
+        hotspots = JSON.parse(freshStep.hotspots);
       } catch {}
-    } else if (step.hotspots) {
-      hotspots = step.hotspots;
+    } else if (freshStep.hotspots) {
+      hotspots = freshStep.hotspots;
     }
     await createPublicDemoStep({
       demoId,
-      stepId: step.itemSK.substring("STEP#".length),
-      s3Key: step.s3Key,
-      order: step.order,
-      pageUrl: step.pageUrl,
-      thumbnailS3Key: step.thumbnailS3Key,
+      stepId: (freshStep.SK ?? freshStep.itemSK).substring("STEP#".length),
+      s3Key: freshStep.s3Key,
+      order: freshStep.order,
+      pageUrl: freshStep.pageUrl,
+      thumbnailS3Key: freshStep.thumbnailS3Key,
       hotspots,
     });
   }
 }
 
 export async function renameDemo(demoId: string, name: string): Promise<void> {
-  const models = getModels();
+  const models = getPrivateModels();
   const now = new Date().toISOString();
   const payload = {
-    demoId,
-    itemSK: "METADATA",
+    PK: pkDemo(demoId),
+    SK: "METADATA",
     name,
     updatedAt: now,
   } as any;
-  const res = await models.Demo.update(payload);
+  const res = await (models as any).AppData.update(payload);
   if (!res?.data || (res as any)?.errors?.length) {
     throw new Error(
       `renameDemo failed: ${(res as any)?.errors?.map((e: any) => e?.message).join(", ") || "no data returned"}`
@@ -563,27 +680,58 @@ export async function renameDemo(demoId: string, name: string): Promise<void> {
 }
 
 export async function setDemoStatus(demoId: string, status: "DRAFT" | "PUBLISHED"): Promise<void> {
-  const models = getModels();
+  const models = getPrivateModels();
   const now = new Date().toISOString();
   const payload = {
-    demoId,
-    itemSK: "METADATA",
+    PK: pkDemo(demoId),
+    SK: "METADATA",
     status,
     statusUpdatedAt: now,
     updatedAt: now,
+    GSI1PK: `OWNER#${await getOwnerId()}#DEMO`,
+    GSI1SK: `STATUS#${status}#TS#${now}`,
   } as any;
-  const res = await models.Demo.update(payload);
+  const res = await (models as any).AppData.update(payload);
   if (!res?.data || (res as any)?.errors?.length) {
     throw new Error(
       `setDemoStatus failed: ${(res as any)?.errors?.map((e: any) => e?.message).join(", ") || "no data returned"}`
     );
   }
 
+  console.info("[setDemoStatus] AppData update completed, now starting mirror process");
+  console.info("[setDemoStatus] entering try block, status:", status);
   try {
     if (status === "PUBLISHED") {
+      console.info("[mirror] starting mirror for", demoId);
       const items = await listDemoItems(demoId);
-      if (!Array.isArray(items)) return;
-      const metadata = items.find((it: any) => it.itemSK === "METADATA");
+      console.info("[mirror] listDemoItems returned:", items);
+      if (!Array.isArray(items)) {
+        console.error("[mirror] items is not an array:", items);
+        return;
+      }
+      console.info(
+        "[mirror] items found:",
+        items.map((it: any) => ({ SK: it.SK, itemSK: it.itemSK, name: it.name }))
+      );
+      let metadata = items.find((it: any) => it?.itemSK === "METADATA" || it?.SK === "METADATA");
+      console.info(
+        "[mirror] metadata found:",
+        metadata ? { name: (metadata as any).name, hotspotStyle: (metadata as any).hotspotStyle } : null
+      );
+      if (!metadata) {
+        try {
+          console.info("[mirror] METADATA not in list; falling back to direct read from AppData");
+          const readModels = getPrivateModels();
+          const direct = await (readModels as any).AppData.get({ PK: pkDemo(demoId), SK: "METADATA" });
+          metadata = (direct as any)?.data ?? undefined;
+          console.info(
+            "[mirror] fallback METADATA:",
+            metadata ? { name: (metadata as any).name, hotspotStyle: (metadata as any).hotspotStyle } : null
+          );
+        } catch (e) {
+          console.error("[mirror] fallback read failed", e);
+        }
+      }
       if (metadata) {
         let effectiveLeadConfig: any = (metadata as any).leadConfig;
         try {
@@ -592,6 +740,7 @@ export async function setDemoStatus(demoId: string, status: "DRAFT" | "PUBLISHED
             if (global && global.leadConfig) effectiveLeadConfig = global.leadConfig;
           }
         } catch (e) {}
+        console.info("[mirror] creating metadata with hotspotStyle:", metadata.hotspotStyle);
         await createPublicDemoMetadata({
           demoId,
           name: metadata.name,
@@ -601,8 +750,10 @@ export async function setDemoStatus(demoId: string, status: "DRAFT" | "PUBLISHED
           leadConfig: effectiveLeadConfig ?? undefined,
           hotspotStyle: metadata.hotspotStyle ?? undefined,
         });
+        console.info("[mirror] metadata created successfully");
       }
       const steps = items.filter((it: any) => typeof it.itemSK === "string" && it.itemSK.startsWith("STEP#"));
+      console.info("[mirror] mirroring steps: count=", steps.length);
       for (const step of steps) {
         let hotspots: any = undefined;
         if (typeof step.hotspots === "string") {
@@ -612,6 +763,20 @@ export async function setDemoStatus(demoId: string, status: "DRAFT" | "PUBLISHED
         } else if (step.hotspots) {
           hotspots = step.hotspots;
         }
+        console.info("[mirror] step", step.itemSK, {
+          s3Key: step.s3Key,
+          thumb: step.thumbnailS3Key,
+          order: step.order,
+        });
+        console.info("[mirror] Creating step with payload:", {
+          demoId,
+          stepId: step.itemSK.substring("STEP#".length),
+          s3Key: step.s3Key,
+          order: step.order,
+          pageUrl: step.pageUrl,
+          thumbnailS3Key: step.thumbnailS3Key,
+          hotspots,
+        });
         await createPublicDemoStep({
           demoId,
           stepId: step.itemSK.substring("STEP#".length),
@@ -621,20 +786,27 @@ export async function setDemoStatus(demoId: string, status: "DRAFT" | "PUBLISHED
           thumbnailS3Key: step.thumbnailS3Key,
           hotspots,
         });
+        console.info("[mirror] step created:", step.itemSK.substring("STEP#".length));
       }
     } else if (status === "DRAFT") {
       await deletePublicDemoItems(demoId);
     }
-  } catch (mirrorErr) {}
+  } catch (mirrorErr) {
+    console.error("[mirror] failed to mirror demo", { demoId, err: mirrorErr });
+    console.error("[mirror] error details:", mirrorErr);
+    console.error("[mirror] error stack:", (mirrorErr as Error)?.stack);
+    // Don't throw - allow status update to succeed even if mirror fails
+    // throw mirrorErr;
+  }
 }
 
 export async function deleteDemo(demoId: string): Promise<void> {
-  const models = getModels();
-  const listRes = await models.Demo.list({ filter: { demoId: { eq: demoId } } });
+  const models = getPrivateModels();
+  const listRes = await (models as any).AppData.list({ filter: { PK: { eq: pkDemo(demoId) } } });
   const items: any[] = listRes?.data || [];
   for (const it of items) {
     try {
-      await models.Demo.delete({ demoId: it.demoId, itemSK: it.itemSK });
+      await (models as any).AppData.delete({ PK: it.PK, SK: it.SK });
     } catch (e) {
       throw e;
     }
@@ -654,22 +826,25 @@ export type Hotspot = {
 
 export async function createDemoMetadata(params: {
   demoId: string;
-  ownerId?: string;
+  ownerId: string;
   name?: string;
   status?: "DRAFT" | "PUBLISHED";
 }): Promise<void> {
   const { demoId, ownerId, name, status = "DRAFT" } = params;
   const now = new Date().toISOString();
-  const models = getModels();
-  const res = await models.Demo.create({
-    demoId,
-    itemSK: "METADATA",
+  const models = getPrivateModels();
+  const res = await (models as any).AppData.create({
+    PK: pkDemo(demoId),
+    SK: "METADATA",
     ownerId,
     name,
     status,
     createdAt: now,
     updatedAt: now,
     statusUpdatedAt: now,
+    GSI1PK: `OWNER#${ownerId}#DEMO`,
+    GSI1SK: `STATUS#${status}#TS#${now}`,
+    currentVersion: 1,
   });
   if (!res?.data || (res as any)?.errors?.length) {
     throw new Error(
@@ -686,13 +861,13 @@ export async function createDemoStep(params: {
   order: number;
   pageUrl?: string;
   thumbnailS3Key?: string;
-  ownerId?: string;
+  ownerId: string;
 }): Promise<void> {
   const { demoId, stepId, s3Key, hotspots, order, pageUrl, thumbnailS3Key, ownerId } = params;
-  const models = getModels();
+  const models = getPrivateModels();
   const payload: Record<string, any> = {
-    demoId,
-    itemSK: `STEP#${stepId}`,
+    PK: pkDemo(demoId),
+    SK: `STEP#${stepId}`,
     ownerId,
     s3Key,
     order,
@@ -706,7 +881,7 @@ export async function createDemoStep(params: {
   }
   Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
 
-  const res = await models.Demo.create(payload);
+  const res = await (models as any).AppData.create(payload);
   console.log("[api/demos] createDemoStep result", { stepId, res });
   if (!res?.data || (res as any)?.errors?.length) {
     throw new Error(
@@ -721,17 +896,17 @@ export async function updateDemoStepHotspots(params: {
   hotspots?: Hotspot[];
 }): Promise<void> {
   const { demoId, stepId, hotspots } = params;
-  const models = getModels();
+  const models = getPrivateModels();
   const payload: Record<string, any> = {
-    demoId,
-    itemSK: `STEP#${stepId}`,
+    PK: pkDemo(demoId),
+    SK: `STEP#${stepId}`,
   };
   if (Array.isArray(hotspots)) {
     try {
       payload.hotspots = JSON.stringify(hotspots);
     } catch (e) {}
   }
-  const res = await models.Demo.update(payload);
+  const res = await (models as any).AppData.update(payload);
   console.log("[api/demos] updateDemoStepHotspots result", { stepId, res });
   if (!res?.data || (res as any)?.errors?.length) {
     throw new Error(
@@ -752,58 +927,26 @@ export async function listDemoItems(demoId: string) {
       } catch (e) {
         console.debug("[api/demos] identity unavailable yet", e);
       }
-      const models = getModels();
+      const models = getPrivateModels();
       let items: any[] = [];
       let nextToken: any = undefined;
       do {
-        const res = await models.Demo.list({ filter: { demoId: { eq: demoId } }, nextToken });
+        const res = await (models as any).AppData.list({ filter: { PK: { eq: pkDemo(demoId) } }, nextToken });
         console.debug("[api/demos] listDemoItems page (userPool):", {
           count: (res as any)?.data?.length ?? 0,
           hasNext: !!(res as any)?.nextToken,
         });
-        items = items.concat((res as any)?.data ?? []);
+        const page = ((res as any)?.data ?? []).map((it: any) => {
+          // Back-compat: expose itemSK like before the refactor
+          if (it && it.itemSK === undefined && typeof it.SK === "string") {
+            return { ...it, itemSK: it.SK };
+          }
+          return it;
+        });
+        items = items.concat(page);
         nextToken = (res as any)?.nextToken;
       } while (nextToken);
       if (Array.isArray(items) && items.length > 0) return items;
-      try {
-        if ((models as any).Demo?.get) {
-          const metaRes = await (models as any).Demo.get({ demoId, itemSK: "METADATA" });
-          const meta = (metaRes as any)?.data;
-          if (meta) {
-            let stepItems: any[] = [];
-            let ntSteps: any = undefined;
-            do {
-              const stepRes = await models.Demo.list({
-                filter: { demoId: { eq: demoId }, itemSK: { beginsWith: "STEP#" } },
-                nextToken: ntSteps,
-              });
-              const page = (stepRes as any)?.data ?? [];
-              stepItems = stepItems.concat(page);
-              ntSteps = (stepRes as any)?.nextToken;
-            } while (ntSteps);
-            if (stepItems.length > 0) {
-              return [meta, ...stepItems];
-            }
-            return [meta];
-          }
-        }
-      } catch (probeErr) {}
-      try {
-        const pubDemoModels = getPublicDemoModelsForPrivate();
-        let pubItems: any[] = [];
-        let nextTokenPub: any = undefined;
-        do {
-          const pubRes = await pubDemoModels.Demo.list({ filter: { demoId: { eq: demoId } }, nextToken: nextTokenPub });
-          pubItems = pubItems.concat((pubRes as any)?.data ?? []);
-          nextTokenPub = (pubRes as any)?.nextToken;
-        } while (nextTokenPub);
-        if (Array.isArray(pubItems) && pubItems.length > 0) return pubItems;
-        try {
-          if ((pubDemoModels as any).Demo?.get) {
-            await (pubDemoModels as any).Demo.get({ demoId, itemSK: "METADATA" });
-          }
-        } catch (probePubErr) {}
-      } catch (publicDemoFallbackErr) {}
       try {
         const pubItems = await listPublicDemoItems(demoId);
         return pubItems;
@@ -819,14 +962,7 @@ export async function listDemoItems(demoId: string) {
   }
 }
 
-export async function getOwnerId(): Promise<string | undefined> {
-  try {
-    const user = await getCurrentUser();
-    return (user as any)?.username || user?.userId;
-  } catch {
-    return undefined;
-  }
-}
+export { useListMyDemos, useDemoItems, useLeadSubmissions, usePublicDemoItems } from "./hooks";
 
 export async function listMyDemos(
   status?: "DRAFT" | "PUBLISHED"
@@ -840,25 +976,21 @@ export async function listMyDemos(
     if (!ownerId) {
       throw new Error("Not signed in. Please sign in to view your demos.");
     }
-    const models = getModels();
-    const filter: any = {
-      itemSK: { eq: "METADATA" },
-      ownerId: { eq: ownerId },
-    };
-    if (status) {
-      filter.status = { eq: status };
-    }
+    const models = getPrivateModels();
+    const filter: any = status
+      ? { GSI1PK: { eq: `OWNER#${ownerId}#DEMO` }, GSI1SK: { beginsWith: `STATUS#${status}#` } }
+      : { GSI1PK: { eq: `OWNER#${ownerId}#DEMO` } };
     let all: any[] = [];
     let nextToken: any = undefined;
     do {
-      const res = await models.Demo.list({ filter, nextToken });
+      const res = await (models as any).AppData.list({ filter, nextToken });
       const page = (res as any)?.data ?? [];
       console.debug("[api/demos] listMyDemos page:", { count: page.length, hasNext: !!(res as any)?.nextToken });
       all = all.concat(page);
       nextToken = (res as any)?.nextToken;
     } while (nextToken);
     const mapped = all.map((it: any) => ({
-      id: it.demoId,
+      id: (it.PK || "").replace(/^DEMO#/, ""),
       name: it.name,
       status: it.status,
       createdAt: it.createdAt,

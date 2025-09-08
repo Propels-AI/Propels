@@ -1,14 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// Use hoisted objects so vi.mock factories don't capture uninitialized top-level variables
+// Hoisted mocks
 const authHoisted = vi.hoisted(() => ({
   fetchAuthSession: vi.fn().mockResolvedValue({}),
   getCurrentUser: vi.fn().mockResolvedValue({ username: "alice", userId: "sub-123" }),
 }));
 
 const dataHoisted = vi.hoisted(() => ({
-  demoListImpl: undefined as undefined | ((args: any) => Promise<any>),
-  demoGetImpl: undefined as undefined | ((args: any) => Promise<any>),
+  appDataListImpl: undefined as undefined | ((args: any) => Promise<any>),
+  appDataGetImpl: undefined as undefined | ((args: any) => Promise<any>),
+  publicListImpl: undefined as undefined | ((args: any) => Promise<any>),
+  publicGetImpl: undefined as undefined | ((args: any) => Promise<any>),
 }));
 
 vi.mock("aws-amplify/auth", () => ({
@@ -17,11 +19,15 @@ vi.mock("aws-amplify/auth", () => ({
 }));
 
 vi.mock("aws-amplify/data", () => ({
-  generateClient: vi.fn(() => ({
+  generateClient: vi.fn((_opts?: any) => ({
     models: {
-      Demo: {
-        list: (args: any) => dataHoisted.demoListImpl?.(args) ?? Promise.resolve({ data: [], nextToken: undefined }),
-        get: (args: any) => dataHoisted.demoGetImpl?.(args) ?? Promise.resolve({ data: undefined }),
+      AppData: {
+        list: (args: any) => dataHoisted.appDataListImpl?.(args) ?? Promise.resolve({ data: [], nextToken: undefined }),
+        get: (args: any) => dataHoisted.appDataGetImpl?.(args) ?? Promise.resolve({ data: undefined }),
+      },
+      PublicMirror: {
+        list: (args: any) => dataHoisted.publicListImpl?.(args) ?? Promise.resolve({ data: [], nextToken: undefined }),
+        get: (args: any) => dataHoisted.publicGetImpl?.(args) ?? Promise.resolve({ data: undefined }),
       },
     },
   })),
@@ -32,13 +38,16 @@ import * as api from "@/lib/api/demos";
 
 beforeEach(() => {
   vi.clearAllMocks();
-  dataHoisted.demoListImpl = undefined;
-  dataHoisted.demoGetImpl = undefined;
+  dataHoisted.appDataListImpl = undefined;
+  dataHoisted.appDataGetImpl = undefined;
+  dataHoisted.publicListImpl = undefined;
+  dataHoisted.publicGetImpl = undefined;
 });
 
 function makeItem(overrides: Partial<any> = {}) {
   return {
     demoId: overrides.demoId ?? "demo-1",
+    PK: overrides.PK ?? `DEMO#${overrides.demoId ?? "demo-1"}`,
     itemSK: overrides.itemSK ?? "METADATA",
     name: overrides.name ?? "Demo A",
     status: overrides.status ?? "DRAFT",
@@ -64,7 +73,7 @@ describe("listMyDemos", () => {
       },
     ];
     let call = 0;
-    dataHoisted.demoListImpl = async (_args) => pages[call++];
+    dataHoisted.appDataListImpl = async (_args) => pages[call++];
 
     const result = await api.listMyDemos();
     expect(result.map((r) => r.id)).toEqual(["d2", "d1"]);
@@ -80,7 +89,7 @@ describe("listDemoItems", () => {
       { data: [meta, step1], nextToken: undefined },
     ];
     let call = 0;
-    dataHoisted.demoListImpl = async (_args) => pages[call++];
+    dataHoisted.appDataListImpl = async (_args) => pages[call++];
 
     const result = await api.listDemoItems("demo-2");
     expect(Array.isArray(result)).toBe(true);
@@ -89,27 +98,21 @@ describe("listDemoItems", () => {
     expect(result.find((it: any) => it.itemSK === "STEP#s1")).toBeTruthy();
   });
 
-  it("falls back to get(METADATA) + beginsWith('STEP#') when main list is empty", async () => {
+  it("falls back to public mirror when private list is empty", async () => {
     const demoId = "demo-3";
-    dataHoisted.demoListImpl = async (args) => {
-      const hasBeginsWith = args?.filter?.itemSK?.beginsWith === "STEP#";
-      if (hasBeginsWith) {
+    dataHoisted.appDataListImpl = async () => ({ data: [], nextToken: undefined });
+    dataHoisted.publicListImpl = async (args) => {
+      if (args?.filter?.PK?.eq === `PUB#${demoId}`) {
         return {
           data: [
+            makeItem({ demoId, itemSK: "METADATA", name: "Fallback Demo" }),
             makeItem({ demoId, itemSK: "STEP#s1", order: 1, s3Key: "public/one.png" }),
             makeItem({ demoId, itemSK: "STEP#s2", order: 2, s3Key: "public/two.png" }),
           ],
           nextToken: undefined,
-        };
+        } as any;
       }
-      return { data: [], nextToken: undefined };
-    };
-
-    dataHoisted.demoGetImpl = async (args) => {
-      if (args?.demoId === demoId && args?.itemSK === "METADATA") {
-        return { data: makeItem({ demoId, itemSK: "METADATA", name: "Fallback Demo" }) };
-      }
-      return { data: undefined };
+      return { data: [], nextToken: undefined } as any;
     };
 
     const result = await api.listDemoItems(demoId);
