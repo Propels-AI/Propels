@@ -1,11 +1,10 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useKeyboardShortcut } from "@/hooks/useKeyboardShortcut";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { syncAnonymousDemo, type EditedDraft } from "../lib/services/syncAnonymousDemo";
 import { useAuth } from "@/lib/providers/AuthProvider";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { deleteDemo, renameDemo, setDemoStatus, listLeadTemplates, saveLeadTemplate } from "@/lib/api/demos";
+import { deleteDemo, renameDemo, setDemoStatus } from "@/lib/api/demos";
 import {
   updateDemoStepHotspots,
   updateDemoLeadConfig,
@@ -19,7 +18,8 @@ import { PasswordlessAuth } from "@/components/auth/PasswordlessAuth";
 import { toast } from "sonner";
 import { Loader2, Copy } from "lucide-react";
 import LeadCaptureOverlay from "@/components/LeadCaptureOverlay";
-import StepsBar from "@/components/StepsBar";
+import EditorHeader from "@/features/editor/components/EditorHeader";
+import LeadFormEditor from "@/features/editor/components/LeadFormEditor";
 import HotspotOverlay from "@/components/HotspotOverlay";
 import { type HotspotsMap, type TooltipStyle } from "@/lib/editor/deriveTooltipStyleFromHotspots";
 import { applyGlobalStyleToHotspots } from "@/lib/editor/applyGlobalStyleToHotspots";
@@ -674,205 +674,120 @@ export function DemoEditorPage() {
   return (
     <div className="min-h-screen flex">
       <div className="flex-1 p-8">
-        <div className="mb-3 flex items-center gap-2">
-          <Input
-            value={demoName}
-            placeholder="Untitled Demo"
-            onChange={(e) => setDemoName(e.target.value)}
-            className="h-8 text-sm w-64"
-          />
-          {demoIdParam && (
-            <button
-              onClick={async () => {
-                if (!demoIdParam) return;
+        <EditorHeader
+          demoId={demoIdParam || undefined}
+          demoName={demoName}
+          onChangeName={(name) => setDemoName(name)}
+          savingTitle={savingTitle}
+          savingDemo={savingDemo}
+          demoStatus={demoStatus}
+          togglingStatus={togglingStatus}
+          deleting={deleting}
+          loadingSteps={loadingSteps}
+          stepsCount={steps.length}
+          isPreviewing={isPreviewing}
+          previewableCount={previewableIndices.length}
+          currentPreviewIndex={Math.max(0, previewableIndices.indexOf(selectedStepIndex))}
+          onSelectPreviewIndex={(pos) => {
+            const targetIdx = previewableIndices[pos] ?? selectedStepIndex;
+            setSelectedStepIndex(targetIdx);
+          }}
+          onPrevPreview={gotoPrevAnnotated}
+          onNextPreview={gotoNextAnnotated}
+          onSaveTitle={async () => {
+            if (!demoIdParam) return;
+            try {
+              setSavingTitle(true);
+              await renameDemo(demoIdParam, demoName || "");
+            } catch (e) {
+              console.error("Failed to rename demo", e);
+              alert("Failed to save title. Please try again.");
+            } finally {
+              setSavingTitle(false);
+            }
+          }}
+          onToggleStatus={async () => {
+            if (!demoIdParam) return;
+            const next = demoStatus === "PUBLISHED" ? "DRAFT" : "PUBLISHED";
+            try {
+              setTogglingStatus(true);
+              if (next === "PUBLISHED") {
                 try {
-                  setSavingTitle(true);
-                  await renameDemo(demoIdParam, demoName || "");
+                  const { leadStepIndex, leadConfig } = extractLeadConfig(steps);
+                  if (leadStepIndex !== null) {
+                    await updateDemoLeadConfig({ demoId: demoIdParam, leadStepIndex, leadConfig: leadConfig as any });
+                  } else {
+                    await updateDemoLeadConfig({ demoId: demoIdParam, leadStepIndex: null });
+                  }
                 } catch (e) {
-                  console.error("Failed to rename demo", e);
-                  alert("Failed to save title. Please try again.");
-                } finally {
-                  setSavingTitle(false);
+                  console.error("Failed to persist lead config before publish (non-fatal)", e);
                 }
-              }}
-              disabled={savingTitle || savingDemo}
-              className={`text-sm py-1.5 px-2 rounded border ${savingTitle ? "opacity-60" : ""}`}
-            >
-              {savingTitle ? "Saving..." : "Save Title"}
-            </button>
-          )}
-        </div>
-        <div className="mb-4 flex items-center gap-3">
-          {demoIdParam && (
-            <>
-              <div className="flex items-center gap-2 mr-4">
-                <span
-                  className={`px-2 py-1 rounded text-xs font-medium ${
-                    demoStatus === "PUBLISHED" ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
-                  }`}
-                >
-                  {demoStatus}
-                </span>
-                <button
-                  onClick={async () => {
-                    if (!demoIdParam) return;
-                    const next = demoStatus === "PUBLISHED" ? "DRAFT" : "PUBLISHED";
-                    try {
-                      setTogglingStatus(true);
-                      if (next === "PUBLISHED") {
-                        try {
-                          const { leadStepIndex, leadConfig } = extractLeadConfig(steps);
-                          if (leadStepIndex !== null) {
-                            await updateDemoLeadConfig({
-                              demoId: demoIdParam,
-                              leadStepIndex,
-                              leadConfig: leadConfig as any,
-                            });
-                          } else {
-                            await updateDemoLeadConfig({ demoId: demoIdParam, leadStepIndex: null });
-                          }
-                        } catch (e) {
-                          console.error("Failed to persist lead config before publish (non-fatal)", e);
-                        }
-                      }
-                      await setDemoStatus(demoIdParam, next);
-                      setDemoStatusLocal(next);
-                      if (next === "PUBLISHED") {
-                        setShareOpen(true);
-                      }
-                    } catch (e) {
-                      console.error("Failed to update status", e);
-                      alert("Failed to update status. Please try again.");
-                    } finally {
-                      setTogglingStatus(false);
-                    }
-                  }}
-                  disabled={togglingStatus || savingDemo}
-                  className={`text-sm py-1.5 px-2 rounded border bg-white hover:bg-gray-50 ${
-                    togglingStatus ? "opacity-60" : ""
-                  }`}
-                >
-                  {demoStatus === "PUBLISHED" ? "Unpublish" : "Publish"}
-                </button>
-                <button
-                  onClick={async () => {
-                    if (!demoIdParam) return;
-                    const ok = confirm("Delete this demo? This cannot be undone.");
-                    if (!ok) return;
-                    try {
-                      setDeleting(true);
-                      await deleteDemo(demoIdParam);
-                      window.location.href = "/dashboard";
-                    } catch (e) {
-                      console.error("Failed to delete demo", e);
-                      alert("Failed to delete demo. Please try again.");
-                    } finally {
-                      setDeleting(false);
-                    }
-                  }}
-                  disabled={deleting || savingDemo}
-                  className={`text-sm py-1.5 px-2 rounded border bg-red-600 text-white hover:bg-red-700 ${
-                    deleting ? "opacity-70" : ""
-                  }`}
-                >
-                  {deleting ? "Deleting..." : "Delete"}
-                </button>
-              </div>
-            </>
-          )}
-          <button
-            onClick={() => {
-              const demoId = demoIdParam;
-              if (!demoId) {
-                alert("Save your demo first to preview in blog.");
-                return;
               }
-              const url = `/preview-blog?demoId=${encodeURIComponent(demoId)}`;
-              window.open(url, "_blank", "noopener,noreferrer");
-            }}
-            className={`text-sm py-2 px-3 rounded border bg-white border-gray-300`}
-            title="Open blog preview"
-          >
-            Blog Preview
-          </button>
-          {demoIdParam && demoStatus === "PUBLISHED" && (
-            <>
-              <button
-                onClick={async () => {
-                  try {
-                    const url = `${window.location.origin}/p/${demoIdParam}`;
-                    await navigator.clipboard.writeText(url);
-                    toast.success("Copied public URL");
-                  } catch (e) {
-                    try {
-                      prompt("Copy public URL", `${window.location.origin}/p/${demoIdParam}`);
-                    } catch {}
-                  }
-                }}
-                className="text-sm py-2 px-3 rounded border bg-white border-gray-300"
-                title="Copy public page URL"
-              >
-                Copy URL
-              </button>
-              <button
-                onClick={async () => {
-                  try {
-                    const code = `<iframe src="${window.location.origin}/embed/${demoIdParam}?ar=16:9" style="width:100%;aspect-ratio:16/9;border:0;" allow="fullscreen"></iframe>`;
-                    await navigator.clipboard.writeText(code);
-                    toast.success("Copied embed code");
-                  } catch (e) {
-                    try {
-                      prompt(
-                        "Copy iframe embed code",
-                        `<iframe src=\"${window.location.origin}/embed/${demoIdParam}?ar=16:9\" style=\"width:100%;aspect-ratio:16/9;border:0;\" allow=\"fullscreen\"></iframe>`
-                      );
-                    } catch {}
-                  }
-                }}
-                className="text-sm py-2 px-3 rounded border bg-white border-gray-300"
-                title="Copy iframe embed code"
-              >
-                Copy Embed
-              </button>
-            </>
-          )}
-          <button
-            onClick={handleSave}
-            disabled={savingDemo}
-            className={`text-sm py-2 px-3 rounded ${
-              savingDemo ? "bg-blue-400 cursor-not-allowed text-white" : "bg-blue-600 hover:bg-blue-700 text-white"
-            }`}
-          >
-            {savingDemo ? "Saving..." : "Save"}
-          </button>
-
-          {loadingSteps && <span className="text-xs text-gray-400">Loading steps…</span>}
-          {!loadingSteps && steps.length > 0 && (
-            <span className="text-xs text-gray-600">Loaded {steps.length} captured steps</span>
-          )}
-          {isPreviewing && (
-            <div className="flex items-center justify-center gap-3">
-              <button onClick={gotoPrevAnnotated} className="text-sm py-1 px-2 rounded border bg-white border-gray-300">
-                Prev
-              </button>
-              <div className="w-64">
-                <StepsBar
-                  total={previewableIndices.length}
-                  current={Math.max(0, previewableIndices.indexOf(selectedStepIndex))}
-                  onSelect={(pos) => {
-                    const targetIdx = previewableIndices[pos] ?? selectedStepIndex;
-                    setSelectedStepIndex(targetIdx);
-                  }}
-                  className="mx-auto"
-                  size="sm"
-                />
-              </div>
-              <button onClick={gotoNextAnnotated} className="text-sm py-1 px-2 rounded border bg-white border-gray-300">
-                Next
-              </button>
-            </div>
-          )}
-        </div>
+              await setDemoStatus(demoIdParam, next);
+              setDemoStatusLocal(next);
+              if (next === "PUBLISHED") setShareOpen(true);
+            } catch (e) {
+              console.error("Failed to update status", e);
+              alert("Failed to update status. Please try again.");
+            } finally {
+              setTogglingStatus(false);
+            }
+          }}
+          onDelete={async () => {
+            if (!demoIdParam) return;
+            const ok = confirm("Delete this demo? This cannot be undone.");
+            if (!ok) return;
+            try {
+              setDeleting(true);
+              await deleteDemo(demoIdParam);
+              window.location.href = "/dashboard";
+            } catch (e) {
+              console.error("Failed to delete demo", e);
+              alert("Failed to delete demo. Please try again.");
+            } finally {
+              setDeleting(false);
+            }
+          }}
+          onOpenBlogPreview={() => {
+            const demoId = demoIdParam;
+            if (!demoId) {
+              alert("Save your demo first to preview in blog.");
+              return;
+            }
+            const url = `/preview-blog?demoId=${encodeURIComponent(demoId)}`;
+            window.open(url, "_blank", "noopener,noreferrer");
+          }}
+          onCopyPublicUrl={async () => {
+            try {
+              const url = demoIdParam ? `${window.location.origin}/p/${demoIdParam}` : "";
+              await navigator.clipboard.writeText(url);
+              toast.success("Copied public URL");
+            } catch (e) {
+              try {
+                prompt("Copy public URL", demoIdParam ? `${window.location.origin}/p/${demoIdParam}` : "");
+              } catch {}
+            }
+          }}
+          onCopyEmbed={async () => {
+            try {
+              const code = demoIdParam
+                ? `<iframe src="${window.location.origin}/embed/${demoIdParam}?ar=16:9" style="width:100%;aspect-ratio:16/9;border:0;" allow="fullscreen"></iframe>`
+                : "";
+              await navigator.clipboard.writeText(code);
+              toast.success("Copied embed code");
+            } catch (e) {
+              try {
+                prompt(
+                  "Copy iframe embed code",
+                  demoIdParam
+                    ? `<iframe src=\"${window.location.origin}/embed/${demoIdParam}?ar=16:9\" style=\"width:100%;aspect-ratio:16/9;border:0;\" allow=\"fullscreen\"></iframe>`
+                    : ""
+                );
+              } catch {}
+            }
+          }}
+          onSave={handleSave}
+        />
         <div
           ref={imageRef}
           className="bg-gray-200 border rounded-xl w-full min-h-[320px] flex items-center justify-center relative overflow-hidden"
@@ -1409,85 +1324,7 @@ export function DemoEditorPage() {
           )}
         </div>
 
-        <div className="pt-4 border-t mt-6">
-          <h3 className="text-lg font-semibold mb-3">Lead Form</h3>
-          <div className="space-y-3 text-sm">
-            <div className="space-y-2">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs text-gray-600 mb-1">Title</label>
-                  <input
-                    className="w-full border rounded px-2 py-1"
-                    value={leadFormConfig.title || ""}
-                    onChange={(e) => setLeadFormConfig((p: any) => ({ ...p, title: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-600 mb-1">CTA Text</label>
-                  <input
-                    className="w-full border rounded px-2 py-1"
-                    value={leadFormConfig.ctaText || ""}
-                    onChange={(e) => setLeadFormConfig((p: any) => ({ ...p, ctaText: e.target.value }))}
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs text-gray-600 mb-1">Subtitle</label>
-                <textarea
-                  className="w-full border rounded px-2 py-1 h-16"
-                  value={leadFormConfig.subtitle || ""}
-                  onChange={(e) => setLeadFormConfig((p: any) => ({ ...p, subtitle: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-1">
-                <div className="text-xs text-gray-600">Fields</div>
-                {[
-                  { key: "email", label: "Email", type: "email", required: true },
-                  { key: "name", label: "Name", type: "text" },
-                  { key: "phone", label: "Phone", type: "tel" },
-                  { key: "position", label: "Position", type: "text" },
-                  { key: "message", label: "Message", type: "textarea" },
-                  { key: "custom", label: "Custom", type: "text" },
-                ].map((f) => {
-                  const list: any[] = Array.isArray(leadFormConfig.fields) ? leadFormConfig.fields : [];
-                  const exists = list.find((x) => x.key === f.key);
-                  const enabled = !!exists;
-                  return (
-                    <label key={f.key} className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        className="accent-blue-600"
-                        checked={enabled}
-                        disabled={f.key === "email"}
-                        onChange={(e) => {
-                          setLeadFormConfig((p: any) => {
-                            const current: any[] = Array.isArray(p.fields) ? [...p.fields] : [];
-                            if (e.target.checked) {
-                              if (!current.find((x) => x.key === f.key))
-                                current.push({ key: f.key, type: f.type, label: f.label });
-                            } else {
-                              const idx = current.findIndex((x) => x.key === f.key);
-                              if (idx >= 0) current.splice(idx, 1);
-                            }
-                            // Ensure email is present & required
-                            if (!current.find((x) => x.key === "email"))
-                              current.unshift({ key: "email", type: "email", label: "Email", required: true });
-                            return { ...p, fields: current };
-                          });
-                        }}
-                      />
-                      <span>{f.label}</span>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <TemplatePicker getConfig={() => leadFormConfig} applyConfig={(cfg) => setLeadFormConfig(cfg)} />
-            </div>
-          </div>
-        </div>
+        <LeadFormEditor leadFormConfig={leadFormConfig as any} setLeadFormConfig={setLeadFormConfig as any} />
       </div>
       <Dialog
         open={authOpen}
@@ -1606,76 +1443,9 @@ export function DemoEditorPage() {
         </UIDialogContent>
       </UIDialog>
       {/* Lightweight template picker actions */}
-      <></>
+  <></>
     </div>
   );
 }
 
 export default DemoEditorPage;
-
-function TemplatePicker(props: { getConfig: () => any; applyConfig: (cfg: any) => void }) {
-  const { getConfig, applyConfig } = props;
-  const [loading, setLoading] = useState(false);
-  const [templates, setTemplates] = useState<Array<{ templateId: string; name: string; leadConfig: any }>>([]);
-  const [name, setName] = useState("");
-
-  const load = async () => {
-    try {
-      setLoading(true);
-      const list = await listLeadTemplates();
-      setTemplates(list);
-    } catch {
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        <Button variant="outline" className="h-8" onClick={load} disabled={loading}>
-          {loading ? "Loading…" : "Load templates"}
-        </Button>
-        <select
-          onChange={(e) => {
-            const t = templates.find((x) => x.templateId === e.target.value);
-            if (t?.leadConfig) {
-              const cfg = typeof t.leadConfig === "string" ? JSON.parse(t.leadConfig) : t.leadConfig;
-              applyConfig(cfg);
-            }
-          }}
-          className="border rounded px-2 py-1 text-xs bg-white"
-        >
-          <option value="">Select template…</option>
-          {templates.map((t) => (
-            <option key={t.templateId} value={t.templateId}>
-              {t.name}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="flex items-center gap-2">
-        <Input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Template name"
-          className="h-8 text-xs w-48"
-        />
-        <Button
-          variant="outline"
-          className="h-8"
-          onClick={async () => {
-            if (!name.trim()) return;
-            try {
-              await saveLeadTemplate(name.trim(), getConfig());
-              setName("");
-              await load();
-            } catch {}
-          }}
-        >
-          Save as template
-        </Button>
-      </div>
-    </div>
-  );
-}
