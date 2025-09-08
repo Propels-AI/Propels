@@ -9,6 +9,24 @@ function getModels() {
   if (!models) {
     throw new Error("Amplify Data models unavailable after generateClient(). Check Amplify.configure outputs.data");
   }
+
+  // Public-readable fetch of private Demo METADATA using apiKey client (schema permits read)
+  async function getPrivateDemoMetadataPublic(demoId: string): Promise<any | null> {
+    try {
+      const models = getPublicDemoModelsForPrivate();
+      if ((models as any).Demo?.get) {
+        const res = await (models as any).Demo.get({ demoId, itemSK: "METADATA" });
+        return (res as any)?.data ?? null;
+      }
+      if ((models as any).Demo?.list) {
+        const res = await (models as any).Demo.list({ filter: { demoId: { eq: demoId }, itemSK: { eq: "METADATA" } } });
+        return ((res as any)?.data ?? [])[0] ?? null;
+      }
+    } catch (e) {
+      console.warn("[api/demos] getPrivateDemoMetadataPublic failed", e);
+    }
+    return null;
+  }
   return models;
 }
 
@@ -55,11 +73,21 @@ export async function updateDemoLeadConfig(params: {
     itemSK: "METADATA",
     leadStepIndex,
   };
+  // Only persist leadConfig if it contains a non-empty fields array to avoid overwriting
+  // an existing saved configuration with defaults ({ bg/style } only).
   if (leadConfig !== undefined) {
     try {
-      payload.leadConfig = typeof leadConfig === "string" ? leadConfig : JSON.stringify(leadConfig);
+      const lc = typeof leadConfig === "string" ? JSON.parse(leadConfig) : leadConfig;
+      const hasFields = Array.isArray(lc?.fields) && lc.fields.length > 0;
+      if (hasFields) {
+        payload.leadConfig = typeof leadConfig === "string" ? leadConfig : JSON.stringify(leadConfig);
+      } else {
+        console.info(
+          "[api/demos] Skipping leadConfig update because no fields detected; will only update leadStepIndex/flags"
+        );
+      }
     } catch (e) {
-      console.warn("[api/demos] Failed to stringify leadConfig; omitting", e);
+      console.warn("[api/demos] Failed to parse/stringify leadConfig; omitting", e);
     }
   }
   if (typeof leadUseGlobal === "boolean") {
@@ -186,7 +214,9 @@ export async function listLeadSubmissions(demoId: string): Promise<
         const metaRes = await pubModels.PublicDemo.get({ demoId, itemSK: "METADATA" });
         demoOwnerId = (metaRes as any)?.data?.ownerId;
       } else if (pubModels?.PublicDemo?.list) {
-        const listRes = await pubModels.PublicDemo.list({ filter: { demoId: { eq: demoId }, itemSK: { eq: "METADATA" } } });
+        const listRes = await pubModels.PublicDemo.list({
+          filter: { demoId: { eq: demoId }, itemSK: { eq: "METADATA" } },
+        });
         demoOwnerId = (listRes as any)?.data?.[0]?.ownerId;
       }
     } catch {}
@@ -260,7 +290,9 @@ export async function createLeadSubmissionPublic(params: {
     const metaRes = await pubModels.PublicDemo.get({ demoId: params.demoId, itemSK: "METADATA" });
     ownerId = (metaRes as any)?.data?.ownerId;
   } catch {
-    const listRes = await pubModels.PublicDemo.list({ filter: { demoId: { eq: params.demoId }, itemSK: { eq: "METADATA" } } });
+    const listRes = await pubModels.PublicDemo.list({
+      filter: { demoId: { eq: params.demoId }, itemSK: { eq: "METADATA" } },
+    });
     ownerId = (listRes as any)?.data?.[0]?.ownerId;
   }
   if (!ownerId) throw new Error("Lead submission failed: demo not found or owner unavailable");
@@ -311,6 +343,29 @@ function getPublicDemoModelsForPrivate() {
     throw new Error("Amplify Data models unavailable for public Demo client");
   }
   return models;
+}
+
+// List private Demo items using the apiKey client (public-readable schema). Useful when PublicDemo mirror is absent.
+export async function listPrivateDemoItemsPublic(demoId: string): Promise<any[]> {
+  const models = getPublicDemoModelsForPrivate();
+  if (!models.Demo) {
+    throw new Error("Demo model is not available. Backend schema not deployed or outputs not updated.");
+  }
+  let items: any[] = [];
+  let nextToken: any = undefined;
+  do {
+    const res = await models.Demo.list({ filter: { demoId: { eq: demoId } }, nextToken });
+    const page = (res as any)?.data ?? [];
+    items = items.concat(page);
+    nextToken = (res as any)?.nextToken;
+  } while (nextToken);
+  // Normalize AWSJSON hotspots if present
+  for (const it of items) {
+    if (typeof (it as any).hotspots === "string") {
+      try { (it as any).hotspots = JSON.parse((it as any).hotspots); } catch {}
+    }
+  }
+  return items;
 }
 
 export async function createPublicDemoMetadata(params: {
@@ -368,8 +423,9 @@ export async function createPublicDemoMetadata(params: {
   const errs = (res as any)?.errors as any[] | undefined;
   if (!res?.data || (errs && errs.length)) {
     const message = errs?.map((e: any) => e?.message).join(", ") || "no data returned";
-    // If item already exists (ConditionalCheckFailed), fallback to update to be idempotent
-    if (/ConditionalCheckFailed/i.test(message)) {
+    // If item already exists (ConditionalCheckFailed) or generic Dynamo "conditional request failed",
+    // fallback to update to be idempotent
+    if (/ConditionalCheckFailed/i.test(message) || /conditional request failed/i.test(message)) {
       const upd = await models.PublicDemo.update(payload);
       if (!upd?.data || (upd as any)?.errors?.length) {
         throw new Error(
@@ -403,32 +459,46 @@ export async function createPublicDemoStep(params: {
   let ownerId = params.ownerId;
   if (!ownerId) {
     try {
-      const u = await getCurrentUser();
-      ownerId = (u as any)?.username || (u as any)?.userId;
-    } catch {}
-  }
-  const payload: Record<string, any> = {
-    demoId: params.demoId,
-    itemSK: `STEP#${params.stepId}`,
-    ownerId,
-    s3Key: params.s3Key,
-    order: params.order,
-    pageUrl: params.pageUrl,
-    thumbnailS3Key: params.thumbnailS3Key,
-  };
-  if (params.hotspots !== undefined) {
-    try {
-      payload.hotspots = typeof params.hotspots === "string" ? params.hotspots : JSON.stringify(params.hotspots);
-    } catch (e) {
-      console.warn("[api/demos] Failed to stringify public hotspots; omitting", e);
+      const me = await getCurrentUser();
+      ownerId = (me as any)?.userId || (me as any)?.username;
+    } catch {
+      // ignore
     }
   }
+  const payload: any = {
+    demoId: params.demoId,
+    itemSK: `STEP#${params.stepId}`,
+    s3Key: params.s3Key,
+    pageUrl: params.pageUrl,
+    order: params.order,
+    // GraphQL model typically expects AWSJSON (string). Stringify arrays/objects.
+    hotspots: Array.isArray(params.hotspots)
+      ? JSON.stringify(params.hotspots)
+      : params.hotspots && typeof params.hotspots === "object"
+        ? JSON.stringify(params.hotspots)
+        : typeof params.hotspots === "string"
+          ? params.hotspots
+          : undefined,
+    ownerId,
+  };
   Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
   const res = await models.PublicDemo.create(payload);
-  if (!res?.data || (res as any)?.errors?.length) {
-    throw new Error(
-      `createPublicDemoStep failed: ${(res as any)?.errors?.map((e: any) => e?.message).join(", ") || "no data returned"}`
-    );
+  const errs = (res as any)?.errors as any[] | undefined;
+  if (!res?.data || (errs && errs.length)) {
+    const message = errs?.map((e: any) => e?.message).join(", ") || "no data returned";
+    // If item already exists (ConditionalCheckFailed), fallback to update to upsert step changes
+    if (/ConditionalCheckFailed/i.test(message)) {
+      const upd = await models.PublicDemo.update(payload);
+      if (!upd?.data || (upd as any)?.errors?.length) {
+        throw new Error(
+          `createPublicDemoStep->update fallback failed: ${
+            (upd as any)?.errors?.map((e: any) => e?.message).join(", ") || "no data returned"
+          }`
+        );
+      }
+      return;
+    }
+    throw new Error(`createPublicDemoStep failed: ${message}`);
   }
 }
 
@@ -456,7 +526,7 @@ export async function listPublicDemoItems(demoId: string) {
 }
 
 export async function deletePublicDemoItems(demoId: string) {
-  const models = getModels();
+  const models = getPublicModels();
   if (!models.PublicDemo) {
     throw new Error("PublicDemo model is not available. Backend schema not deployed or outputs not updated.");
   }
@@ -464,6 +534,18 @@ export async function deletePublicDemoItems(demoId: string) {
   const items: any[] = listRes?.data || [];
   for (const it of items) {
     await models.PublicDemo.delete({ demoId: it.demoId, itemSK: it.itemSK });
+  }
+}
+
+export async function hasPublicMirror(demoId: string): Promise<boolean> {
+  try {
+    const models = getPublicModels();
+    if (!models.PublicDemo) return false;
+    const res = await models.PublicDemo.list({ filter: { demoId: { eq: demoId } } });
+    const items = (res as any)?.data ?? [];
+    return items.length > 0;
+  } catch {
+    return false;
   }
 }
 

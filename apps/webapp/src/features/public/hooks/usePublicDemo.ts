@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { listPublicDemoItems, listDemoItems } from "@/lib/api/demos";
+import { listPublicDemoItems, listPrivateDemoItemsPublic } from "@/lib/api/demos";
 
 export type PublicStep = {
   itemSK: string;
@@ -53,6 +53,7 @@ export function usePublicDemo(demoId?: string) {
     dotStrokeColor: "#ffffff",
     animation: "none",
   });
+  const [refreshTick, setRefreshTick] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -61,6 +62,7 @@ export function usePublicDemo(demoId?: string) {
       setLoading(true);
       setError(undefined);
       try {
+        // Load public mirror
         const items = await listPublicDemoItems(demoId);
         if (cancelled) return;
         const metadata = items.find((it: any) => it.itemSK === "METADATA");
@@ -74,7 +76,9 @@ export function usePublicDemo(demoId?: string) {
             const cfgRaw = metadata.leadConfig;
             let cfg: any = typeof cfgRaw === "string" ? JSON.parse(cfgRaw) : cfgRaw;
             if (typeof cfg === "string") {
-              try { cfg = JSON.parse(cfg); } catch {}
+              try {
+                cfg = JSON.parse(cfg);
+              } catch {}
             }
             setLeadConfig(cfg);
             if (cfg && typeof cfg.bg === "string") lBg = cfg.bg === "black" ? "black" : "white";
@@ -83,20 +87,48 @@ export function usePublicDemo(demoId?: string) {
           lBg = metadata?.leadBg === "black" ? "black" : "white";
         }
         setLeadBg(lBg);
-        // Fallback to private leadConfig when public lacks fields
+
+        // Also load private METADATA (public-readable) to support DRAFT previews
+        const privateItems = await listPrivateDemoItemsPublic(demoId);
+        const privateMeta = (privateItems || []).find((it: any) => it.itemSK === "METADATA");
+        let privateCfg: any = privateMeta?.leadConfig;
+        try { privateCfg = typeof privateCfg === "string" ? JSON.parse(privateCfg) : privateCfg; } catch {}
+        if (typeof privateCfg === "string") { try { privateCfg = JSON.parse(privateCfg); } catch {} }
+        const privateFields = Array.isArray(privateCfg?.fields) ? privateCfg.fields : [];
+        const isDraft = String(privateMeta?.status || "DRAFT").toUpperCase() !== "PUBLISHED";
+        // If still DRAFT and private has a richer config, prefer it (for editor previews before publish)
+        if (isDraft && privateFields.length > 0) {
+          setLeadConfig(privateCfg);
+          if (privateCfg.bg === "black" || privateCfg.bg === "white") setLeadBg(privateCfg.bg as any);
+          if (typeof privateMeta?.leadStepIndex === "number") setLeadStepIndex(privateMeta.leadStepIndex);
+        }
+        // Prefer private leadConfig when it's richer/newer than public (handles mirror lag/defaults)
         try {
-          if (!Array.isArray((metadata?.leadConfig as any)?.fields)) {
-            const privateItems = await listDemoItems(demoId);
-            const privateMeta = (privateItems || []).find((it: any) => it.itemSK === "METADATA");
-            let cfg: any = privateMeta?.leadConfig;
-            if (cfg) {
-              try { cfg = typeof cfg === "string" ? JSON.parse(cfg) : cfg; } catch {}
-              if (typeof cfg === "string") { try { cfg = JSON.parse(cfg); } catch {} }
-              if (cfg && Array.isArray(cfg.fields)) {
-                setLeadConfig((prev: any) => (prev && Array.isArray(prev.fields) ? prev : cfg));
-                if (cfg.bg === "black" || cfg.bg === "white") setLeadBg(cfg.bg);
-              }
-            }
+          const pubCfgRaw: any = metadata?.leadConfig;
+          let pubCfg: any = typeof pubCfgRaw === "string" ? JSON.parse(pubCfgRaw) : pubCfgRaw;
+          if (typeof pubCfg === "string") { try { pubCfg = JSON.parse(pubCfg); } catch {} }
+          const publicFields = Array.isArray(pubCfg?.fields) ? pubCfg.fields : [];
+          const looksDefault =
+            pubCfg &&
+            typeof pubCfg === "object" &&
+            (pubCfg.title === "Stay in the loop" ||
+              pubCfg.subtitle === "Enjoying the demo? Leave your details and we’ll reach out." ||
+              (publicFields.length === 1 && publicFields[0]?.key === "email"));
+
+          // privateMeta/privateCfg already loaded above; clone into local var
+          let pCfg: any = privateCfg;
+          if (pCfg) {
+            try { pCfg = typeof pCfg === "string" ? JSON.parse(pCfg) : pCfg; } catch {}
+            if (typeof pCfg === "string") { try { pCfg = JSON.parse(pCfg); } catch {} }
+          }
+          const privateFields = Array.isArray(pCfg?.fields) ? pCfg.fields : [];
+          const differs = (() => {
+            try { return JSON.stringify(pCfg || {}) !== JSON.stringify(pubCfg || {}); } catch { return false; }
+          })();
+          const shouldUsePrivate = (privateFields.length > 0) && (looksDefault || publicFields.length === 0 || differs);
+          if (shouldUsePrivate) {
+            setLeadConfig(pCfg);
+            if (pCfg.bg === "black" || pCfg.bg === "white") setLeadBg(pCfg.bg as any);
           }
         } catch {}
         // hotspot style defaults
@@ -143,7 +175,21 @@ export function usePublicDemo(demoId?: string) {
     return () => {
       cancelled = true;
     };
-  }, [demoId]);
+  }, [demoId, refreshTick]);
+
+  // Refetch on tab focus/visibility changes to pick up recent mirrors quickly
+  useEffect(() => {
+    const onFocus = () => setRefreshTick((t) => t + 1);
+    const onVis = () => {
+      if (document.visibilityState === "visible") setRefreshTick((t) => t + 1);
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, []);
 
   return {
     loading,

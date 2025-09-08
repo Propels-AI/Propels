@@ -72,6 +72,12 @@ export default function PublicDemoEmbed() {
       dotStrokePx: h.dotStrokePx ?? hotspotStyleDefaults.dotStrokePx,
       dotStrokeColor: h.dotStrokeColor ?? hotspotStyleDefaults.dotStrokeColor,
       animation: (h.animation ?? hotspotStyleDefaults.animation) as any,
+      // Tooltip bubble styling & offsets defaults from METADATA.hotspotStyle
+      tooltipBgColor: (h as any).tooltipBgColor ?? hotspotStyleDefaults.tooltipBgColor,
+      tooltipTextColor: (h as any).tooltipTextColor ?? hotspotStyleDefaults.tooltipTextColor,
+      tooltipTextSizePx: (h as any).tooltipTextSizePx ?? hotspotStyleDefaults.tooltipTextSizePx,
+      tooltipOffsetXNorm: (h as any).tooltipOffsetXNorm ?? hotspotStyleDefaults.tooltipOffsetXNorm,
+      tooltipOffsetYNorm: (h as any).tooltipOffsetYNorm ?? hotspotStyleDefaults.tooltipOffsetYNorm,
     }));
   }, [steps, currentRealIndex, hotspotStyleDefaults]);
 

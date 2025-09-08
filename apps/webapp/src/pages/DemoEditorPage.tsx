@@ -5,20 +5,15 @@ import { Button } from "@/components/ui/button";
 import { syncAnonymousDemo, type EditedDraft } from "../lib/services/syncAnonymousDemo";
 import { useAuth } from "@/lib/providers/AuthProvider";
 import { useSearchParams, useNavigate } from "react-router-dom";
+import { deleteDemo, renameDemo, setDemoStatus, listLeadTemplates, saveLeadTemplate } from "@/lib/api/demos";
 import {
-  deleteDemo,
-  listDemoItems,
-  renameDemo,
-  setDemoStatus,
   updateDemoStepHotspots,
-  mirrorDemoToPublic,
-  deletePublicDemoItems,
   updateDemoLeadConfig,
   updateDemoStyleConfig,
-  listLeadTemplates,
-  saveLeadTemplate,
-} from "@/lib/api/demos";
-import { getUrl } from "aws-amplify/storage";
+  mirrorDemoToPublic,
+  deletePublicDemoItems,
+} from "@/features/editor/services/editorPersistence";
+import { useEditorData } from "@/features/editor/hooks/useEditorData";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { PasswordlessAuth } from "@/components/auth/PasswordlessAuth";
 import { toast } from "sonner";
@@ -26,11 +21,7 @@ import { Loader2, Copy } from "lucide-react";
 import LeadCaptureOverlay from "@/components/LeadCaptureOverlay";
 import StepsBar from "@/components/StepsBar";
 import HotspotOverlay from "@/components/HotspotOverlay";
-import {
-  deriveTooltipStyleFromHotspots,
-  type HotspotsMap,
-  type TooltipStyle,
-} from "@/lib/editor/deriveTooltipStyleFromHotspots";
+import { type HotspotsMap, type TooltipStyle } from "@/lib/editor/deriveTooltipStyleFromHotspots";
 import { applyGlobalStyleToHotspots } from "@/lib/editor/applyGlobalStyleToHotspots";
 import { extractLeadConfig } from "@/lib/editor/extractLeadConfig";
 import { Dialog as UIDialog, DialogContent as UIDialogContent } from "@/components/ui/dialog";
@@ -83,6 +74,9 @@ export function DemoEditorPage() {
   const [shareOpen, setShareOpen] = useState(false);
   // Retry counter for backend load (handle eventual consistency right after creation)
   const loadAttemptsRef = useRef<number>(0);
+
+  // New: hook to load data for saved demos (backend path)
+  const ed = useEditorData(demoIdParam || undefined);
 
   const [isDrawing, setIsDrawing] = useState(false);
   const [startPos, setStartPos] = useState({ x: 0, y: 0 });
@@ -165,171 +159,6 @@ export function DemoEditorPage() {
   const currentHotspots: Hotspot[] = currentStepId ? (hotspotsByStep[currentStepId] ?? []) : [];
 
   useEffect(() => {
-    const loadFromBackend = async (demoId: string) => {
-      try {
-        setLoadingSteps(true);
-        const items = await listDemoItems(demoId);
-        const meta = (items || []).find((it: any) => String(it.itemSK) === "METADATA");
-        if (meta) {
-          setDemoName(meta.name || "");
-          setDemoStatusLocal((meta.status as any) === "PUBLISHED" ? "PUBLISHED" : "DRAFT");
-          try {
-            if ((meta as any).leadConfig) {
-              const cfg =
-                typeof (meta as any).leadConfig === "string"
-                  ? JSON.parse((meta as any).leadConfig)
-                  : (meta as any).leadConfig;
-              if (cfg && typeof cfg === "object") setLeadFormConfig(cfg);
-            }
-          } catch {}
-          try {
-            const raw = (meta as any).hotspotStyle;
-            if (raw) {
-              const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
-              if (parsed && typeof parsed === "object") {
-                setTooltipStyle((prev) => ({
-                  dotSize: Number(parsed.dotSize ?? prev.dotSize ?? 12),
-                  dotColor: String(parsed.dotColor ?? prev.dotColor ?? "#2563eb"),
-                  dotStrokePx: Number(parsed.dotStrokePx ?? prev.dotStrokePx ?? 2),
-                  dotStrokeColor: String(parsed.dotStrokeColor ?? prev.dotStrokeColor ?? "#ffffff"),
-                  animation: (parsed.animation ?? prev.animation ?? "none") as any,
-                  tooltipBgColor: String(parsed.tooltipBgColor ?? prev.tooltipBgColor ?? "#2563eb"),
-                  tooltipTextColor: String(parsed.tooltipTextColor ?? prev.tooltipTextColor ?? "#ffffff"),
-                  tooltipTextSizePx: Number(parsed.tooltipTextSizePx ?? prev.tooltipTextSizePx ?? 12),
-                }));
-              }
-            }
-          } catch {}
-        }
-        const stepItems = (items || []).filter((it: any) => String(it.itemSK || "").startsWith("STEP#"));
-        stepItems.sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0));
-        const urls: Array<{
-          id: string;
-          pageUrl: string;
-          screenshotUrl: string;
-        }> = [];
-        const hotspotsMap: Record<string, Hotspot[]> = {};
-        for (const si of stepItems) {
-          try {
-            const raw: string | undefined = si.s3Key;
-            if (!raw) continue;
-            const isUrl = /^(https?:)?\/\//i.test(raw);
-            let screenshotUrl: string | undefined;
-            if (isUrl) {
-              screenshotUrl = raw;
-            } else {
-              const s = String(raw);
-              let access: "guest" | "protected" | "private" = "guest";
-              let keyForStorage = s;
-              if (s.startsWith("public/")) {
-                access = "guest";
-                keyForStorage = s.replace(/^public\//, "");
-              } else if (s.startsWith("protected/")) {
-                access = "protected";
-                keyForStorage = s.replace(/^protected\/[^/]+\//, "");
-              } else if (s.startsWith("private/")) {
-                access = "private";
-                keyForStorage = s.replace(/^private\/[^/]+\//, "");
-              }
-              try {
-                const { url } = await getUrl({ key: keyForStorage, options: { accessLevel: access as any } } as any);
-                screenshotUrl = url.toString();
-              } catch (err) {
-                console.error("[Editor] Storage.getUrl failed", { raw, keyForStorage, access }, err);
-              }
-            }
-            if (!screenshotUrl) continue;
-            urls.push({
-              id: String(si.itemSK).slice("STEP#".length),
-              pageUrl: si.pageUrl || "",
-              screenshotUrl,
-            });
-            if (si.hotspots) {
-              try {
-                const parsed = typeof si.hotspots === "string" ? JSON.parse(si.hotspots) : si.hotspots;
-                if (Array.isArray(parsed)) hotspotsMap[String(si.itemSK).slice("STEP#".length)] = parsed as Hotspot[];
-              } catch (_e) {}
-            }
-          } catch (e) {
-            console.error("[Editor] Failed to resolve S3 URL", { itemSK: si?.itemSK, s3Key: si?.s3Key }, e);
-          }
-        }
-        if (!stepItems.length && loadAttemptsRef.current < 10) {
-          loadAttemptsRef.current += 1;
-          const delayMs = 300 + loadAttemptsRef.current * 300; // ~0.6s..3.3s
-          setTimeout(() => {
-            loadFromBackend(demoId);
-          }, delayMs);
-          return;
-        }
-        if (stepItems.length > 0 && !urls.length && loadAttemptsRef.current < 10) {
-          loadAttemptsRef.current += 1;
-          const delayMs = 500 + loadAttemptsRef.current * 400;
-          setTimeout(() => loadFromBackend(demoId), delayMs);
-          return;
-        }
-        try {
-          const hasMetaStyle = Boolean((meta as any)?.hotspotStyle);
-          if (!hasMetaStyle) {
-            const derived = deriveTooltipStyleFromHotspots(
-              hotspotsMap as HotspotsMap,
-              {
-                dotSize: 12,
-                dotColor: "#2563eb",
-                dotStrokePx: 2,
-                dotStrokeColor: "#ffffff",
-                animation: "none",
-                tooltipBgColor: "#2563eb",
-                tooltipTextColor: "#ffffff",
-                tooltipTextSizePx: 12,
-              } as TooltipStyle
-            );
-            if (derived) {
-              setTooltipStyle((prev) => ({
-                dotSize: Number(derived.dotSize ?? prev.dotSize ?? 12),
-                dotColor: String(derived.dotColor ?? prev.dotColor ?? "#2563eb"),
-                dotStrokePx: Number(derived.dotStrokePx ?? prev.dotStrokePx ?? 2),
-                dotStrokeColor: String(derived.dotStrokeColor ?? prev.dotStrokeColor ?? "#ffffff"),
-                animation: (derived.animation ?? prev.animation ?? "none") as any,
-                tooltipBgColor: String(derived.tooltipBgColor ?? prev.tooltipBgColor ?? "#2563eb"),
-                tooltipTextColor: String(derived.tooltipTextColor ?? prev.tooltipTextColor ?? "#ffffff"),
-                tooltipTextSizePx: Number(derived.tooltipTextSizePx ?? prev.tooltipTextSizePx ?? 12),
-              }));
-            }
-          }
-        } catch {}
-        try {
-          let leadIdxSaved: number | null | undefined = (meta as any)?.leadStepIndex;
-          let leadBgSaved: "white" | "black" = "white";
-          if ((meta as any)?.leadConfig) {
-            try {
-              const cfg =
-                typeof (meta as any).leadConfig === "string"
-                  ? JSON.parse((meta as any).leadConfig)
-                  : (meta as any).leadConfig;
-              if (cfg && (cfg.bg === "white" || cfg.bg === "black")) leadBgSaved = cfg.bg;
-            } catch {}
-          }
-          if (typeof leadIdxSaved === "number" && leadIdxSaved >= 0 && leadIdxSaved <= urls.length) {
-            const leadStep = {
-              id: "LEAD-SAVED",
-              pageUrl: "",
-              screenshotUrl: undefined as unknown as string,
-              isLeadCapture: true as const,
-              leadBg: leadBgSaved,
-            } as any;
-            urls.splice(leadIdxSaved, 0, leadStep);
-          }
-        } catch {}
-        setSteps(urls);
-        setHotspotsByStep(hotspotsMap);
-        setSelectedStepIndex(0);
-      } catch (e) {
-        console.error("[Editor] Failed to load demo from backend", e);
-      } finally {
-        setLoadingSteps(false);
-      }
-    };
 
     const loadFromExtension = async () => {
       try {
@@ -447,12 +276,24 @@ export function DemoEditorPage() {
     };
 
     loadAttemptsRef.current = 0;
-    if (demoIdParam) {
-      loadFromBackend(demoIdParam);
-    } else {
+    if (!demoIdParam) {
       loadFromExtension();
     }
   }, [demoIdParam]);
+
+  // Sync local UI state from useEditorData when editing a saved demo
+  useEffect(() => {
+    if (!demoIdParam) return;
+    setLoadingSteps(ed.loading);
+    if (ed.loading) return;
+    setDemoName(ed.demoName || "");
+    setDemoStatusLocal(ed.demoStatus);
+    setSteps(ed.steps as any);
+    setHotspotsByStep(ed.hotspotsByStep as any);
+    if (ed.leadFormConfig) setLeadFormConfig(ed.leadFormConfig);
+    setTooltipStyle((prev) => ({ ...prev, ...ed.tooltipStyle }));
+    setSelectedStepIndex(0);
+  }, [demoIdParam, ed.loading, ed.demoName, ed.demoStatus, ed.steps, ed.hotspotsByStep, ed.leadFormConfig, ed.tooltipStyle]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -539,12 +380,25 @@ export function DemoEditorPage() {
         });
         await Promise.all(updates);
         try {
-          const { leadStepIndex } = extractLeadConfig(steps);
+          const extracted = extractLeadConfig(steps);
+          const leadConfigToSave: any = (extracted as any)?.leadConfig ?? (leadFormConfig as any);
+          console.info("[Editor Save] lead config about to persist", {
+            leadStepIndex: extracted.leadStepIndex,
+            leadFormConfig: leadConfigToSave,
+            leadFormFieldsCount: Array.isArray((leadConfigToSave as any)?.fields)
+              ? (leadConfigToSave as any).fields.length
+              : undefined,
+          });
           await updateDemoLeadConfig({
             demoId: demoIdParam,
-            leadStepIndex: leadStepIndex !== null ? leadStepIndex : null,
-            leadConfig: leadFormConfig as any,
+            leadStepIndex: extracted.leadStepIndex !== null ? extracted.leadStepIndex : null,
+            leadConfig: leadConfigToSave,
           });
+          if (!Array.isArray((leadConfigToSave as any)?.fields) || (leadConfigToSave as any).fields.length === 0) {
+            console.warn(
+              "[Editor Save] leadFormConfig has no fields at save time — public preview will show defaults until fields are saved"
+            );
+          }
         } catch (e) {
           console.error("Failed to persist lead config (non-fatal)", e);
         }
@@ -555,13 +409,21 @@ export function DemoEditorPage() {
         }
         if (demoStatus === "PUBLISHED") {
           try {
-            const { leadStepIndex: leadIdxNow } = extractLeadConfig(steps);
-            // Use the full lead form configuration that the editor manages so fields are preserved in PublicDemo
-            await mirrorDemoToPublic(demoIdParam, {
+            const extractedNow = extractLeadConfig(steps);
+            const leadConfigToMirror: any = (extractedNow as any)?.leadConfig ?? (leadFormConfig as any);
+            const mirrorPayload = {
               name: demoName || undefined,
-              leadStepIndex: leadIdxNow,
-              leadConfig: leadFormConfig,
+              leadStepIndex: extractedNow.leadStepIndex,
+              leadConfig: leadConfigToMirror,
+            } as const;
+            console.info("[Editor Save] mirroring to PublicDemo", {
+              ...mirrorPayload,
+              leadFormFieldsCount: Array.isArray((leadConfigToMirror as any)?.fields)
+                ? (leadConfigToMirror as any).fields.length
+                : undefined,
             });
+            // Use the full lead form configuration that the editor manages so fields are preserved in PublicDemo
+            await mirrorDemoToPublic(demoIdParam, mirrorPayload as any);
           } catch (mirrorErr) {
             console.error("Mirror to public failed (will still keep private saved).", mirrorErr);
           }

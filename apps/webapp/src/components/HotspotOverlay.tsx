@@ -247,8 +247,9 @@ export const HotspotOverlay: React.FC<HotspotOverlayProps> = ({
             const centerY = top + dotSize / 2;
             const dxNorm = (h as any).tooltipOffsetXNorm;
             const dyNorm = (h as any).tooltipOffsetYNorm;
-            const dxPx = typeof dxNorm === "number" ? dxNorm * box.width : dotSize / 2 + 6;
-            const dyPx = typeof dyNorm === "number" ? dyNorm * box.height : 0;
+            // Match editor defaults: place bubble to the right (dotSize + 6) and slightly above (-8)
+            const dxPx = typeof dxNorm === "number" ? dxNorm * box.width : dotSize + 6;
+            const dyPx = typeof dyNorm === "number" ? dyNorm * box.height : -8;
             bubbleLeft = centerX + dxPx;
             bubbleTop = centerY + dyPx;
             bubbleLeftLocal = bubbleLeft - left;
@@ -256,8 +257,8 @@ export const HotspotOverlay: React.FC<HotspotOverlayProps> = ({
           } else if (!box && typeof h.x === "number" && typeof h.y === "number") {
             const centerX = Number(h.x) + dotSize / 2;
             const centerY = Number(h.y) + dotSize / 2;
-            bubbleLeft = centerX + (dotSize / 2 + 6);
-            bubbleTop = centerY + 0;
+            bubbleLeft = centerX + (dotSize + 6);
+            bubbleTop = centerY - 8;
             bubbleLeftLocal = bubbleLeft - Number(h.x);
             bubbleTopLocal = bubbleTop - Number(h.y);
           }
@@ -285,7 +286,6 @@ export const HotspotOverlay: React.FC<HotspotOverlayProps> = ({
                     fontSize: `${bubbleSizePx}px`,
                     left: bubbleLeftLocal,
                     top: bubbleTopLocal,
-                    transform: "translate(-50%, -50%)",
                   }}
                   onMouseDown={(e) => {
                     if (!enableBubbleDrag || !box) return;
