@@ -1,6 +1,5 @@
 import { generateClient } from "aws-amplify/data";
 import { getCurrentUser, fetchAuthSession } from "aws-amplify/auth";
-import { useQuery, UseQueryResult } from "@tanstack/react-query";
 
 const pkDemo = (demoId: string) => `DEMO#${demoId}`;
 const pkPub = (demoId: string) => `PUB#${demoId}`;
@@ -966,37 +965,9 @@ export async function listDemoItems(demoId: string) {
 // (moved getOwnerId above)
 
 // -----------------
-// TanStack Query hooks
+// TanStack Query hooks (moved to hooks.ts)
 // -----------------
-
-export function useListMyDemos(
-  status?: "DRAFT" | "PUBLISHED"
-): UseQueryResult<
-  Array<{ id: string; name?: string; status?: string; createdAt?: string; updatedAt?: string }>,
-  Error
-> {
-  return useQuery({ queryKey: ["myDemos", status ?? "ALL"], queryFn: () => listMyDemos(status) });
-}
-
-export function useDemoItems(demoId: string): UseQueryResult<any[], Error> {
-  return useQuery({ queryKey: ["demoItems", demoId], queryFn: () => listDemoItems(demoId), enabled: !!demoId });
-}
-
-export function useLeadSubmissions(demoId: string): UseQueryResult<any[], Error> {
-  return useQuery({
-    queryKey: ["leadSubmissions", demoId],
-    queryFn: () => listLeadSubmissions(demoId),
-    enabled: !!demoId,
-  });
-}
-
-export function usePublicDemoItems(demoId: string): UseQueryResult<any[], Error> {
-  return useQuery({
-    queryKey: ["publicDemoItems", demoId],
-    queryFn: () => listPublicDemoItems(demoId),
-    enabled: !!demoId,
-  });
-}
+export { useListMyDemos, useDemoItems, useLeadSubmissions, usePublicDemoItems } from "./hooks";
 
 export async function listMyDemos(
   status?: "DRAFT" | "PUBLISHED"
