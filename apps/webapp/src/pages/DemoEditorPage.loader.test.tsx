@@ -12,7 +12,8 @@ vi.mock("aws-amplify/storage", () => ({
 }));
 
 vi.mock("@/lib/providers/AuthProvider", () => ({
-  useAuth: () => ({ user: null }),
+  // Simulate an authenticated user so the editor route with demoId renders
+  useAuth: () => ({ user: { userId: "test-user" }, isLoading: false }),
 }));
 
 vi.mock("@/lib/api/demos", () => ({

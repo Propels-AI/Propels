@@ -65,8 +65,9 @@ describe("DemoEditorPage save flow (draft vs published)", () => {
 
     renderWith("demo-draft");
 
-    // Ensure UI loaded (wait for at least one Save button to appear)
+    // Ensure UI and steps loaded
     await screen.findAllByRole("button", { name: /^Save$/ });
+    await screen.findByText(/Step\s*1/i);
 
     // Click the header Save button (there may be another 'Save' inside the tooltip inspector)
     const [saveHeader] = screen.getAllByRole("button", { name: /^Save$/ });
@@ -95,9 +96,10 @@ describe("DemoEditorPage save flow (draft vs published)", () => {
 
     renderWith("demo-pub");
 
-    // Ensure UI loaded (published badge & Save visible)
+    // Ensure UI loaded (published badge & Save visible) and steps rendered
     await waitFor(() => expect(screen.getByText(/PUBLISHED/i)).toBeInTheDocument());
     await screen.findAllByRole("button", { name: /^Save$/ });
+    await screen.findByText(/Step\s*1/i);
 
     const [saveHeader] = screen.getAllByRole("button", { name: /^Save$/ });
     fireEvent.click(saveHeader);

@@ -12,7 +12,8 @@ vi.mock("aws-amplify/storage", () => ({
 }));
 
 vi.mock("@/lib/providers/AuthProvider", () => ({
-  useAuth: () => ({ user: null }),
+  // Simulate an authenticated user so the editor path (with demoId) does not redirect
+  useAuth: () => ({ user: { userId: "test-user" }, isLoading: false }),
 }));
 
 vi.mock("@/lib/api/demos", () => ({
