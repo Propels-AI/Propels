@@ -14,7 +14,7 @@ const schema = a.schema({
 
       // Common attributes
       entityType: a.string(),
-      ownerId: a.string(),
+      ownerId: a.string().required(),
       createdAt: a.datetime(),
       updatedAt: a.datetime(),
 
@@ -75,7 +75,7 @@ const schema = a.schema({
       SK: a.string().required(), // "METADATA" | "STEP#..."
 
       // minimal mirror attributes
-      ownerId: a.string(),
+      ownerId: a.string().required(),
       name: a.string(),
       createdAt: a.datetime(),
       updatedAt: a.datetime(),

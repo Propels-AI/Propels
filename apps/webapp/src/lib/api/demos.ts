@@ -826,7 +826,7 @@ export type Hotspot = {
 
 export async function createDemoMetadata(params: {
   demoId: string;
-  ownerId?: string;
+  ownerId: string;
   name?: string;
   status?: "DRAFT" | "PUBLISHED";
 }): Promise<void> {
@@ -861,7 +861,7 @@ export async function createDemoStep(params: {
   order: number;
   pageUrl?: string;
   thumbnailS3Key?: string;
-  ownerId?: string;
+  ownerId: string;
 }): Promise<void> {
   const { demoId, stepId, s3Key, hotspots, order, pageUrl, thumbnailS3Key, ownerId } = params;
   const models = getPrivateModels();
