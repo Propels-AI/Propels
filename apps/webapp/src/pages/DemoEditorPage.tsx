@@ -474,6 +474,11 @@ export function DemoEditorPage() {
         const dy = y - centerY;
         const inside = dx * dx + dy * dy <= radius * radius;
         if (inside) {
+          // Prevent native selection/drag while moving the hotspot dot
+          e.preventDefault();
+          try {
+            document.body.style.userSelect = "none";
+          } catch {}
           setIsDraggingHotspot(true);
           setDragHotspotId(existing.id);
           dragStartRef.current = { x: e.clientX, y: e.clientY };
@@ -528,6 +533,10 @@ export function DemoEditorPage() {
       const id = dragHotspotId;
       setDragHotspotId(null);
       dragStartRef.current = null;
+      // Restore selection once dragging ends
+      try {
+        document.body.style.userSelect = "";
+      } catch {}
       if (start && id) {
         const moved = Math.hypot(e.clientX - start.x, e.clientY - start.y);
         if (moved < 3) {
@@ -854,9 +863,11 @@ export function DemoEditorPage() {
                   } catch {}
                 }}
                 onError={() => setImageLoading(false)}
-                className={`absolute inset-0 w-full h-full object-contain ${
+                className={`absolute inset-0 w-full h-full object-contain select-none ${
                   imageLoading ? "opacity-50" : "opacity-100"
                 }`}
+                draggable={false}
+                onDragStart={(e) => e.preventDefault()}
               />
             )
           ) : demoIdParam && !loadingSteps ? (
@@ -1000,6 +1011,11 @@ export function DemoEditorPage() {
                         // Enable dragging bubble in edit mode (not preview)
                         if (isPreviewing) return;
                         e.stopPropagation();
+                        // Prevent text/image selection while dragging the bubble
+                        e.preventDefault();
+                        try {
+                          document.body.style.userSelect = "none";
+                        } catch {}
                         const rect = imageRef.current?.getBoundingClientRect();
                         if (!rect || !naturalSize) return;
                         const startX = e.clientX;
@@ -1026,6 +1042,10 @@ export function DemoEditorPage() {
                         const onUp = () => {
                           document.removeEventListener("mousemove", onMove);
                           document.removeEventListener("mouseup", onUp);
+                          // Restore selection after bubble drag ends
+                          try {
+                            document.body.style.userSelect = "";
+                          } catch {}
                         };
                         document.addEventListener("mousemove", onMove);
                         document.addEventListener("mouseup", onUp);
