@@ -111,7 +111,7 @@ async function updateActionIcon(options?: { recording?: boolean; count?: number 
     // Background transparent (kept clear)
 
     // Draw icon
-    const radius = Math.floor(size * 0.48);
+    const radius = Math.max(1, Math.floor(size * 0.5) - 1);
     const cx = Math.floor(size / 2);
     const cy = Math.floor(size / 2);
     if (rec) {
@@ -121,13 +121,29 @@ async function updateActionIcon(options?: { recording?: boolean; count?: number 
       ctx.closePath();
       ctx.fillStyle = "#dc2626"; // red-600
       ctx.fill();
+
+      // Draw step count in the center for a clear numeric indicator
+      const display = count > 99 ? "99+" : String(count);
+      const fontSize = Math.max(8, Math.floor(size * 0.48));
+      ctx.font = `bold ${fontSize}px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.lineWidth = Math.max(2, Math.floor(size * 0.08));
+      ctx.strokeStyle = "rgba(0,0,0,0.35)";
+      try {
+        ctx.strokeText(display, cx, cy + 0.5);
+      } catch {}
+      ctx.fillStyle = "#ffffff";
+      try {
+        ctx.fillText(display, cx, cy);
+      } catch {}
     } else {
       // Idle: hollow gray ring for clearer distinction
       ctx.beginPath();
       ctx.arc(cx, cy, radius, 0, Math.PI * 2);
       ctx.closePath();
-      ctx.lineWidth = Math.max(2, Math.floor(size * 0.18));
-      ctx.strokeStyle = "#94a3b8"; // slate-400 ring
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "#cbd5e1";
       ctx.stroke();
     }
 
@@ -458,10 +474,13 @@ async function handleCaptureScreenshot(captureData: DemoCapture, sendResponse: (
       console.log("✅ Background: Step count updated in storage");
     });
 
-    // Keep red dot badge while recording
+    // Refresh the action icon to reflect the latest step count inside the red dot
     if (isRecording) {
-      chrome.action.setBadgeText({ text: "●" });
-      chrome.action.setBadgeBackgroundColor({ color: "#dc2626" });
+      try {
+        await updateActionIcon({ recording: true, count: stepCount });
+      } catch (e) {
+        // ignore icon update errors silently
+      }
     }
 
     console.log("Screenshot captured and saved:", updatedCapture);
