@@ -104,9 +104,7 @@
       isCapturing = true;
     }
 
-    // Visual indicator that capture is active
-    showCaptureIndicator();
-    updateCaptureIndicator(stepCount);
+    // Visual indicator removed (handled by action icon in background script)
   }
 
   function stopCapture() {
@@ -119,8 +117,7 @@
     // Remove click listener (with same options as addEventListener)
     document.removeEventListener("click", handleClick, true);
 
-    // Hide capture indicator
-    hideCaptureIndicator();
+    // Visual indicator removed
 
     // The captured data is already saved in IndexedDB by the background script
     // No need to send it again
@@ -189,15 +186,13 @@
         captureData.push(response.data);
         stepCount++; // Increment after successful capture
         console.log("✅ Screenshot captured successfully, new step count:", stepCount);
-
-        // Update capture indicator with step count
-        updateCaptureIndicator(stepCount);
+        // Visual indicator removed
       } else {
         console.error("❌ Failed to capture screenshot:", response);
         // Still increment for UI feedback but log the issue
         stepCount++;
         console.log("⚠️ Incrementing step count despite background failure:", stepCount);
-        updateCaptureIndicator(stepCount);
+        // Visual indicator removed
       }
     } catch (error) {
       console.error("💥 Error sending capture message:", error);
@@ -213,45 +208,7 @@
       // Still increment for UI feedback
       stepCount++;
       console.log("⚠️ Incrementing step count despite error:", stepCount);
-      updateCaptureIndicator(stepCount);
-    }
-  }
-
-  function showCaptureIndicator() {
-    // Remove existing indicator if present
-    hideCaptureIndicator();
-
-    const indicator = document.createElement("div");
-    indicator.id = "demo-capture-indicator";
-    indicator.style.cssText = `
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      background: #ff4444;
-      color: white;
-      padding: 8px 16px;
-      border-radius: 20px;
-      font-family: Arial, sans-serif;
-      font-size: 12px;
-      z-index: 10000;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-      pointer-events: none;
-    `;
-    indicator.textContent = "🔴 Recording Demo - 0 steps";
-    document.body.appendChild(indicator);
-  }
-
-  function updateCaptureIndicator(stepCount: number) {
-    const indicator = document.getElementById("demo-capture-indicator");
-    if (indicator) {
-      indicator.textContent = `🔴 Recording Demo - ${stepCount} steps`;
-    }
-  }
-
-  function hideCaptureIndicator() {
-    const indicator = document.getElementById("demo-capture-indicator");
-    if (indicator) {
-      indicator.remove();
+      // Visual indicator removed
     }
   }
 
@@ -272,13 +229,10 @@
         stepCount = response.stepCount || 0;
         captureData = []; // Reset local data for new page
 
-        // Add click listener and show indicator
+        // Add click listener
         document.addEventListener("click", handleClick, true);
         console.log("👂 Click listener added to document");
-
-        showCaptureIndicator();
-        updateCaptureIndicator(stepCount);
-        console.log("🔴 Recording indicator shown with step count:", stepCount);
+        console.log("🔴 Recording resumed with step count:", stepCount);
       } else {
         console.log("❌ No active recording session found or response invalid:", response);
       }
