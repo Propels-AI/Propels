@@ -4,109 +4,140 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Propels Demo Capturer – Getting Started</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <style>
       :root {
-        --bg: #0b1220;
-        --panel: #0f172a;
-        --text: #e5e7eb;
-        --muted: #94a3b8;
-        --brand: #6366f1;
-        --accent: #22d3ee;
-        --border: #1f2937;
+        --bg: #ffffff;
+        --text: #111827; /* neutral gray-900 */
+        --muted: #6b7280; /* neutral gray-500 */
+        --border: #e5e7eb; /* neutral gray-200 */
       }
-      html, body {
+      html,
+      body {
         height: 100%;
       }
       body {
         margin: 0;
-        background: linear-gradient(180deg, var(--bg), #0b1020);
+        background: var(--bg);
         color: var(--text);
-        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+        font-family:
+          "Inter",
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          Segoe UI,
+          Roboto,
+          Helvetica,
+          Arial,
+          "Apple Color Emoji",
+          "Segoe UI Emoji";
+      }
+      .viewport {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 40px 16px;
       }
       .container {
-        max-width: 820px;
-        margin: 0 auto;
-        padding: 40px 20px 64px;
+        width: 100%;
+        margin: 0 5%;
       }
       .card {
-        background: linear-gradient(180deg, #0f172a, #0c1426);
+        background: #ffffff;
         border: 1px solid var(--border);
-        border-radius: 16px;
-        padding: 28px;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+        border-radius: 12px;
+        padding: 0; /* remove padding so height matches iframe */
       }
       .title {
-        font-size: 24px;
+        font-size: 22px;
         font-weight: 700;
-        margin: 0 0 6px 0;
+        margin: 0 0 8px 0;
         letter-spacing: 0.2px;
+        text-align: center;
       }
       .subtitle {
         color: var(--muted);
         margin: 0 0 24px 0;
+        text-align: center;
       }
       .steps {
-        display: grid;
-        grid-template-columns: 1fr;
-        gap: 14px;
-      }
-      .step {
-        display: grid;
-        grid-template-columns: 36px 1fr;
-        gap: 14px;
-        align-items: start;
-        background: rgba(99,102,241,0.06);
-        border: 1px solid rgba(99,102,241,0.2);
-        border-radius: 12px;
-        padding: 14px;
-      }
-      .badge {
-        width: 36px;
-        height: 36px;
-        border-radius: 10px;
-        background: linear-gradient(180deg, var(--brand), #4f46e5);
-        display: grid;
-        place-items: center;
-        color: white;
-        font-weight: 700;
-      }
-      .step h3 {
-        margin: 2px 0 6px 0;
-        font-size: 16px;
-      }
-      .step p {
         margin: 0;
-        color: var(--muted);
-        line-height: 1.5;
+        padding: 0;
+      }
+      ol.steps-list {
+        margin: 0;
+        padding-left: 18px;
+      }
+      ol.steps-list li {
+        margin: 12px 0;
+        line-height: 1.6;
+      }
+      .step-title {
+        font-weight: 600;
       }
       .cta-row {
         display: flex;
+        justify-content: center;
         flex-wrap: wrap;
-        gap: 10px;
+        gap: 8px;
         margin-top: 20px;
+      }
+      .two-col {
+        display: grid;
+        grid-template-columns: 1fr 2fr;
+        gap: 20px;
+        align-items: stretch; /* make columns equal height */
+      }
+      @media (max-width: 900px) {
+        .two-col {
+          grid-template-columns: 1fr;
+        }
+      }
+      .instructions {
+        font-size: 16px;
+        padding: 24px; /* inner spacing moved from card */
+      }
+      .card {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+      .lead {
+        display: block;
+        margin: 4px 0 16px 0;
+        text-align: center;
+        color: var(--muted);
+      }
+      .embed iframe {
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        height: auto;
+        max-height: 70vh;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: #fff;
       }
       .btn {
         appearance: none;
         border: 1px solid var(--border);
-        background: linear-gradient(180deg, #111827, #0f172a);
+        background: #ffffff;
         color: var(--text);
-        border-radius: 10px;
+        border-radius: 8px;
         padding: 10px 14px;
-        font-weight: 600;
+        font-weight: 500;
         text-decoration: none;
         display: inline-flex;
         align-items: center;
         gap: 8px;
       }
-      .btn.primary {
-        border-color: transparent;
-        background: linear-gradient(180deg, var(--brand), #4f46e5);
-        color: white;
-      }
       .hint {
         margin-top: 16px;
         color: var(--muted);
         font-size: 13px;
+        text-align: center;
       }
       .footer {
         margin-top: 22px;
@@ -115,19 +146,15 @@
         text-align: center;
       }
       .logo {
-        display: inline-flex;
-        align-items: center;
-        gap: 10px;
-        margin-bottom: 16px;
+        display: block;
+        margin: 0 auto 16px auto;
         color: var(--text);
         text-decoration: none;
+        text-align: center;
+        font-weight: 600;
       }
       .logo .dot {
-        width: 14px;
-        height: 14px;
-        border-radius: 4px;
-        background: linear-gradient(180deg, var(--accent), #06b6d4);
-        box-shadow: 0 4px 16px rgba(34,211,238,0.35);
+        display: none;
       }
       .kbd {
         display: inline-block;
@@ -135,70 +162,43 @@
         border-bottom-width: 2px;
         padding: 2px 6px;
         border-radius: 6px;
-        background: #0b1324;
+        background: #f9fafb;
       }
     </style>
   </head>
   <body>
-    <div class="container">
-      <a class="logo" href="https://app.propels.ai" target="_blank" rel="noreferrer">
-        <span class="dot"></span>
-        <strong>Propels Demo Capturer</strong>
-      </a>
-      <div class="card">
-        <h1 class="title">Welcome! Let's capture your first demo</h1>
-        <p class="subtitle">Follow these quick steps. You can keep this tab open the first time.</p>
-        <div class="steps">
-          <div class="step">
-            <div class="badge">1</div>
-            <div>
-              <h3>Pin the extension</h3>
-              <p>Click the extensions <span class="kbd">🧩</span> icon in the Chrome toolbar and pin <strong>Propels Demo Capturer</strong>. This keeps the icon visible.</p>
+    <div class="viewport">
+      <div class="container">
+        <h1 class="title">Welcome to Propels!</h1>
+        <span class="lead">Propels is a demo showroom that allows you to embed anywhere to capture leads!</span>
+        <div class="two-col">
+          <div class="card">
+            <div class="instructions">
+              <ol class="steps-list" style="font-size: 18px">
+                <li>
+                  Click the extensions
+                  <span class="kbd">🧩</span> icon and pin <strong>Propels Demo Capturer</strong>.
+                </li>
+                <li>
+                  Go to the page you want to show. Click the Propels icon and hit <strong>Start Recording</strong>.
+                </li>
+                <li>
+                  Navigate like you're showing a customer. Click the icon again and choose <strong>Stop</strong> — we'll
+                  open the Editor.
+                </li>
+              </ol>
             </div>
           </div>
-          <div class="step">
-            <div class="badge">2</div>
-            <div>
-              <h3>Open the site you want to demo</h3>
-              <p>Navigate to any page where you’ll start your walkthrough.</p>
-            </div>
-          </div>
-          <div class="step">
-            <div class="badge">3</div>
-            <div>
-              <h3>Start recording from the extension</h3>
-              <p>Click the Propels icon, then press <strong>Start Recording</strong>. The toolbar icon turns into a <strong>solid red dot</strong> while recording.</p>
-            </div>
-          </div>
-          <div class="step">
-            <div class="badge">4</div>
-            <div>
-              <h3>Click through your flow</h3>
-              <p>Each click captures a step. Use natural pacing. Press the extension icon again and choose <strong>Stop</strong> when done.</p>
-            </div>
-          </div>
-          <div class="step">
-            <div class="badge">5</div>
-            <div>
-              <h3>Edit and publish</h3>
-              <p>After stopping, we’ll open the <strong>Editor</strong> where you can add tooltips, rename, and publish your demo.</p>
-            </div>
+          <div class="embed">
+            <iframe src="https://propels.ai" title="Propels" loading="lazy"></iframe>
           </div>
         </div>
         <div class="cta-row">
           <a class="btn primary" href="https://app.propels.ai" target="_blank" rel="noreferrer">Open Web App</a>
-          <a class="btn" href="https://docs.propels.ai" target="_blank" rel="noreferrer">Read Docs</a>
-          <button id="open-editor" class="btn" type="button">Open Local Editor (dev)</button>
+          <a class="btn primary" href="https://propels.ai" target="_blank" rel="noreferrer">See Our Demo</a>
         </div>
-        <div class="hint">Tip: You can start/stop from the extension popup at any time. The toolbar icon shows a <strong>solid red dot</strong> while recording, and a <strong>hollow gray ring</strong> when idle.</div>
         <div class="footer">Need help? Contact support at support@propels.ai</div>
       </div>
     </div>
-    <script>
-      // Optional: quick link to local dev editor if running the web app locally
-      document.getElementById('open-editor')?.addEventListener('click', () => {
-        chrome.tabs.create({ url: 'http://localhost:5173/editor' });
-      });
-    </script>
   </body>
 </html>
