@@ -14,6 +14,7 @@ import {
 } from "@/features/editor/services/editorPersistence";
 import { useEditorData } from "@/features/editor/hooks/useEditorData";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { PasswordlessAuth } from "@/components/auth/PasswordlessAuth";
 import { toast } from "sonner";
 import { Loader2, Copy } from "lucide-react";
@@ -1061,23 +1062,31 @@ export function DemoEditorPage() {
             })}
         </div>
       </div>
-      <div className="w-80 bg-gray-100 p-4 border-l space-y-6">
-        <h2 className="text-xl font-semibold mb-2 flex items-center justify-between">
-          <span>Steps</span>
-          <button
-            title="Add lead generation step"
-            className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50"
-            onClick={() => {
-              setLeadUiOpen((v) => !v);
-              const safeLen = Math.max(1, steps.length);
-              const suggested = Math.min(safeLen, selectedStepIndex + 1);
-              setLeadInsertAnchor(suggested);
-              setLeadInsertPos("after");
-            }}
-          >
-            + Lead
-          </button>
-        </h2>
+      <div className="w-80 bg-gray-100 p-4 border-l">
+        <Tabs defaultValue="steps" className="w-full">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="steps">Steps</TabsTrigger>
+            <TabsTrigger value="tooltip">Tooltip</TabsTrigger>
+            <TabsTrigger value="lead">Lead Form</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="steps" className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Steps</h3>
+              <button
+                title="Add lead generation step"
+                className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50"
+                onClick={() => {
+                  setLeadUiOpen((v) => !v);
+                  const safeLen = Math.max(1, steps.length);
+                  const suggested = Math.min(safeLen, selectedStepIndex + 1);
+                  setLeadInsertAnchor(suggested);
+                  setLeadInsertPos("after");
+                }}
+              >
+                + Lead
+              </button>
+            </div>
         {leadUiOpen && (
           <div className="mb-3 p-3 bg-white border rounded-lg shadow-sm text-xs text-gray-700">
             <div className="flex flex-wrap items-center gap-2">
@@ -1198,16 +1207,17 @@ export function DemoEditorPage() {
             </button>
           ))}
         </div>
+          </TabsContent>
 
-        <div className="pt-4 border-t mt-6">
-          <h3 className="text-lg font-semibold mb-3">Tooltip Inspector</h3>
-          {isCurrentLeadStep ? (
-            <div className="text-xs text-gray-600">Lead capture step has no hotspots.</div>
-          ) : currentHotspots.length === 0 ? (
-            <div className="text-xs text-gray-600">No tooltip on this step. Click on the image to add one.</div>
-          ) : (
-            <div className="space-y-3 text-sm">
-              <div className="flex gap-2 text-xs">
+          <TabsContent value="tooltip" className="space-y-4">
+            <h3 className="text-lg font-semibold">Tooltip Inspector</h3>
+            {isCurrentLeadStep ? (
+              <div className="text-xs text-gray-600">Lead capture step has no hotspots.</div>
+            ) : currentHotspots.length === 0 ? (
+              <div className="text-xs text-gray-600">No tooltip on this step. Click on the image to add one.</div>
+            ) : (
+              <div className="space-y-3 text-sm">
+                <div className="flex gap-2 text-xs">
                 <button
                   className={`px-2 py-1 rounded border ${inspectorTab === "fill" ? "bg-white border-blue-500 text-blue-700" : "bg-gray-50 border-transparent"}`}
                   onClick={() => setInspectorTab("fill")}
@@ -1343,16 +1353,24 @@ export function DemoEditorPage() {
                 </button>
               </div>
             </div>
-          )}
-        </div>
+            )}
+          </TabsContent>
 
-        <LeadFormEditor leadFormConfig={leadFormConfig as any} setLeadFormConfig={setLeadFormConfig as any} />
+          <TabsContent value="lead" className="space-y-4">
+            <h3 className="text-lg font-semibold">Lead Form Editor</h3>
+            <LeadFormEditor 
+              leadFormConfig={leadFormConfig} 
+              setLeadFormConfig={setLeadFormConfig} 
+            />
+          </TabsContent>
+        </Tabs>
       </div>
+      {/* Auth dialog */}
       <Dialog
         open={authOpen}
         onOpenChange={(open) => {
-          setAuthOpen(open);
-          if (!open && !isAuthenticated) {
+          if (!open) {
+            setAuthOpen(false);
             setSavingDemo(false);
           }
         }}
