@@ -1,6 +1,7 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Combobox } from '@/components/ui/combobox';
 import LeadFormEditor from '@/features/editor/components/LeadFormEditor';
 import { type TooltipStyle } from '@/lib/editor/deriveTooltipStyleFromHotspots';
 
@@ -43,6 +44,13 @@ export function EditorSidebar({
   const [leadInsertAnchor, setLeadInsertAnchor] = React.useState(1);
   const [leadInsertPos, setLeadInsertPos] = React.useState<'before' | 'after'>('after');
   const [inspectorTab, setInspectorTab] = React.useState<'fill' | 'stroke'>('fill');
+
+  const animationOptions = [
+    { value: "none", label: "None" },
+    { value: "pulse", label: "Pulse" },
+    { value: "breathe", label: "Breathe" },
+    { value: "fade", label: "Fade" },
+  ];
 
   return (
     <div className="w-80 bg-muted/30 p-4 border-r">
@@ -305,16 +313,13 @@ export function EditorSidebar({
               </div>
               <div>
                 <label className="block text-xs text-muted-foreground mb-1">Animation (applies to all steps)</label>
-                <select
+                <Combobox
+                  options={animationOptions}
                   value={tooltipStyle.animation}
-                  onChange={(e) => applyGlobalStyle({ animation: e.target.value as any })}
-                  className="w-full border rounded p-1 bg-background"
-                >
-                  <option value="none">None</option>
-                  <option value="pulse">Pulse</option>
-                  <option value="breathe">Breathe</option>
-                  <option value="fade">Fade</option>
-                </select>
+                  onValueChange={(value) => applyGlobalStyle({ animation: value as any })}
+                  placeholder="Select animation..."
+                  className="w-full"
+                />
               </div>
               <div className="flex gap-2 pt-1">
                 <Button onClick={handleSave} size="sm">
