@@ -4,9 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { signIn, confirmSignIn, signUp, confirmSignUp, getCurrentUser, signOut } from "aws-amplify/auth";
-import { Mail, CheckCircle, Loader2 } from "lucide-react";
+import { Lock, Mail, MailCheck, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 
 type AuthMode = "emailEntry" | "otpVerification";
@@ -45,6 +46,16 @@ function PasswordlessAuthComponent({
   const [resendDisabled, setResendDisabled] = useState(false);
   const [isSignUpFlow, setIsSignUpFlow] = useState(false);
   const [tempPassword, setTempPassword] = useState<string | null>(null);
+
+  // Reusable error component
+  const ErrorMessage = ({ error }: { error: string }) => (
+    <div className="flex items-start gap-3 rounded-lg border border-destructive/20 bg-destructive/5 p-3 mb-2">
+      <div className="flex h-5 w-5 items-center justify-center rounded-full bg-destructive/10 mt-0.5 flex-shrink-0">
+        <AlertCircle className="h-3 w-3 text-destructive" />
+      </div>
+      <p className="text-sm text-destructive leading-relaxed m-0">{error}</p>
+    </div>
+  );
 
   // Clear error when user edits email to re-enable submit UX
   useEffect(() => {
@@ -288,7 +299,12 @@ function PasswordlessAuthComponent({
       } else if (name === "CodeMismatchException") {
         setError("Incorrect code. Please try again.");
       } else {
-        setError(msg);
+        // Transform generic auth errors to be more appropriate for OTP context
+        if (msg && msg.toLowerCase().includes("incorrect username or password")) {
+          setError("Invalid verification code. Please try again.");
+        } else {
+          setError(msg);
+        }
       }
 
       const looksLikeSessionIssue =
@@ -327,123 +343,159 @@ function PasswordlessAuthComponent({
   };
 
   return (
-    <div
-      className={`w-full space-y-6 ${
-        isInDialog ? "p-6" : "max-w-md mx-auto p-6 bg-background text-foreground rounded-lg shadow-md border"
-      }`}
-    >
+    <>
       {isInDialog && (
         <DialogHeader>
           <DialogTitle className="sr-only">{mode === "emailEntry" ? "Sign In or Sign Up" : "Verify Email"}</DialogTitle>
         </DialogHeader>
       )}
 
-      {mode === "emailEntry" ? (
-        <div className="space-y-6">
-          {hasAnonymousSession && (
-            <div className="p-4 bg-blue-50 dark:bg-blue-950 text-blue-800 dark:text-blue-200 rounded-md border border-blue-200 dark:border-blue-800">
-              <p className="font-semibold">Sign up to save the demo you just captured!</p>
-            </div>
-          )}
-
-          <div className="flex flex-col items-center gap-2">
-            <div
-              className="flex size-11 shrink-0 items-center justify-center rounded-full border border-border"
-              aria-hidden="true"
-            >
-              <Mail className="h-6 w-6" />
-            </div>
-            <div className="text-center space-y-1">
-              <h2 className="text-2xl font-semibold leading-none tracking-tight">Sign In or Sign Up</h2>
-              <p className="text-sm text-muted-foreground">Enter your email to get a one-time code.</p>
-            </div>
-          </div>
-
-          <form ref={formRef} className="grid gap-4" onSubmit={handleEmailSubmit}>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor={`${id}-email`}>Email</Label>
-                <Input
-                  id={`${id}-email`}
-                  type="email"
-                  placeholder="john.doe@example.com"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  disabled={isLoading}
-                  autoFocus
-                />
+      <Card className={`w-full ${isInDialog ? "border-0 shadow-none" : "max-w-sm mx-auto"}`}>
+        {mode === "emailEntry" ? (
+          <>
+            {hasAnonymousSession && (
+              <div className="p-4 bg-blue-50 dark:bg-blue-950 text-blue-800 dark:text-blue-200 rounded-md border border-blue-200 dark:border-blue-800 mx-6 mt-6">
+                <p className="font-semibold">Sign up to save the demo you just captured!</p>
               </div>
-            </div>
+            )}
 
-            {error && <p className="text-sm text-red-600 dark:text-red-500 text-center">{error}</p>}
+            <CardHeader className="space-y-1 pb-4">
+              <div className="flex flex-col items-center text-center space-y-2">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+                  <Lock className="h-5 w-5 text-foreground" />
+                </div>
+                <div className="space-y-2">
+                  <CardTitle className="text-xl font-semibold tracking-tight">Sign In or Sign Up</CardTitle>
+                  <CardDescription className="text-sm text-muted-foreground px-2">
+                    Enter your email to sign in or create a new account. We'll send you a secure one-time passcode.
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
 
-            <Button type="submit" className="w-full" disabled={isLoading || !email.trim()}>
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Sending Code...
-                </>
-              ) : (
-                "Continue with Email"
-              )}
-            </Button>
-          </form>
-        </div>
-      ) : (
-        <div className="space-y-6">
-          <div className="flex flex-col items-center gap-2">
-            <div
-              className="flex size-11 shrink-0 items-center justify-center rounded-full border border-border"
-              aria-hidden="true"
-            >
-              <CheckCircle className="h-6 w-6" />
-            </div>
-            <div className="text-center space-y-1">
-              <h2 className="text-2xl font-semibold leading-none tracking-tight">Check your email</h2>
-              <p className="text-sm text-muted-foreground">
-                We sent a 6-digit code to <strong>{email}</strong>
-              </p>
-            </div>
-          </div>
+            <CardContent className="space-y-6">
+              <form ref={formRef} onSubmit={handleEmailSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor={`${id}-email`} className="text-sm font-medium">
+                    Email
+                  </Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id={`${id}-email`}
+                      type="email"
+                      placeholder="name@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="pl-10"
+                      required
+                      disabled={isLoading}
+                      autoFocus
+                    />
+                  </div>
+                </div>
 
-          <form ref={formRef} className="grid gap-4" onSubmit={handleOtpSubmit}>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor={`${id}-confirmation-code`}>Verification Code</Label>
-                <InputOTP
-                  maxLength={6}
-                  value={otpCode}
-                  onChange={(value) => setOtpCode(value)}
-                  disabled={isLoading}
-                  name={`${id}-confirmation-code`}
-                  id={`${id}-confirmation-code`}
-                  onComplete={(value) => {
-                    setOtpCode(value);
-                    setTimeout(() => {
-                      if (value.length === 6) {
-                        const submitButton = formRef.current?.querySelector(
-                          'button[type="submit"]'
-                        ) as HTMLButtonElement;
-                        if (submitButton && !submitButton.disabled) {
-                          submitButton.click();
+                {error && <ErrorMessage error={error} />}
+
+                <Button type="submit" className="w-full" disabled={isLoading || !email.trim()}>
+                  {isLoading ? (
+                    <div className="flex items-center gap-2">
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      Sending passcode...
+                    </div>
+                  ) : (
+                    "Continue with Email"
+                  )}
+                </Button>
+              </form>
+
+              <div className="text-center">
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  By continuing, you agree to our{" "}
+                  <a href="#" className="underline underline-offset-4 hover:text-primary">
+                    Terms of Service
+                  </a>{" "}
+                  and{" "}
+                  <a href="#" className="underline underline-offset-4 hover:text-primary">
+                    Privacy Policy
+                  </a>
+                  .
+                </p>
+              </div>
+            </CardContent>
+          </>
+        ) : (
+          <>
+            <CardHeader className="space-y-1 pb-4">
+              <div className="flex flex-col items-center text-center space-y-2">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+                  <MailCheck className="h-6 w-6 text-primary" />
+                </div>
+                <div className="space-y-2">
+                  <CardTitle className="text-xl font-semibold tracking-tight">Check your email</CardTitle>
+                  <CardDescription className="text-sm text-muted-foreground px-2">
+                    We sent a 6-digit code to <span className="font-medium text-foreground">{email}</span>
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+
+            <CardContent className="space-y-6">
+              <form ref={formRef} onSubmit={handleOtpSubmit} className="space-y-4">
+                <div className="space-y-3">
+                  <Label htmlFor={`${id}-confirmation-code`} className="text-sm font-medium text-center block">
+                    Enter verification code
+                  </Label>
+                  <InputOTP
+                    maxLength={6}
+                    value={otpCode}
+                    onChange={(value) => setOtpCode(value)}
+                    disabled={isLoading}
+                    name={`${id}-confirmation-code`}
+                    id={`${id}-confirmation-code`}
+                    onComplete={(value) => {
+                      setOtpCode(value);
+                      setTimeout(() => {
+                        if (value.length === 6) {
+                          const submitButton = formRef.current?.querySelector(
+                            'button[type="submit"]'
+                          ) as HTMLButtonElement;
+                          if (submitButton && !submitButton.disabled) {
+                            submitButton.click();
+                          }
                         }
-                      }
-                    }, 100);
-                  }}
-                >
-                  <InputOTPGroup className="w-full justify-center">
-                    {[...Array(6)].map((_, i) => (
-                      <InputOTPSlot key={i} index={i} />
-                    ))}
-                  </InputOTPGroup>
-                </InputOTP>
-                <div className="text-center text-sm text-muted-foreground">
-                  <span>Didn't get a code? </span>
+                      }, 100);
+                    }}
+                  >
+                    <InputOTPGroup className="w-full justify-center">
+                      {[...Array(6)].map((_, i) => (
+                        <InputOTPSlot key={i} index={i} />
+                      ))}
+                    </InputOTPGroup>
+                  </InputOTP>
+                </div>
+
+                {error && <ErrorMessage error={error} />}
+
+                <Button type="submit" className="w-full" disabled={isLoading || otpCode.length !== 6}>
+                  {isLoading ? (
+                    <div className="flex items-center gap-2">
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      Verifying...
+                    </div>
+                  ) : (
+                    "Verify Code"
+                  )}
+                </Button>
+              </form>
+
+              <div className="flex flex-col items-center space-y-2 text-center">
+                <p className="text-sm text-muted-foreground">
+                  Didn't receive a code?{" "}
                   <Button
                     variant="link"
                     type="button"
-                    className="p-0 h-auto font-normal text-primary hover:underline disabled:opacity-50 inline-flex items-center"
+                    className="p-0 h-auto font-normal underline-offset-4"
                     onClick={async () => {
                       if (!email.trim() || resendDisabled) return;
                       setIsLoading(true);
@@ -464,48 +516,36 @@ function PasswordlessAuthComponent({
                       } catch (resendErr) {
                         logError("Resend code failed", resendErr);
                         const rErr = resendErr as { message?: string };
-                        setError(rErr.message || "Failed to resend code.");
+                        let errorMsg = rErr.message || "Failed to resend code.";
+                        // Transform generic auth errors for resend context
+                        if (errorMsg.toLowerCase().includes("incorrect username or password")) {
+                          errorMsg = "Unable to resend code. Please try again.";
+                        }
+                        setError(errorMsg);
                       } finally {
                         setIsLoading(false);
                       }
                     }}
                     disabled={isLoading || resendDisabled}
                   >
-                    Send code again.
+                    Resend code
                   </Button>
-                </div>
+                </p>
+                <Button
+                  variant="ghost"
+                  type="button"
+                  className="text-sm"
+                  onClick={handleBackToEmail}
+                  disabled={isLoading}
+                >
+                  ← Back to email
+                </Button>
               </div>
-            </div>
-
-            {error && <p className="text-sm text-red-600 dark:text-red-500 text-center">{error}</p>}
-
-            <Button type="submit" className="w-full" disabled={isLoading || otpCode.length !== 6}>
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Verifying...
-                </>
-              ) : (
-                "Verify Code"
-              )}
-            </Button>
-
-            <p className="text-sm text-center text-muted-foreground">
-              Back to{" "}
-              <Button
-                variant="link"
-                type="button"
-                className="p-0 h-auto font-normal disabled:opacity-50"
-                onClick={handleBackToEmail}
-                disabled={isLoading}
-              >
-                Email Entry
-              </Button>
-            </p>
-          </form>
-        </div>
-      )}
-    </div>
+            </CardContent>
+          </>
+        )}
+      </Card>
+    </>
   );
 }
 
