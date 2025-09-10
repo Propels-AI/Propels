@@ -2,21 +2,32 @@
 (function () {
   document.addEventListener("DOMContentLoaded", () => {
     const toggleBtn = document.getElementById("recordToggle");
-    const viewBtn = document.getElementById("viewDemos");
-    const statusEl = document.getElementById("status");
+    const recBadge = document.getElementById("recBadge");
+    const recordDesc = document.getElementById("recordDesc");
 
-    if (!toggleBtn || !statusEl) {
+    if (!toggleBtn) {
       console.warn("Popup UI elements missing");
       return;
     }
 
-    function setStatus(text) {
-      statusEl.textContent = text;
+    function setToggle(recording) {
+      toggleBtn.classList.remove("btn-primary", "btn-danger");
+      if (recording) {
+        toggleBtn.textContent = "Stop Recording";
+        toggleBtn.classList.add("btn", "btn-danger");
+      } else {
+        toggleBtn.textContent = "Start Recording";
+        toggleBtn.classList.add("btn", "btn-primary");
+      }
     }
 
-    function setToggle(recording) {
-      toggleBtn.textContent = recording ? "⏹ Stop Recording" : "🔴 Start Recording";
-      toggleBtn.classList.toggle("secondary", recording);
+    function updateUI(recording) {
+      setToggle(recording);
+      if (recBadge) recBadge.style.display = recording ? "inline-block" : "none";
+      if (recordDesc)
+        recordDesc.textContent = recording
+          ? "Recording current tab — click stop when done"
+          : "Records the current browser tab";
     }
 
     async function getActiveTab() {
@@ -32,27 +43,30 @@
     async function startCapture() {
       const tab = await getActiveTab();
       if (!tab || !tab.id) {
-        setStatus("❌ No active tab");
+        console.warn("❌ No active tab");
         return false;
       }
       const url = tab.url || "";
-      if (url.startsWith("chrome://") || url.startsWith("chrome-extension://") || url.startsWith("edge://") || url.startsWith("about:")) {
-        setStatus("❌ Cannot record on this page. Open a regular website.");
+      if (
+        url.startsWith("chrome://") ||
+        url.startsWith("chrome-extension://") ||
+        url.startsWith("edge://") ||
+        url.startsWith("about:")
+      ) {
+        console.warn("❌ Cannot record on this page. Open a regular website.");
         return false;
       }
       try {
         await injectContent(tab.id);
       } catch (e) {
         console.warn("Content injection failed", e);
-        setStatus("❌ Inject failed. Refresh the page and try again.");
         return false;
       }
       try {
         await chrome.tabs.sendMessage(tab.id, { type: "START_CAPTURE" });
       } catch (_) {}
       await chrome.runtime.sendMessage({ type: "START_CAPTURE" });
-      setToggle(true);
-      setStatus("🔴 Capturing… Click on the page to add steps");
+      updateUI(true);
       return true;
     }
 
@@ -64,8 +78,7 @@
         } catch (_) {}
       }
       await chrome.runtime.sendMessage({ type: "STOP_CAPTURE" });
-      setToggle(false);
-      setStatus("✅ Capture complete. Opening editor if needed…");
+      updateUI(false);
       return true;
     }
 
@@ -73,11 +86,9 @@
       try {
         const res = await chrome.runtime.sendMessage({ type: "GET_RECORDING_STATE" });
         const recording = !!(res && res.success && res.isRecording);
-        setToggle(recording);
-        setStatus(recording ? "🔴 Recording active" : "Ready to start recording");
+        updateUI(recording);
       } catch (e) {
-        setToggle(false);
-        setStatus("Ready to start recording");
+        updateUI(false);
       }
     }
 
@@ -95,10 +106,6 @@
         await startCapture();
       }
     });
-
-    if (viewBtn) {
-      viewBtn.addEventListener("click", () => chrome.tabs.create({ url: "http://localhost:5173/dashboard" }));
-    }
 
     // initial
     refreshState();

@@ -3,55 +3,125 @@
   <head>
     <meta charset="utf-8" />
     <style>
+      :root {
+        --background: #ffffff;
+        --foreground: #374151;
+        --card: #f9fafb;
+        --primary: #0891b2;
+        --primary-foreground: #ffffff;
+        --border: #e5e7eb;
+        --muted-foreground: #6b7280;
+        --destructive: #dc2626;
+      }
+      html,
       body {
-        width: 300px;
-        padding: 16px;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        width: 320px;
+        background: var(--background);
+        color: var(--foreground);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      }
+      .popup {
+        display: flex;
+        flex-direction: column;
       }
       .header {
-        text-align: center;
-        margin-bottom: 16px;
+        padding: 16px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
       }
-      .button {
+      .title {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 700;
+      }
+      .badge {
+        display: none;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: var(--destructive);
+        color: #fff;
+        font-size: 11px;
+        font-weight: 600;
+      }
+      .content {
+        padding: 16px;
+      }
+      .btn {
         width: 100%;
-        padding: 12px;
-        margin: 8px 0;
+        height: 48px;
         border: none;
-        border-radius: 6px;
-        background: #007bff;
-        color: white;
-        cursor: pointer;
+        border-radius: 8px;
         font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
       }
-      .button:hover {
-        background: #0056b3;
+      .btn-primary {
+        background: var(--primary);
+        color: var(--primary-foreground);
       }
-      .secondary {
-        background: #f3f4f6;
-        color: #111827;
-        border: 1px solid #e5e7eb;
+      .btn-primary:hover {
+        filter: brightness(0.95);
       }
-      .secondary:hover {
-        background: #e5e7eb;
+      .btn-danger {
+        background: var(--destructive);
+        color: #fff;
       }
-      .status {
+      .btn-danger:hover {
+        filter: brightness(0.95);
+      }
+      .helper {
+        margin-top: 8px;
         text-align: center;
-        margin-top: 16px;
         font-size: 12px;
-        color: #666;
+        color: var(--muted-foreground);
+      }
+      .footer {
+        padding: 12px 16px;
+        border-top: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 11px;
+        color: var(--muted-foreground);
+      }
+      .link {
+        background: none;
+        border: none;
+        color: inherit;
+        cursor: pointer;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .hidden {
+        display: none !important;
       }
     </style>
   </head>
   <body>
-    <div class="header">
-      <h3>Demo Builder</h3>
+    <div class="popup">
+      <div class="header">
+        <h1 class="title">Screen Recorder</h1>
+        <span id="recBadge" class="badge">Recording</span>
+      </div>
+
+      <div class="content">
+        <button id="recordToggle" class="btn btn-primary">Start Recording</button>
+        <div id="recordDesc" class="helper">Records the current browser tab</div>
+      </div>
+
+      <div class="footer">
+        <button class="link" id="helpLink">Help</button>
+        <button class="link" id="privacyLink">See Example</button>
+      </div>
     </div>
-
-    <button class="button" id="recordToggle">🔴 Start Recording</button>
-
-    <button class="button secondary" id="viewDemos">👀 See Example</button>
-
-    <div class="status" id="status">Ready to capture</div>
 
     <script src="popup.js"></script>
   </body>
