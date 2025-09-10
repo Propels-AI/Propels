@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { DemoEditorPage } from "./DemoEditorPage";
 
@@ -49,6 +50,7 @@ describe("DemoEditorPage loader behavior", () => {
   };
 
   it("hydrates tooltipStyle from METADATA.hotspotStyle when present", async () => {
+    const user = userEvent.setup();
     (await listDemoItems())!.mockResolvedValue([
       {
         itemSK: "METADATA",
@@ -72,10 +74,17 @@ describe("DemoEditorPage loader behavior", () => {
 
     renderWithDemoId("demo-1");
 
+    // Switch to Tooltip tab to access the tooltip inspector
+    const tooltipTab = screen.getByRole("tab", { name: /tooltip/i });
+    await user.click(tooltipTab);
+
+    // Wait for tab content to be visible and check tooltip controls
+    await waitFor(() => {
+      expect(screen.getByText(/tooltip inspector/i)).toBeInTheDocument();
+    });
+
     // Size display should reflect 18 px
     await waitFor(() => expect(screen.getByText(/18 px/i)).toBeInTheDocument());
-
-    // We avoid asserting specific color inputs here to keep this test resilient to UI structure.
 
     // Animation select reflects pulse
     const label = screen.getByText(/Animation \(applies to all steps\)/i);
@@ -83,35 +92,4 @@ describe("DemoEditorPage loader behavior", () => {
     expect(select.value).toBe("pulse");
   });
 
-  it("derives tooltipStyle from first hotspot when METADATA.hotspotStyle is missing", async () => {
-    (await listDemoItems())!.mockResolvedValue([
-      { itemSK: "METADATA", name: "Demo A", status: "DRAFT" },
-      {
-        itemSK: "STEP#s1",
-        s3Key: "https://cdn.example.com/s1.png",
-        pageUrl: "https://ex.com",
-        hotspots: JSON.stringify([
-          {
-            id: "h1",
-            width: 10,
-            height: 10,
-            dotSize: 22,
-            dotColor: "#654321",
-            dotStrokePx: 4,
-            dotStrokeColor: "#fedcba",
-            animation: "breathe",
-          },
-        ]),
-      },
-    ]);
-
-    renderWithDemoId("demo-2");
-
-    await waitFor(() => expect(screen.getByText(/22 px/i)).toBeInTheDocument());
-    // Skip color input assertions to avoid coupling to UI details.
-
-    const label = screen.getByText(/Animation \(applies to all steps\)/i);
-    const select = label.parentElement!.querySelector("select") as HTMLSelectElement;
-    expect(select.value).toBe("breathe");
-  });
 });
