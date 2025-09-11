@@ -10,7 +10,7 @@ import PublicDemoEmbed from "@/pages/PublicDemoEmbed";
 import BlogPreviewPage from "./pages/BlogPreviewPage";
 import LeadSubmissionsPage from "@/pages/LeadSubmissionsPage";
 import { AuthProvider } from "@/lib/providers/AuthProvider";
-import { Toaster } from "sonner";
+import { Toaster } from "@/components/ui/sonner";
 
 const queryClient = new QueryClient();
 
@@ -32,7 +32,7 @@ function App() {
             <Route path="/" element={<SignInPage />} />
           </Routes>
         </Router>
-        <Toaster richColors position="top-right" />
+        <Toaster position="top-right" />
       </QueryClientProvider>
     </AuthProvider>
   );
