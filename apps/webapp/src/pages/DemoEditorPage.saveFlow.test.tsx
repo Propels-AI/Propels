@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { DemoEditorPage } from "./DemoEditorPage";
 
@@ -96,13 +97,25 @@ describe("DemoEditorPage save flow (draft vs published)", () => {
 
     renderWith("demo-pub");
 
-    // Ensure UI loaded (published badge & Save visible) and steps rendered
-    await waitFor(() => expect(screen.getByText(/PUBLISHED/i)).toBeInTheDocument());
+    // Open dropdown menu to access published badge
+    const user = userEvent.setup();
+    const dropdownBtn = await screen.findByTestId("actions-menu");
+    await user.click(dropdownBtn);
+
+    // Ensure UI loaded (published badge visible) and steps rendered
+    await waitFor(() => {
+      expect(screen.getByText(/PUBLISHED/i)).toBeInTheDocument();
+    });
+
+    // Close dropdown by clicking elsewhere or pressing Escape to access main Save button
+    await user.keyboard("{Escape}");
+
+    // Now find the main Save button and steps
     await screen.findAllByRole("button", { name: /^Save$/ });
     await screen.findByText(/Step\s*1/i);
 
     const [saveHeader] = screen.getAllByRole("button", { name: /^Save$/ });
-    fireEvent.click(saveHeader);
+    await user.click(saveHeader);
 
     await waitFor(async () => {
       expect((await api()).mirrorDemoToPublic).toHaveBeenCalledWith(

@@ -723,11 +723,13 @@ export function DemoEditorPage() {
           onPrevPreview={gotoPrevAnnotated}
           onNextPreview={gotoNextAnnotated}
           onPreview={() => setIsPreviewing(!isPreviewing)}
-          onSaveTitle={async () => {
+          onSaveTitle={async (newTitle?: string) => {
             if (!demoIdParam) return;
             try {
               setSavingTitle(true);
-              await renameDemo(demoIdParam, demoName || "");
+              // Use the passed newTitle if provided, otherwise fall back to current demoName
+              const titleToSave = newTitle !== undefined ? newTitle : demoName || "";
+              await renameDemo(demoIdParam, titleToSave);
             } catch (e) {
               console.error("Failed to rename demo", e);
               alert("Failed to save title. Please try again.");

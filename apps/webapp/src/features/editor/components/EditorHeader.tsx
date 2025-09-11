@@ -1,3 +1,4 @@
+import { useState, useRef, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -7,7 +8,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, Eye, Copy, Link, Upload, Trash2 } from "lucide-react";
+import { MoreHorizontal, Eye, Copy, Link, Upload, Trash2, Edit3, Check } from "lucide-react";
 import StepsBar from "@/components/StepsBar";
 
 export type EditorHeaderProps = {
@@ -26,7 +27,7 @@ export type EditorHeaderProps = {
   onPrevPreview: () => void;
   onNextPreview: () => void;
   // actions
-  onSaveTitle: () => Promise<void> | void;
+  onSaveTitle: (newTitle?: string) => Promise<void> | void;
   onPreview: () => void;
   onToggleStatus: () => Promise<void> | void;
   onDelete: () => Promise<void> | void;
@@ -62,33 +63,110 @@ export default function EditorHeader(props: EditorHeaderProps) {
     onSave,
   } = props;
 
+  // Title editing state
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editingTitleValue, setEditingTitleValue] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Focus input when entering edit mode
+  useEffect(() => {
+    if (isEditingTitle && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [isEditingTitle]);
+
+  const handleEditTitle = () => {
+    // If it's "Untitled Demo" or empty, start with empty input, otherwise use current name
+    const currentValue = !demoName || demoName === "Untitled Demo" ? "" : demoName;
+    setEditingTitleValue(currentValue);
+    setIsEditingTitle(true);
+  };
+
+  const handleSaveTitle = async () => {
+    const newTitle = editingTitleValue.trim() || "Untitled Demo";
+    onChangeName(newTitle);
+    setIsEditingTitle(false);
+
+    // Pass the new title directly to onSaveTitle
+    if (demoId) {
+      await onSaveTitle(newTitle);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditingTitle(false);
+    setEditingTitleValue("");
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleSaveTitle();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      handleCancelEdit();
+    }
+  };
+
   return (
     <div className="font-sans">
-      {/* Demo Title Section */}
-      <div className="mb-3 flex items-center gap-2">
-        <Input
-          value={demoName}
-          placeholder="Untitled Demo"
-          onChange={(e) => onChangeName(e.target.value)}
-          className="h-8 text-sm w-64 font-sans"
-        />
-        {demoId && (
-          <Button
-            onClick={() => onSaveTitle()}
-            disabled={!!savingTitle || !!savingDemo}
-            variant="outline"
-            size="sm"
-            className={`font-sans ${savingTitle ? "opacity-60" : ""}`}
-          >
-            {savingTitle ? "Saving..." : "Save Title"}
-          </Button>
-        )}
-      </div>
-
-      {/* Actions Section */}
+      {/* Single Row Header: Title on left, Actions on right */}
       <div className="mb-4 flex items-center justify-between">
+        {/* Left: Demo Title Section */}
+        <div className="flex items-center gap-2">
+          {isEditingTitle ? (
+            <>
+              <Input
+                ref={inputRef}
+                value={editingTitleValue}
+                placeholder="Enter demo name"
+                onChange={(e) => setEditingTitleValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                className="h-8 text-sm w-64 font-sans"
+              />
+              <Button
+                onClick={handleSaveTitle}
+                disabled={!!savingTitle || !!savingDemo}
+                variant="outline"
+                size="sm"
+                className={`font-sans ${savingTitle ? "opacity-60" : ""}`}
+              >
+                {savingTitle ? (
+                  "Saving..."
+                ) : (
+                  <>
+                    <Check className="h-3 w-3 mr-1" />
+                    Save
+                  </>
+                )}
+              </Button>
+            </>
+          ) : (
+            <>
+              <h1 className="text-lg font-medium text-foreground font-sans">{demoName || "Untitled Demo"}</h1>
+              {demoId && (
+                <Button
+                  onClick={handleEditTitle}
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0 font-sans hover:bg-accent"
+                  title="Edit demo name"
+                >
+                  <Edit3 className="h-3 w-3" />
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Right: Action Buttons */}
         <div className="flex items-center gap-3">
-          {/* Primary Actions */}
+          {/* Primary Actions - Swapped order: Preview first, then Save */}
+          <Button onClick={() => onPreview()} variant="outline" className="font-sans">
+            <Eye className="h-4 w-4 mr-2" />
+            Preview
+          </Button>
+
           <Button
             onClick={() => onSave()}
             disabled={!!savingDemo}
@@ -101,13 +179,6 @@ export default function EditorHeader(props: EditorHeaderProps) {
             {savingDemo ? "Saving..." : "Save"}
           </Button>
 
-          <Button onClick={() => onPreview()} variant="outline" className="font-sans">
-            <Eye className="h-4 w-4 mr-2" />
-            Preview
-          </Button>
-        </div>
-
-        <div className="flex items-center gap-3">
           {/* Secondary Actions Menu */}
           {demoId && (
             <DropdownMenu>
@@ -153,16 +224,16 @@ export default function EditorHeader(props: EditorHeaderProps) {
                       <Copy className="h-4 w-4 mr-2" />
                       Copy Embed
                     </DropdownMenuItem>
+
+                    <DropdownMenuSeparator />
+
+                    {/* Blog Preview */}
+                    <DropdownMenuItem onClick={() => onOpenBlogPreview()} className="font-sans">
+                      <Eye className="h-4 w-4 mr-2" />
+                      Blog Preview
+                    </DropdownMenuItem>
                   </>
                 )}
-
-                <DropdownMenuSeparator />
-
-                {/* Blog Preview */}
-                <DropdownMenuItem onClick={() => onOpenBlogPreview()} className="font-sans">
-                  <Eye className="h-4 w-4 mr-2" />
-                  Blog Preview
-                </DropdownMenuItem>
 
                 <DropdownMenuSeparator />
 

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { DemoEditorPage } from "./DemoEditorPage";
 
@@ -35,7 +36,8 @@ vi.mock("@/lib/api/demos", () => ({
 }));
 
 const api = async () => await import("@/lib/api/demos");
-const listDemoItemsMock = async () => (await import("@/lib/api/demos")).listDemoItems as unknown as ReturnType<typeof vi.fn>;
+const listDemoItemsMock = async () =>
+  (await import("@/lib/api/demos")).listDemoItems as unknown as ReturnType<typeof vi.fn>;
 
 const origError = console.error;
 const origWarn = console.warn;
@@ -82,10 +84,26 @@ describe("DemoEditorPage publish flow", () => {
 
     renderWith("demo-draft");
 
-    // Wait for Publish button to appear, then click
-    const publishBtn = await screen.findByRole("button", { name: /Publish/i });
+    // Wait for the main Save button to appear (not "Save Title")
+    await waitFor(() => {
+      const saveButtons = screen.getAllByRole("button", { name: /Save/ });
+      const mainSaveButton = saveButtons.find((btn) => btn.textContent === "Save");
+      expect(mainSaveButton).toBeInTheDocument();
+    });
 
-    fireEvent.click(publishBtn);
+    // Wait for the actions menu to appear and click it
+    const user = userEvent.setup();
+    const dropdownBtn = await screen.findByTestId("actions-menu");
+    await user.click(dropdownBtn);
+
+    // Wait a bit for the dropdown to open
+    await waitFor(() => {
+      expect(screen.getByText(/Publish/i)).toBeInTheDocument();
+    });
+
+    // Find and click the Publish button
+    const publishBtn = screen.getByText(/Publish/i);
+    await user.click(publishBtn);
 
     await waitFor(async () => {
       const { updateDemoLeadConfig, setDemoStatus } = await api();
@@ -102,15 +120,23 @@ describe("DemoEditorPage publish flow", () => {
   });
 
   it("unpublishes without error (PUBLISHED -> DRAFT)", async () => {
-    (await listDemoItemsMock())!.mockResolvedValue([
-      { itemSK: "METADATA", name: "Demo Pub", status: "PUBLISHED" },
-    ]);
+    (await listDemoItemsMock())!.mockResolvedValue([{ itemSK: "METADATA", name: "Demo Pub", status: "PUBLISHED" }]);
 
     renderWith("demo-pub");
 
-    await waitFor(() => expect(screen.getByText(/PUBLISHED/i)).toBeInTheDocument());
-    const unpublishBtn = await screen.findByRole("button", { name: /Unpublish/i });
-    fireEvent.click(unpublishBtn);
+    // Open dropdown menu to access status and unpublish button
+    const user = userEvent.setup();
+    const dropdownBtn = await screen.findByTestId("actions-menu");
+    await user.click(dropdownBtn);
+
+    // Wait for dropdown content to appear
+    await waitFor(() => {
+      expect(screen.getByText(/PUBLISHED/i)).toBeInTheDocument();
+      expect(screen.getByText(/Unpublish/i)).toBeInTheDocument();
+    });
+
+    const unpublishBtn = screen.getByText(/Unpublish/i);
+    await user.click(unpublishBtn);
 
     await waitFor(async () => {
       const { setDemoStatus } = await api();
