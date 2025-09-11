@@ -122,10 +122,14 @@ export default function EditorHeader(props: EditorHeaderProps) {
                 placeholder="Enter demo name"
                 onChange={(e) => setEditingTitleValue(e.target.value)}
                 onKeyDown={handleKeyDown}
+                onBlur={handleCancelEdit}
                 className="h-8 text-sm w-64 font-sans"
               />
               <Button
-                onClick={handleSaveTitle}
+                onMouseDown={(e) => {
+                  e.preventDefault(); // Prevent input blur when clicking save
+                  handleSaveTitle();
+                }}
                 disabled={!!savingTitle || !!savingDemo}
                 variant="outline"
                 size="sm"
