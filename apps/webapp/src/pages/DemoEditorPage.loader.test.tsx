@@ -86,10 +86,10 @@ describe("DemoEditorPage loader behavior", () => {
     // Size display should reflect 18 px
     await waitFor(() => expect(screen.getByText(/18 px/i)).toBeInTheDocument());
 
-    // Animation select reflects pulse
+    // Animation combobox reflects pulse
     const label = screen.getByText(/Animation \(applies to all steps\)/i);
-    const select = label.parentElement!.querySelector("select") as HTMLSelectElement;
-    expect(select.value).toBe("pulse");
+    const combobox = label.parentElement!.querySelector("[role='combobox']") as HTMLButtonElement;
+    expect(combobox).toBeInTheDocument();
+    expect(combobox.textContent).toBe("Pulse");
   });
-
 });
