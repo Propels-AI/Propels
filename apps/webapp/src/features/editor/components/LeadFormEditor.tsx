@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Combobox } from "@/components/ui/combobox";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { listLeadTemplates, saveLeadTemplate } from "@/lib/api/demos";
 
 export type LeadFormConfig = any;
@@ -86,7 +88,7 @@ export default function LeadFormEditor(props: {
           </div>
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-3">
           <TemplatePicker getConfig={() => leadFormConfig} applyConfig={(cfg) => setLeadFormConfig(() => cfg)} />
         </div>
       </div>
@@ -98,9 +100,11 @@ function TemplatePicker(props: { getConfig: () => any; applyConfig: (cfg: any) =
   const { getConfig, applyConfig } = props;
   const [loading, setLoading] = useState(false);
   const [templates, setTemplates] = useState<Array<{ templateId: string; name: string; leadConfig: any }>>([]);
-  const [name, setName] = useState("");
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  const load = async () => {
+  const loadTemplates = async () => {
     try {
       setLoading(true);
       const list = await listLeadTemplates();
@@ -111,52 +115,101 @@ function TemplatePicker(props: { getConfig: () => any; applyConfig: (cfg: any) =
     }
   };
 
+  // Auto-load templates on mount
+  useEffect(() => {
+    loadTemplates();
+  }, []);
+
+  const templateOptions = templates.map((t) => ({
+    value: t.templateId,
+    label: t.name,
+  }));
+
+  const handleTemplateSelect = (templateId: string) => {
+    const template = templates.find((t) => t.templateId === templateId);
+    if (template?.leadConfig) {
+      const cfg = typeof template.leadConfig === "string" ? JSON.parse(template.leadConfig) : template.leadConfig;
+      applyConfig(cfg);
+    }
+  };
+
+  const handleSaveTemplate = async () => {
+    if (!templateName.trim()) return;
+
+    try {
+      setSaving(true);
+      await saveLeadTemplate(templateName.trim(), getConfig());
+      setTemplateName("");
+      setDialogOpen(false);
+      await loadTemplates(); // Refresh the list
+    } catch (error) {
+      console.error("Failed to save template:", error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        <Button variant="outline" className="h-8" onClick={load} disabled={loading}>
-          {loading ? "Loading…" : "Load templates"}
-        </Button>
-        <select
-          onChange={(e) => {
-            const t = templates.find((x) => x.templateId === e.target.value);
-            if (t?.leadConfig) {
-              const cfg = typeof t.leadConfig === "string" ? JSON.parse(t.leadConfig) : t.leadConfig;
-              applyConfig(cfg);
-            }
-          }}
-          className="bg-background border border-input text-foreground rounded-md px-3 py-2 text-xs font-sans focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
-        >
-          <option value="">Select template…</option>
-          {templates.map((t) => (
-            <option key={t.templateId} value={t.templateId}>
-              {t.name}
-            </option>
-          ))}
-        </select>
+    <>
+      <div className="space-y-3">
+        {/* Template Loading Section */}
+        <div>
+          <p className="text-xs text-muted-foreground mb-2 font-sans">Or load a template</p>
+          <Combobox
+            options={templateOptions}
+            value=""
+            onValueChange={handleTemplateSelect}
+            placeholder={loading ? "Loading templates..." : "Select a template..."}
+            className="w-full"
+          />
+        </div>
+
+        {/* Template Saving Section */}
+        <div>
+          <Button variant="outline" size="sm" onClick={() => setDialogOpen(true)} className="w-full font-sans">
+            Save as template
+          </Button>
+          <p className="text-xs text-muted-foreground mt-1 font-sans">
+            Save this configuration to load in future forms
+          </p>
+        </div>
       </div>
-      <div className="flex items-center gap-2">
-        <Input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Template name"
-          className="h-8 text-xs w-48 font-sans"
-        />
-        <Button
-          variant="outline"
-          className="h-8"
-          onClick={async () => {
-            if (!name.trim()) return;
-            try {
-              await saveLeadTemplate(name.trim(), getConfig());
-              setName("");
-              await load();
-            } catch {}
-          }}
-        >
-          Save as template
-        </Button>
-      </div>
-    </div>
+
+      {/* Save Template Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-sans">Save Template</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground font-sans">Template Name</label>
+              <Input
+                value={templateName}
+                onChange={(e) => setTemplateName(e.target.value)}
+                placeholder="Enter a name for this template"
+                className="font-sans"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDialogOpen(false);
+                setTemplateName("");
+              }}
+              disabled={saving}
+              className="font-sans"
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSaveTemplate} disabled={!templateName.trim() || saving} className="font-sans">
+              {saving ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

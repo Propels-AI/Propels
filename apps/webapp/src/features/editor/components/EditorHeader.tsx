@@ -1,4 +1,3 @@
-import React from "react";
 import { Input } from "@/components/ui/input";
 import StepsBar from "@/components/StepsBar";
 
@@ -57,19 +56,19 @@ export default function EditorHeader(props: EditorHeaderProps) {
   } = props;
 
   return (
-    <>
+    <div className="font-sans">
       <div className="mb-3 flex items-center gap-2">
         <Input
           value={demoName}
           placeholder="Untitled Demo"
           onChange={(e) => onChangeName(e.target.value)}
-          className="h-8 text-sm w-64"
+          className="h-8 text-sm w-64 font-sans"
         />
         {demoId && (
           <button
             onClick={() => onSaveTitle()}
             disabled={!!savingTitle || !!savingDemo}
-            className={`text-sm py-1.5 px-2 rounded border ${savingTitle ? "opacity-60" : ""}`}
+            className={`text-sm py-1.5 px-3 rounded-md border border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none transition-colors font-sans ${savingTitle ? "opacity-60" : ""}`}
           >
             {savingTitle ? "Saving..." : "Save Title"}
           </button>
@@ -81,8 +80,10 @@ export default function EditorHeader(props: EditorHeaderProps) {
           <>
             <div className="flex items-center gap-2 mr-4">
               <span
-                className={`px-2 py-1 rounded text-xs font-medium ${
-                  demoStatus === "PUBLISHED" ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
+                className={`px-2 py-1 rounded-md text-xs font-medium font-sans border ${
+                  demoStatus === "PUBLISHED"
+                    ? "bg-primary/10 text-primary border-primary/20"
+                    : "bg-secondary/10 text-secondary border-secondary/20"
                 }`}
               >
                 {demoStatus}
@@ -90,7 +91,7 @@ export default function EditorHeader(props: EditorHeaderProps) {
               <button
                 onClick={() => onToggleStatus()}
                 disabled={!!togglingStatus || !!savingDemo}
-                className={`text-sm py-1.5 px-2 rounded border bg-white hover:bg-gray-50 ${
+                className={`text-sm py-1.5 px-3 rounded-md border border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none transition-colors font-sans ${
                   togglingStatus ? "opacity-60" : ""
                 }`}
               >
@@ -99,7 +100,7 @@ export default function EditorHeader(props: EditorHeaderProps) {
               <button
                 onClick={() => onDelete()}
                 disabled={!!deleting || !!savingDemo}
-                className={`text-sm py-1.5 px-2 rounded border bg-red-600 text-white hover:bg-red-700 ${
+                className={`text-sm py-1.5 px-3 rounded-md border border-destructive bg-destructive text-destructive-foreground hover:bg-destructive/90 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none transition-colors font-sans ${
                   deleting ? "opacity-70" : ""
                 }`}
               >
@@ -110,7 +111,7 @@ export default function EditorHeader(props: EditorHeaderProps) {
         )}
         <button
           onClick={() => onOpenBlogPreview()}
-          className={`text-sm py-2 px-3 rounded border bg-white border-gray-300`}
+          className="text-sm py-2 px-3 rounded-md border border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none transition-colors font-sans"
           title="Open blog preview"
         >
           Blog Preview
@@ -119,14 +120,14 @@ export default function EditorHeader(props: EditorHeaderProps) {
           <>
             <button
               onClick={() => onCopyPublicUrl()}
-              className="text-sm py-2 px-3 rounded border bg-white border-gray-300"
+              className="text-sm py-2 px-3 rounded-md border border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none transition-colors font-sans"
               title="Copy public page URL"
             >
               Copy URL
             </button>
             <button
               onClick={() => onCopyEmbed()}
-              className="text-sm py-2 px-3 rounded border bg-white border-gray-300"
+              className="text-sm py-2 px-3 rounded-md border border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none transition-colors font-sans"
               title="Copy iframe embed code"
             >
               Copy Embed
@@ -136,20 +137,25 @@ export default function EditorHeader(props: EditorHeaderProps) {
         <button
           onClick={() => onSave()}
           disabled={!!savingDemo}
-          className={`text-sm py-2 px-3 rounded ${
-            savingDemo ? "bg-blue-400 cursor-not-allowed text-white" : "bg-blue-600 hover:bg-blue-700 text-white"
+          className={`text-sm py-2 px-3 rounded-md transition-colors font-sans focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none ${
+            savingDemo
+              ? "bg-primary/60 cursor-not-allowed text-primary-foreground"
+              : "bg-primary hover:bg-primary/90 text-primary-foreground"
           }`}
         >
           {savingDemo ? "Saving..." : "Save"}
         </button>
 
-        {loadingSteps && <span className="text-xs text-gray-400">Loading steps…</span>}
+        {loadingSteps && <span className="text-xs text-muted-foreground font-sans">Loading steps…</span>}
         {!loadingSteps && stepsCount > 0 && (
-          <span className="text-xs text-gray-600">Loaded {stepsCount} captured steps</span>
+          <span className="text-xs text-muted-foreground font-sans">Loaded {stepsCount} captured steps</span>
         )}
         {isPreviewing && (
           <div className="flex items-center justify-center gap-3">
-            <button onClick={onPrevPreview} className="text-sm py-1 px-2 rounded border bg-white border-gray-300">
+            <button
+              onClick={onPrevPreview}
+              className="text-sm py-1 px-3 rounded-md border border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none transition-colors font-sans"
+            >
               Prev
             </button>
             <div className="w-64">
@@ -161,12 +167,15 @@ export default function EditorHeader(props: EditorHeaderProps) {
                 size="sm"
               />
             </div>
-            <button onClick={onNextPreview} className="text-sm py-1 px-2 rounded border bg-white border-gray-300">
+            <button
+              onClick={onNextPreview}
+              className="text-sm py-1 px-3 rounded-md border border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none transition-colors font-sans"
+            >
               Next
             </button>
           </div>
         )}
       </div>
-    </>
+    </div>
   );
 }

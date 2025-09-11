@@ -69,6 +69,7 @@ export function DemoEditorPage() {
   const [deleting, setDeleting] = useState(false);
   const [savingDemo, setSavingDemo] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   // Retry counter for backend load (handle eventual consistency right after creation)
   const loadAttemptsRef = useRef<number>(0);
 
@@ -155,7 +156,6 @@ export function DemoEditorPage() {
   const currentHotspots: Hotspot[] = currentStepId ? (hotspotsByStep[currentStepId] ?? []) : [];
 
   useEffect(() => {
-
     const loadFromExtension = async () => {
       try {
         setLoadingSteps(true);
@@ -289,7 +289,16 @@ export function DemoEditorPage() {
     if (ed.leadFormConfig) setLeadFormConfig(ed.leadFormConfig);
     setTooltipStyle((prev) => ({ ...prev, ...ed.tooltipStyle }));
     setSelectedStepIndex(0);
-  }, [demoIdParam, ed.loading, ed.demoName, ed.demoStatus, ed.steps, ed.hotspotsByStep, ed.leadFormConfig, ed.tooltipStyle]);
+  }, [
+    demoIdParam,
+    ed.loading,
+    ed.demoName,
+    ed.demoStatus,
+    ed.steps,
+    ed.hotspotsByStep,
+    ed.leadFormConfig,
+    ed.tooltipStyle,
+  ]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -691,6 +700,8 @@ export function DemoEditorPage() {
         tooltipStyle={tooltipStyle}
         applyGlobalStyle={applyGlobalStyle}
         handleSave={handleSave}
+        isCollapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
       />
       <div className="flex-1 p-8">
         <EditorHeader
@@ -1189,7 +1200,7 @@ export function DemoEditorPage() {
         </UIDialogContent>
       </UIDialog>
       {/* Lightweight template picker actions */}
-  <></>
+      <></>
     </div>
   );
 }
