@@ -31,6 +31,7 @@ interface EditorSidebarProps {
   handleSave: () => void;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
+  onAddLeadStep: (insertIndex: number) => void;
 }
 
 export function EditorSidebar({
@@ -48,6 +49,7 @@ export function EditorSidebar({
   handleSave,
   isCollapsed,
   onToggleCollapse,
+  onAddLeadStep,
 }: EditorSidebarProps) {
   const [leadUiOpen, setLeadUiOpen] = React.useState(false);
   const [leadInsertAnchor, setLeadInsertAnchor] = React.useState(1);
@@ -154,9 +156,8 @@ export function EditorSidebar({
                             onClick={() => {
                               const anchor0 = Math.max(1, Math.min(Math.max(1, steps.length), leadInsertAnchor)) - 1;
                               const insertIndex = leadInsertPos === "before" ? anchor0 : anchor0 + 1;
-                              // This should be handled by parent component
-                              // For now, we'll call a hypothetical onAddLeadStep
-                              console.log("Add lead step at index:", insertIndex);
+                              onAddLeadStep(insertIndex);
+                              setLeadUiOpen(false);
                             }}
                           >
                             Insert

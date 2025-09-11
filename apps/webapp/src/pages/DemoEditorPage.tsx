@@ -685,6 +685,25 @@ export function DemoEditorPage() {
     if (nextPos >= 0) setSelectedStepIndex(previewableIndices[nextPos]);
   };
 
+  const addLeadStep = (insertIndex: number) => {
+    const leadStep = {
+      id: `LEAD-${Date.now()}`,
+      pageUrl: "",
+      isLeadCapture: true as const,
+      leadBg: "white" as const,
+    };
+
+    setSteps((prevSteps) => {
+      const newSteps = [...prevSteps];
+      const safeIndex = Math.max(0, Math.min(insertIndex, newSteps.length));
+      newSteps.splice(safeIndex, 0, leadStep);
+      return newSteps;
+    });
+
+    // Select the newly inserted lead step
+    setSelectedStepIndex(insertIndex);
+  };
+
   return (
     <div className="min-h-screen flex">
       <EditorSidebar
@@ -702,6 +721,7 @@ export function DemoEditorPage() {
         handleSave={handleSave}
         isCollapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+        onAddLeadStep={addLeadStep}
       />
       <div className="flex-1 p-8">
         <EditorHeader
