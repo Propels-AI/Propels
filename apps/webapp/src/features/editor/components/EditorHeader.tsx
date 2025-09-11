@@ -123,7 +123,7 @@ export default function EditorHeader(props: EditorHeaderProps) {
                 onChange={(e) => setEditingTitleValue(e.target.value)}
                 onKeyDown={handleKeyDown}
                 onBlur={handleCancelEdit}
-                className="h-8 text-sm w-64 font-sans"
+                className="h-8 text-sm w-64 font-sans border border-border focus:border-ring focus:ring-0"
               />
               <Button
                 onMouseDown={(e) => {
@@ -134,6 +134,7 @@ export default function EditorHeader(props: EditorHeaderProps) {
                 variant="outline"
                 size="sm"
                 className={`font-sans ${savingTitle ? "opacity-60" : ""}`}
+                data-testid="title-save-button"
               >
                 {savingTitle ? (
                   "Saving..."
