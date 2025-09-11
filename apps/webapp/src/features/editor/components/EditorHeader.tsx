@@ -123,7 +123,7 @@ export default function EditorHeader(props: EditorHeaderProps) {
                 onChange={(e) => setEditingTitleValue(e.target.value)}
                 onKeyDown={handleKeyDown}
                 onBlur={handleCancelEdit}
-                className="h-8 text-sm w-64 font-sans border border-border focus:border-ring focus:ring-0"
+                className="h-8 text-sm w-64 font-sans border border-border focus-visible:border-ring focus-visible:ring-0"
               />
               <Button
                 onMouseDown={(e) => {
