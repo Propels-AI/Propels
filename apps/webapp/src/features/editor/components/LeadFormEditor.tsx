@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { listLeadTemplates, saveLeadTemplate } from "@/lib/api/demos";
@@ -12,38 +12,38 @@ export default function LeadFormEditor(props: {
   const { leadFormConfig, setLeadFormConfig } = props;
 
   return (
-    <div className="pt-4 border-t mt-6">
-      <h3 className="text-lg font-semibold mb-3">Lead Form</h3>
-      <div className="space-y-3 text-sm">
+    <div className="pt-4 border-t border-border mt-6">
+      <h3 className="text-lg font-semibold mb-3 text-foreground font-sans">Lead Form</h3>
+      <div className="space-y-3 text-sm text-foreground font-sans">
         <div className="space-y-2">
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="block text-xs text-gray-600 mb-1">Title</label>
+              <label className="block text-xs text-muted-foreground mb-1 font-sans">Title</label>
               <input
-                className="w-full border rounded px-2 py-1"
+                className="w-full bg-background border border-input text-foreground rounded-md px-3 py-2 text-sm font-sans focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
                 value={leadFormConfig.title || ""}
                 onChange={(e) => setLeadFormConfig((p: any) => ({ ...p, title: e.target.value }))}
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-600 mb-1">CTA Text</label>
+              <label className="block text-xs text-muted-foreground mb-1 font-sans">CTA Text</label>
               <input
-                className="w-full border rounded px-2 py-1"
+                className="w-full bg-background border border-input text-foreground rounded-md px-3 py-2 text-sm font-sans focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
                 value={leadFormConfig.ctaText || ""}
                 onChange={(e) => setLeadFormConfig((p: any) => ({ ...p, ctaText: e.target.value }))}
               />
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-600 mb-1">Subtitle</label>
+            <label className="block text-xs text-muted-foreground mb-1 font-sans">Subtitle</label>
             <textarea
-              className="w-full border rounded px-2 py-1 h-16"
+              className="w-full bg-background border border-input text-foreground rounded-md px-3 py-2 h-16 text-sm font-sans focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none resize-none"
               value={leadFormConfig.subtitle || ""}
               onChange={(e) => setLeadFormConfig((p: any) => ({ ...p, subtitle: e.target.value }))}
             />
           </div>
           <div className="space-y-1">
-            <div className="text-xs text-gray-600">Fields</div>
+            <div className="text-xs text-muted-foreground font-sans">Fields</div>
             {[
               { key: "email", label: "Email", type: "email", required: true },
               { key: "name", label: "Name", type: "text" },
@@ -56,10 +56,10 @@ export default function LeadFormEditor(props: {
               const exists = list.find((x) => x.key === f.key);
               const enabled = !!exists;
               return (
-                <label key={f.key} className="flex items-center gap-2 text-sm">
+                <label key={f.key} className="flex items-center gap-2 text-sm text-foreground font-sans">
                   <input
                     type="checkbox"
-                    className="accent-blue-600"
+                    className="accent-primary focus:ring-2 focus:ring-ring focus:ring-offset-2"
                     checked={enabled}
                     disabled={f.key === "email"}
                     onChange={(e) => {
@@ -125,7 +125,7 @@ function TemplatePicker(props: { getConfig: () => any; applyConfig: (cfg: any) =
               applyConfig(cfg);
             }
           }}
-          className="border rounded px-2 py-1 text-xs bg-white"
+          className="bg-background border border-input text-foreground rounded-md px-3 py-2 text-xs font-sans focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
         >
           <option value="">Select template…</option>
           {templates.map((t) => (
@@ -140,7 +140,7 @@ function TemplatePicker(props: { getConfig: () => any; applyConfig: (cfg: any) =
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Template name"
-          className="h-8 text-xs w-48"
+          className="h-8 text-xs w-48 font-sans"
         />
         <Button
           variant="outline"

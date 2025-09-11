@@ -1,9 +1,9 @@
-import React from 'react';
-import { Button } from '@/components/ui/button';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Combobox } from '@/components/ui/combobox';
-import LeadFormEditor from '@/features/editor/components/LeadFormEditor';
-import { type TooltipStyle } from '@/lib/editor/deriveTooltipStyleFromHotspots';
+import React from "react";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Combobox } from "@/components/ui/combobox";
+import LeadFormEditor from "@/features/editor/components/LeadFormEditor";
+import { type TooltipStyle } from "@/lib/editor/deriveTooltipStyleFromHotspots";
 
 interface EditorSidebarProps {
   steps: Array<{
@@ -11,7 +11,7 @@ interface EditorSidebarProps {
     pageUrl: string;
     screenshotUrl?: string;
     isLeadCapture?: boolean;
-    leadBg?: 'white' | 'black';
+    leadBg?: "white" | "black";
   }>;
   loadingSteps: boolean;
   selectedStepIndex: number;
@@ -42,8 +42,8 @@ export function EditorSidebar({
 }: EditorSidebarProps) {
   const [leadUiOpen, setLeadUiOpen] = React.useState(false);
   const [leadInsertAnchor, setLeadInsertAnchor] = React.useState(1);
-  const [leadInsertPos, setLeadInsertPos] = React.useState<'before' | 'after'>('after');
-  const [inspectorTab, setInspectorTab] = React.useState<'fill' | 'stroke'>('fill');
+  const [leadInsertPos, setLeadInsertPos] = React.useState<"before" | "after">("after");
+  const [inspectorTab, setInspectorTab] = React.useState<"fill" | "stroke">("fill");
 
   const animationOptions = [
     { value: "none", label: "None" },
@@ -53,17 +53,17 @@ export function EditorSidebar({
   ];
 
   return (
-    <div className="w-80 bg-muted/30 p-4 border-r">
+    <div className="w-80 bg-muted/30 p-4 border-r border-border font-sans">
       <Tabs defaultValue="steps" className="w-full">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="steps">Steps</TabsTrigger>
           <TabsTrigger value="tooltip">Tooltip</TabsTrigger>
           <TabsTrigger value="lead">Lead Form</TabsTrigger>
         </TabsList>
-        
+
         <TabsContent value="steps" className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold">Steps</h3>
+            <h3 className="text-lg font-semibold text-foreground">Steps</h3>
             <Button
               title="Add lead generation step"
               size="sm"
@@ -73,14 +73,14 @@ export function EditorSidebar({
                 const safeLen = Math.max(1, steps.length);
                 const suggested = Math.min(safeLen, selectedStepIndex + 1);
                 setLeadInsertAnchor(suggested);
-                setLeadInsertPos('after');
+                setLeadInsertPos("after");
               }}
             >
               + Lead
             </Button>
           </div>
           {leadUiOpen && (
-            <div className="mb-3 p-3 bg-card border rounded-lg shadow-sm text-xs text-card-foreground">
+            <div className="mb-3 p-3 bg-card border border-border rounded-lg shadow-sm text-xs text-card-foreground">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-medium">Add lead form</span>
                 <label className="inline-flex items-center gap-1">
@@ -88,8 +88,8 @@ export function EditorSidebar({
                     type="radio"
                     name="leadpos"
                     className="accent-primary"
-                    checked={leadInsertPos === 'before'}
-                    onChange={() => setLeadInsertPos('before')}
+                    checked={leadInsertPos === "before"}
+                    onChange={() => setLeadInsertPos("before")}
                   />
                   <span>before</span>
                 </label>
@@ -98,8 +98,8 @@ export function EditorSidebar({
                     type="radio"
                     name="leadpos"
                     className="accent-primary"
-                    checked={leadInsertPos === 'after'}
-                    onChange={() => setLeadInsertPos('after')}
+                    checked={leadInsertPos === "after"}
+                    onChange={() => setLeadInsertPos("after")}
                   />
                   <span>after</span>
                 </label>
@@ -108,10 +108,10 @@ export function EditorSidebar({
                   value={leadInsertAnchor}
                   onChange={(e) =>
                     setLeadInsertAnchor(
-                      Math.max(1, Math.min(Math.max(1, steps.length), parseInt(e.target.value || '1', 10)))
+                      Math.max(1, Math.min(Math.max(1, steps.length), parseInt(e.target.value || "1", 10)))
                     )
                   }
-                  className="border rounded px-2 py-1 text-xs bg-background"
+                  className="bg-background border border-input text-foreground rounded-md px-2 py-1 text-xs focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
                 >
                   {Array.from({ length: Math.max(1, steps.length) }, (_, i) => i + 1).map((n) => (
                     <option key={n} value={n}>
@@ -124,19 +124,15 @@ export function EditorSidebar({
                     size="sm"
                     onClick={() => {
                       const anchor0 = Math.max(1, Math.min(Math.max(1, steps.length), leadInsertAnchor)) - 1;
-                      const insertIndex = leadInsertPos === 'before' ? anchor0 : anchor0 + 1;
+                      const insertIndex = leadInsertPos === "before" ? anchor0 : anchor0 + 1;
                       // This should be handled by parent component
                       // For now, we'll call a hypothetical onAddLeadStep
-                      console.log('Add lead step at index:', insertIndex);
+                      console.log("Add lead step at index:", insertIndex);
                     }}
                   >
                     Insert
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setLeadUiOpen(false)}
-                  >
+                  <Button size="sm" variant="outline" onClick={() => setLeadUiOpen(false)}>
                     Cancel
                   </Button>
                 </div>
@@ -167,13 +163,13 @@ export function EditorSidebar({
                 key={s.id}
                 onClick={() => onSelectStep(idx)}
                 className={`w-full flex gap-3 items-center bg-card p-2 rounded-lg shadow border text-left hover:border-primary ${
-                  idx === selectedStepIndex ? 'border-primary' : 'border-transparent'
+                  idx === selectedStepIndex ? "border-primary" : "border-transparent"
                 }`}
               >
                 {s.isLeadCapture ? (
                   <div
                     className={`w-16 h-12 rounded flex items-center justify-center text-[10px] border ${
-                      s.leadBg === 'black' ? 'bg-black text-white' : 'bg-white text-gray-700'
+                      s.leadBg === "black" ? "bg-black text-white" : "bg-white text-gray-700"
                     }`}
                   >
                     LEAD
@@ -184,7 +180,7 @@ export function EditorSidebar({
                 <div className="flex-1">
                   <p className="text-sm font-medium">Step {idx + 1}</p>
                   <p className="text-[10px] text-muted-foreground truncate">
-                    {s.isLeadCapture ? 'Lead capture' : s.pageUrl}
+                    {s.isLeadCapture ? "Lead capture" : s.pageUrl}
                   </p>
                 </div>
               </button>
@@ -193,33 +189,31 @@ export function EditorSidebar({
         </TabsContent>
 
         <TabsContent value="tooltip" className="space-y-4">
-          <h3 className="text-lg font-semibold">Tooltip Inspector</h3>
+          <h3 className="text-lg font-semibold text-foreground">Tooltip Inspector</h3>
           {isCurrentLeadStep ? (
             <div className="text-xs text-muted-foreground">Lead capture step has no hotspots.</div>
           ) : currentHotspots.length === 0 ? (
-            <div className="text-xs text-muted-foreground">
-              No tooltip on this step. Click on the image to add one.
-            </div>
+            <div className="text-xs text-muted-foreground">No tooltip on this step. Click on the image to add one.</div>
           ) : (
             <div className="space-y-3 text-sm">
               <div className="flex gap-2 text-xs">
                 <Button
                   size="sm"
-                  variant={inspectorTab === 'fill' ? 'default' : 'outline'}
-                  onClick={() => setInspectorTab('fill')}
+                  variant={inspectorTab === "fill" ? "default" : "outline"}
+                  onClick={() => setInspectorTab("fill")}
                 >
                   Fill
                 </Button>
                 <Button
                   size="sm"
-                  variant={inspectorTab === 'stroke' ? 'default' : 'outline'}
-                  onClick={() => setInspectorTab('stroke')}
+                  variant={inspectorTab === "stroke" ? "default" : "outline"}
+                  onClick={() => setInspectorTab("stroke")}
                 >
                   Stroke
                 </Button>
               </div>
 
-              {inspectorTab === 'fill' ? (
+              {inspectorTab === "fill" ? (
                 <>
                   <div>
                     <label className="block text-xs text-muted-foreground mb-1">Size (px)</label>
@@ -232,9 +226,7 @@ export function EditorSidebar({
                       onChange={(e) => applyGlobalStyle({ dotSize: Number(e.target.value) })}
                       className="w-full"
                     />
-                    <div className="text-[10px] text-muted-foreground mt-0.5">
-                      {Number(tooltipStyle.dotSize)} px
-                    </div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">{Number(tooltipStyle.dotSize)} px</div>
                   </div>
                   <div>
                     <label className="block text-xs text-muted-foreground mb-1">Color</label>
@@ -280,7 +272,7 @@ export function EditorSidebar({
                 <label className="block text-xs text-muted-foreground mb-1">Tooltip background</label>
                 <input
                   type="color"
-                  value={tooltipStyle.tooltipBgColor || '#2563eb'}
+                  value={tooltipStyle.tooltipBgColor || "#2563eb"}
                   onChange={(e) => applyGlobalStyle({ tooltipBgColor: e.target.value })}
                   className="w-10 h-8 p-0 border rounded"
                   title="Choose tooltip background"
@@ -290,7 +282,7 @@ export function EditorSidebar({
                 <label className="block text-xs text-muted-foreground mb-1">Tooltip text color</label>
                 <input
                   type="color"
-                  value={tooltipStyle.tooltipTextColor || '#ffffff'}
+                  value={tooltipStyle.tooltipTextColor || "#ffffff"}
                   onChange={(e) => applyGlobalStyle({ tooltipTextColor: e.target.value })}
                   className="w-10 h-8 p-0 border rounded"
                   title="Choose tooltip text color"
@@ -331,7 +323,7 @@ export function EditorSidebar({
                   onClick={() => {
                     if (!currentStepId) return;
                     // This should be handled by parent component
-                    console.log('Delete tooltip for step:', currentStepId);
+                    console.log("Delete tooltip for step:", currentStepId);
                   }}
                 >
                   Delete Tooltip
@@ -342,11 +334,8 @@ export function EditorSidebar({
         </TabsContent>
 
         <TabsContent value="lead" className="space-y-4">
-          <h3 className="text-lg font-semibold">Lead Form Editor</h3>
-          <LeadFormEditor 
-            leadFormConfig={leadFormConfig} 
-            setLeadFormConfig={setLeadFormConfig} 
-          />
+          <h3 className="text-lg font-semibold text-foreground font-sans">Lead Form Editor</h3>
+          <LeadFormEditor leadFormConfig={leadFormConfig} setLeadFormConfig={setLeadFormConfig} />
         </TabsContent>
       </Tabs>
     </div>
