@@ -713,8 +713,6 @@ export function DemoEditorPage() {
           demoStatus={demoStatus}
           togglingStatus={togglingStatus}
           deleting={deleting}
-          loadingSteps={loadingSteps}
-          stepsCount={steps.length}
           isPreviewing={isPreviewing}
           previewableCount={previewableIndices.length}
           currentPreviewIndex={Math.max(0, previewableIndices.indexOf(selectedStepIndex))}
@@ -724,6 +722,7 @@ export function DemoEditorPage() {
           }}
           onPrevPreview={gotoPrevAnnotated}
           onNextPreview={gotoNextAnnotated}
+          onPreview={() => setIsPreviewing(!isPreviewing)}
           onSaveTitle={async () => {
             if (!demoIdParam) return;
             try {

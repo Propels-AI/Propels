@@ -1,4 +1,13 @@
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { MoreHorizontal, Eye, Copy, Link, Upload, Trash2 } from "lucide-react";
 import StepsBar from "@/components/StepsBar";
 
 export type EditorHeaderProps = {
@@ -10,8 +19,6 @@ export type EditorHeaderProps = {
   demoStatus: "DRAFT" | "PUBLISHED";
   togglingStatus: boolean;
   deleting: boolean;
-  loadingSteps: boolean;
-  stepsCount: number;
   isPreviewing: boolean;
   previewableCount: number;
   currentPreviewIndex: number;
@@ -20,6 +27,7 @@ export type EditorHeaderProps = {
   onNextPreview: () => void;
   // actions
   onSaveTitle: () => Promise<void> | void;
+  onPreview: () => void;
   onToggleStatus: () => Promise<void> | void;
   onDelete: () => Promise<void> | void;
   onOpenBlogPreview: () => void;
@@ -38,8 +46,6 @@ export default function EditorHeader(props: EditorHeaderProps) {
     demoStatus,
     togglingStatus,
     deleting,
-    loadingSteps,
-    stepsCount,
     isPreviewing,
     previewableCount,
     currentPreviewIndex,
@@ -47,6 +53,7 @@ export default function EditorHeader(props: EditorHeaderProps) {
     onPrevPreview,
     onNextPreview,
     onSaveTitle,
+    onPreview,
     onToggleStatus,
     onDelete,
     onOpenBlogPreview,
@@ -57,6 +64,7 @@ export default function EditorHeader(props: EditorHeaderProps) {
 
   return (
     <div className="font-sans">
+      {/* Demo Title Section */}
       <div className="mb-3 flex items-center gap-2">
         <Input
           value={demoName}
@@ -65,117 +73,134 @@ export default function EditorHeader(props: EditorHeaderProps) {
           className="h-8 text-sm w-64 font-sans"
         />
         {demoId && (
-          <button
+          <Button
             onClick={() => onSaveTitle()}
             disabled={!!savingTitle || !!savingDemo}
-            className={`text-sm py-1.5 px-3 rounded-md border border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none transition-colors font-sans ${savingTitle ? "opacity-60" : ""}`}
+            variant="outline"
+            size="sm"
+            className={`font-sans ${savingTitle ? "opacity-60" : ""}`}
           >
             {savingTitle ? "Saving..." : "Save Title"}
-          </button>
+          </Button>
         )}
       </div>
 
-      <div className="mb-4 flex items-center gap-3">
-        {demoId && (
-          <>
-            <div className="flex items-center gap-2 mr-4">
-              <span
-                className={`px-2 py-1 rounded-md text-xs font-medium font-sans border ${
-                  demoStatus === "PUBLISHED"
-                    ? "bg-primary/10 text-primary border-primary/20"
-                    : "bg-secondary/10 text-secondary border-secondary/20"
-                }`}
-              >
-                {demoStatus}
-              </span>
-              <button
-                onClick={() => onToggleStatus()}
-                disabled={!!togglingStatus || !!savingDemo}
-                className={`text-sm py-1.5 px-3 rounded-md border border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none transition-colors font-sans ${
-                  togglingStatus ? "opacity-60" : ""
-                }`}
-              >
-                {demoStatus === "PUBLISHED" ? "Unpublish" : "Publish"}
-              </button>
-              <button
-                onClick={() => onDelete()}
-                disabled={!!deleting || !!savingDemo}
-                className={`text-sm py-1.5 px-3 rounded-md border border-destructive bg-destructive text-destructive-foreground hover:bg-destructive/90 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none transition-colors font-sans ${
-                  deleting ? "opacity-70" : ""
-                }`}
-              >
-                {deleting ? "Deleting..." : "Delete"}
-              </button>
-            </div>
-          </>
-        )}
-        <button
-          onClick={() => onOpenBlogPreview()}
-          className="text-sm py-2 px-3 rounded-md border border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none transition-colors font-sans"
-          title="Open blog preview"
-        >
-          Blog Preview
-        </button>
-        {demoId && demoStatus === "PUBLISHED" && (
-          <>
-            <button
-              onClick={() => onCopyPublicUrl()}
-              className="text-sm py-2 px-3 rounded-md border border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none transition-colors font-sans"
-              title="Copy public page URL"
-            >
-              Copy URL
-            </button>
-            <button
-              onClick={() => onCopyEmbed()}
-              className="text-sm py-2 px-3 rounded-md border border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none transition-colors font-sans"
-              title="Copy iframe embed code"
-            >
-              Copy Embed
-            </button>
-          </>
-        )}
-        <button
-          onClick={() => onSave()}
-          disabled={!!savingDemo}
-          className={`text-sm py-2 px-3 rounded-md transition-colors font-sans focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none ${
-            savingDemo
-              ? "bg-primary/60 cursor-not-allowed text-primary-foreground"
-              : "bg-primary hover:bg-primary/90 text-primary-foreground"
-          }`}
-        >
-          {savingDemo ? "Saving..." : "Save"}
-        </button>
+      {/* Actions Section */}
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          {/* Primary Actions */}
+          <Button
+            onClick={() => onSave()}
+            disabled={!!savingDemo}
+            className={`font-sans ${
+              savingDemo
+                ? "bg-primary/60 cursor-not-allowed text-primary-foreground"
+                : "bg-primary hover:bg-primary/90 text-primary-foreground"
+            }`}
+          >
+            {savingDemo ? "Saving..." : "Save"}
+          </Button>
 
-        {loadingSteps && <span className="text-xs text-muted-foreground font-sans">Loading steps…</span>}
-        {!loadingSteps && stepsCount > 0 && (
-          <span className="text-xs text-muted-foreground font-sans">Loaded {stepsCount} captured steps</span>
-        )}
-        {isPreviewing && (
-          <div className="flex items-center justify-center gap-3">
-            <button
-              onClick={onPrevPreview}
-              className="text-sm py-1 px-3 rounded-md border border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none transition-colors font-sans"
-            >
-              Prev
-            </button>
-            <div className="w-64">
-              <StepsBar
-                total={previewableCount}
-                current={currentPreviewIndex}
-                onSelect={onSelectPreviewIndex}
-                className="mx-auto"
-                size="sm"
-              />
-            </div>
-            <button
-              onClick={onNextPreview}
-              className="text-sm py-1 px-3 rounded-md border border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none transition-colors font-sans"
-            >
-              Next
-            </button>
+          <Button onClick={() => onPreview()} variant="outline" className="font-sans">
+            <Eye className="h-4 w-4 mr-2" />
+            Preview
+          </Button>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {/* Secondary Actions Menu */}
+          {demoId && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="font-sans" data-testid="actions-menu">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                {/* Status Badge */}
+                <div className="px-2 py-1.5">
+                  <span
+                    className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium border ${
+                      demoStatus === "PUBLISHED"
+                        ? "bg-primary/10 text-primary border-primary/20"
+                        : "bg-secondary/10 text-secondary border-secondary/20"
+                    }`}
+                  >
+                    {demoStatus}
+                  </span>
+                </div>
+
+                <DropdownMenuSeparator />
+
+                {/* Publishing Actions */}
+                <DropdownMenuItem
+                  onClick={() => onToggleStatus()}
+                  disabled={!!togglingStatus || !!savingDemo}
+                  className="font-sans"
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  {demoStatus === "PUBLISHED" ? "Unpublish" : "Publish"}
+                </DropdownMenuItem>
+
+                {demoStatus === "PUBLISHED" && (
+                  <>
+                    <DropdownMenuItem onClick={() => onCopyPublicUrl()} className="font-sans">
+                      <Link className="h-4 w-4 mr-2" />
+                      Copy URL
+                    </DropdownMenuItem>
+
+                    <DropdownMenuItem onClick={() => onCopyEmbed()} className="font-sans">
+                      <Copy className="h-4 w-4 mr-2" />
+                      Copy Embed
+                    </DropdownMenuItem>
+                  </>
+                )}
+
+                <DropdownMenuSeparator />
+
+                {/* Blog Preview */}
+                <DropdownMenuItem onClick={() => onOpenBlogPreview()} className="font-sans">
+                  <Eye className="h-4 w-4 mr-2" />
+                  Blog Preview
+                </DropdownMenuItem>
+
+                <DropdownMenuSeparator />
+
+                {/* Destructive Actions */}
+                <DropdownMenuItem
+                  onClick={() => onDelete()}
+                  disabled={!!deleting || !!savingDemo}
+                  className="font-sans text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  {deleting ? "Deleting..." : "Delete"}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
+      </div>
+
+      {/* Preview Navigation (when in preview mode) */}
+      {isPreviewing && (
+        <div className="mb-4 flex items-center justify-center gap-3">
+          <Button onClick={onPrevPreview} variant="outline" size="sm" className="font-sans">
+            Prev
+          </Button>
+          <div className="w-64">
+            <StepsBar
+              total={previewableCount}
+              current={currentPreviewIndex}
+              onSelect={onSelectPreviewIndex}
+              className="mx-auto"
+              size="sm"
+            />
           </div>
-        )}
-      </div>
+          <Button onClick={onNextPreview} variant="outline" size="sm" className="font-sans">
+            Next
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
