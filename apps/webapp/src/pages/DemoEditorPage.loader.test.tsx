@@ -80,14 +80,14 @@ describe("DemoEditorPage loader behavior", () => {
 
     // Wait for tab content to be visible and check tooltip controls
     await waitFor(() => {
-      expect(screen.getByText(/tooltip inspector/i)).toBeInTheDocument();
+      expect(screen.getByText(/global styling/i)).toBeInTheDocument();
     });
 
     // Size display should reflect 18 px
     await waitFor(() => expect(screen.getByText(/18 px/i)).toBeInTheDocument());
 
     // Animation combobox reflects pulse
-    const label = screen.getByText(/Animation \(applies to all steps\)/i);
+    const label = screen.getByText(/Animation/i);
     const combobox = label.parentElement!.querySelector("[role='combobox']") as HTMLButtonElement;
     expect(combobox).toBeInTheDocument();
     expect(combobox.textContent).toBe("Pulse");

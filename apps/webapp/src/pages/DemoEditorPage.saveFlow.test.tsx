@@ -68,7 +68,7 @@ describe("DemoEditorPage save flow (draft vs published)", () => {
 
     // Ensure UI and steps loaded
     await screen.findAllByRole("button", { name: /^Save$/ });
-    await screen.findByText(/Step\s*1/i);
+    await screen.findByText("1"); // Step number badge
 
     // Click the header Save button (there may be another 'Save' inside the tooltip inspector)
     const [saveHeader] = screen.getAllByRole("button", { name: /^Save$/ });
@@ -112,7 +112,7 @@ describe("DemoEditorPage save flow (draft vs published)", () => {
 
     // Now find the main Save button and steps
     await screen.findAllByRole("button", { name: /^Save$/ });
-    await screen.findByText(/Step\s*1/i);
+    await screen.findByText("1"); // Step number badge
 
     const [saveHeader] = screen.getAllByRole("button", { name: /^Save$/ });
     await user.click(saveHeader);
