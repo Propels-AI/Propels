@@ -204,11 +204,31 @@ export function EditorSidebar({
 
                         {s.isLeadCapture ? (
                           <div
-                            className={`aspect-video w-full rounded-lg flex items-center justify-center text-sm border ${
+                            className={`aspect-video w-full rounded-lg flex items-center justify-center p-3 border ${
                               s.leadBg === "black" ? "bg-black text-white" : "bg-white text-gray-700"
                             }`}
                           >
-                            LEAD
+                            {/* Mini Lead Form Preview */}
+                            <div className="w-full max-w-[120px] space-y-2">
+                              <div className="text-center">
+                                <div className="text-[8px] font-semibold mb-1">
+                                  {(leadFormConfig as any)?.title || "Stay in the loop"}
+                                </div>
+                                <div className="text-[6px] opacity-70 mb-2">
+                                  {(leadFormConfig as any)?.subtitle || "Leave your details"}
+                                </div>
+                              </div>
+                              <div className="space-y-1.5">
+                                <div className="h-2 bg-current/20 rounded-sm" />
+                                <div className="h-2 bg-current/20 rounded-sm w-4/5" />
+                                <div className="h-1.5 bg-current/20 rounded-sm w-3/5" />
+                              </div>
+                              <div className="text-center mt-2">
+                                <div className="text-[6px] px-2 py-0.5 bg-current/30 rounded-sm inline-block">
+                                  {(leadFormConfig as any)?.ctaText || "Notify me"}
+                                </div>
+                              </div>
+                            </div>
                           </div>
                         ) : (
                           /* Large Image Display */
