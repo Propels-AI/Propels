@@ -16,7 +16,9 @@ export type LeadCaptureOverlayProps = {
 
 export function LeadCaptureOverlay({ bg = "white", config, onSubmit, onDismiss, className }: LeadCaptureOverlayProps) {
   const id = useId();
-  const fields = Array.isArray((config as any)?.fields) ? (config as any).fields : [];
+  const allFields = Array.isArray((config as any)?.fields) ? (config as any).fields : [];
+  // Filter out disabled fields (enabled: false)
+  const fields = allFields.filter((field: any) => field.enabled !== false);
   const title = (config as any)?.title || "Stay in the loop";
   const subtitle = (config as any)?.subtitle || "Enjoying the demo? Leave your details and we'll reach out.";
   const ctaText = (config as any)?.ctaText || "Notify me";
