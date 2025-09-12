@@ -3,7 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { FormInput, Mail, MessageSquare, User, CheckCircle } from "lucide-react";
+import { FormInput } from "lucide-react";
+import { PhoneInput } from "@/components/ui/phone-input";
 
 export type LeadCaptureOverlayProps = {
   bg?: "white" | "black";
@@ -21,18 +22,6 @@ export function LeadCaptureOverlay({ bg = "white", config, onSubmit, onDismiss, 
   const ctaText = (config as any)?.ctaText || "Notify me";
   const [formValues, setFormValues] = useState<Record<string, any>>({});
   const [submitted, setSubmitted] = useState(false);
-
-  // Get icon for field type
-  const getFieldIcon = (type: string) => {
-    switch (type) {
-      case "email":
-        return Mail;
-      case "textarea":
-        return MessageSquare;
-      default:
-        return User;
-    }
-  };
 
   // Default fields if none configured
   const defaultFields = [
@@ -58,9 +47,6 @@ export function LeadCaptureOverlay({ bg = "white", config, onSubmit, onDismiss, 
             <>
               <CardHeader className="space-y-1 pb-4">
                 <div className="flex flex-col items-center text-center space-y-2">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-                    <CheckCircle className="h-6 w-6 text-primary" />
-                  </div>
                   <div className="space-y-2">
                     <CardTitle className="text-xl font-semibold tracking-tight">Thank you!</CardTitle>
                     <CardDescription className="text-sm text-muted-foreground px-2">
@@ -101,37 +87,38 @@ export function LeadCaptureOverlay({ bg = "white", config, onSubmit, onDismiss, 
                   className="space-y-4"
                 >
                   {fieldsToRender.map((f: any) => {
-                    const Icon = getFieldIcon(f.type);
                     return (
                       <div key={f.key} className="space-y-2">
                         <Label htmlFor={`${id}-${f.key}`} className="text-sm font-medium">
                           {f.label || f.key}
                         </Label>
                         {f.type === "textarea" ? (
-                          <div className="relative">
-                            <MessageSquare className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                            <textarea
-                              id={`${id}-${f.key}`}
-                              required={!!f.required}
-                              placeholder={f.placeholder}
-                              className="w-full min-h-[80px] pl-10 pt-3 pb-3 pr-3 text-sm border border-input bg-background rounded-md focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none resize-none"
-                              value={formValues[f.key] || ""}
-                              onChange={(e) => setFormValues((p) => ({ ...p, [f.key]: e.target.value }))}
-                            />
-                          </div>
+                          <textarea
+                            id={`${id}-${f.key}`}
+                            required={!!f.required}
+                            placeholder={f.placeholder}
+                            className="w-full min-h-[80px] pt-3 pb-3 px-3 text-sm border border-input bg-background rounded-md focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none resize-none"
+                            value={formValues[f.key] || ""}
+                            onChange={(e) => setFormValues((p) => ({ ...p, [f.key]: e.target.value }))}
+                          />
+                        ) : f.type === "tel" ? (
+                          <PhoneInput
+                            id={`${id}-${f.key}`}
+                            required={!!f.required}
+                            placeholder={f.placeholder || "Enter phone number"}
+                            value={formValues[f.key] || ""}
+                            onChange={(value) => setFormValues((p) => ({ ...p, [f.key]: value }))}
+                            defaultCountry="US"
+                          />
                         ) : (
-                          <div className="relative">
-                            <Icon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input
-                              id={`${id}-${f.key}`}
-                              type={f.type || "text"}
-                              required={!!f.required}
-                              placeholder={f.placeholder}
-                              className="pl-10"
-                              value={formValues[f.key] || ""}
-                              onChange={(e) => setFormValues((p) => ({ ...p, [f.key]: e.target.value }))}
-                            />
-                          </div>
+                          <Input
+                            id={`${id}-${f.key}`}
+                            type={f.type || "text"}
+                            required={!!f.required}
+                            placeholder={f.placeholder}
+                            value={formValues[f.key] || ""}
+                            onChange={(e) => setFormValues((p) => ({ ...p, [f.key]: e.target.value }))}
+                          />
                         )}
                       </div>
                     );
