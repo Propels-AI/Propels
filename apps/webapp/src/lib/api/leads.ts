@@ -24,7 +24,6 @@ function extractDemoNameFromLead(lead: any): string {
       const possibleNameFields = ["demo_name", "demoName", "demo", "product", "title"];
       for (const fieldName of possibleNameFields) {
         if (fields[fieldName] && typeof fields[fieldName] === "string" && fields[fieldName].length > 0) {
-          console.log(`[extractDemoNameFromLead] Found demo name in field '${fieldName}': "${fields[fieldName]}"`);
           return fields[fieldName];
         }
       }
@@ -35,12 +34,11 @@ function extractDemoNameFromLead(lead: any): string {
       // Extract potential demo name from URL paths
       const urlMatch = lead.pageUrl.match(/\/([^\/]+)\/demo/i) || lead.pageUrl.match(/demo\/([^\/]+)/i);
       if (urlMatch && urlMatch[1] && urlMatch[1].length > 3) {
-        console.log(`[extractDemoNameFromLead] Found demo name in URL: "${urlMatch[1]}"`);
         return urlMatch[1];
       }
     }
   } catch (error) {
-    console.log(`[extractDemoNameFromLead] Error parsing lead fields:`, error);
+    // Error parsing lead fields
   }
 
   return `Demo ${lead.demoId?.slice(0, 8) || "Unknown"}`;
@@ -51,28 +49,22 @@ function extractDemoNameFromLead(lead: any): string {
  * Uses the same logic as getLeadStatsByDemo for consistency
  */
 function getBestDemoNameFromLeads(leads: any[]): string {
-  console.log(`[getBestDemoNameFromLeads] Processing ${leads.length} leads`);
   if (leads.length === 0) return "Unknown Demo";
 
   // Start with the first lead's name
   let bestName = extractDemoNameFromLead(leads[0]);
-  console.log(`[getBestDemoNameFromLeads] Initial name from first lead: "${bestName}"`);
 
   // Look through all leads to find a better name (one that doesn't start with "Demo ")
   for (let i = 0; i < leads.length; i++) {
     const lead = leads[i];
     const leadDemoName = extractDemoNameFromLead(lead);
-    console.log(`[getBestDemoNameFromLeads] Lead ${i} (${lead.itemSK}): "${leadDemoName}"`);
-    console.log(`[getBestDemoNameFromLeads] Lead ${i} fields:`, lead.fields);
 
     if (leadDemoName && !leadDemoName.startsWith("Demo ")) {
-      console.log(`[getBestDemoNameFromLeads] Found good name: "${leadDemoName}"`);
       bestName = leadDemoName;
       break; // Found a good name, use it
     }
   }
 
-  console.log(`[getBestDemoNameFromLeads] Final name: "${bestName}"`);
   return bestName;
 }
 
@@ -222,28 +214,20 @@ export async function listLeadSubmissionsSmartly(demoId: string): Promise<{
 }> {
   // First try the normal method (works for existing demos)
   try {
-    console.log(`[listLeadSubmissionsSmartly] Trying normal method for demo ${demoId}`);
     const { listLeadSubmissions } = await import("./demos");
     const leads = await listLeadSubmissions(demoId);
-    console.log(`[listLeadSubmissionsSmartly] Normal method returned ${leads.length} leads`);
     // Use consistent logic to get the best demo name
     const demoName = getBestDemoNameFromLeads(leads);
-    console.log(`[listLeadSubmissionsSmartly] Normal method final demo name: "${demoName}"`);
     return { leads, isDemoDeleted: false, demoName };
   } catch (error: any) {
-    console.log(`[listLeadSubmissionsSmartly] Normal method failed:`, error.message);
     // If it fails with "Forbidden" or "not the owner", try the deleted demo method
     if (error?.message?.includes("Forbidden") || error?.message?.includes("not the owner") || error?.status === 403) {
       try {
-        console.log(`[listLeadSubmissionsSmartly] Trying deleted demo method for demo ${demoId}`);
         const leads = await getLeadsForDeletedDemo(demoId);
-        console.log(`[listLeadSubmissionsSmartly] Deleted demo method returned ${leads.length} leads`);
         // Use consistent logic to get the best demo name
         const demoName = getBestDemoNameFromLeads(leads);
-        console.log(`[listLeadSubmissionsSmartly] Deleted demo method final demo name: "${demoName}"`);
         return { leads, isDemoDeleted: true, demoName };
       } catch (deletedError) {
-        console.log(`[listLeadSubmissionsSmartly] Deleted demo method also failed:`, deletedError);
         // If both methods fail, re-throw the original error
         throw error;
       }
