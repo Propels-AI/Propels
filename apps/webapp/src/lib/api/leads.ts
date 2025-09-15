@@ -224,6 +224,10 @@ export async function listLeadSubmissionsSmartly(demoId: string): Promise<{
     if (error?.message?.includes("Forbidden") || error?.message?.includes("not the owner") || error?.status === 403) {
       try {
         const leads = await getLeadsForDeletedDemo(demoId);
+        if (leads.length === 0) {
+          // Still not the owner (or truly no preserved leads) — propagate original error
+          throw error;
+        }
         // Use consistent logic to get the best demo name
         const demoName = getBestDemoNameFromLeads(leads);
         return { leads, isDemoDeleted: true, demoName };

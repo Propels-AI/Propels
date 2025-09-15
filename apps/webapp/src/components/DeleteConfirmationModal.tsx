@@ -15,7 +15,7 @@ import { toast } from "sonner";
 interface DeleteDemoModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: () => Promise<void>;
   demoName: string;
 }
 
