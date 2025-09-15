@@ -4,12 +4,15 @@ import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useAuth } from "@/lib/providers/AuthProvider";
 import { Button } from "@/components/ui/button";
+import { DeleteDemoModal } from "@/components/DeleteConfirmationModal";
 
 export function DemoListView(props: { statusFilter?: "ALL" | "DRAFT" | "PUBLISHED" } = {}) {
   const { statusFilter = "ALL" } = props;
   const navigate = useNavigate();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [nameDrafts, setNameDrafts] = useState<Record<string, string>>({});
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [demoToDelete, setDemoToDelete] = useState<{ id: string; name: string } | null>(null);
   const { user, isLoading: authLoading } = useAuth();
   const isAuthenticated = !!user;
   const {
@@ -30,7 +33,11 @@ export function DemoListView(props: { statusFilter?: "ALL" | "DRAFT" | "PUBLISHE
   });
   const deleteMut = useMutation({
     mutationFn: async (id: string) => deleteDemo(id),
-    onSuccess: () => refetch(),
+    onSuccess: () => {
+      refetch();
+      setDeleteModalOpen(false);
+      setDemoToDelete(null);
+    },
   });
   const statusMut = useMutation({
     mutationFn: async (vars: { id: string; status: "DRAFT" | "PUBLISHED" }) => setDemoStatus(vars.id, vars.status),
@@ -186,13 +193,8 @@ export function DemoListView(props: { statusFilter?: "ALL" | "DRAFT" | "PUBLISHE
                     variant="destructive"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (
-                        confirm(
-                          "Delete this demo? This cannot be undone.\n\nNote: Lead submissions will be preserved and can still be accessed from the leads page."
-                        )
-                      ) {
-                        deleteMut.mutate(demo.id);
-                      }
+                      setDemoToDelete({ id: demo.id, name: demo.name || "Untitled Demo" });
+                      setDeleteModalOpen(true);
                     }}
                   >
                     Delete
@@ -207,6 +209,17 @@ export function DemoListView(props: { statusFilter?: "ALL" | "DRAFT" | "PUBLISHE
           ))}
         </div>
       )}
+
+      <DeleteDemoModal
+        isOpen={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        onConfirm={() => {
+          if (demoToDelete) {
+            deleteMut.mutate(demoToDelete.id);
+          }
+        }}
+        demoName={demoToDelete?.name || "Untitled Demo"}
+      />
     </div>
   );
 }

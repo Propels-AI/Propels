@@ -19,7 +19,6 @@ export type EditorHeaderProps = {
   savingDemo: boolean;
   demoStatus: "DRAFT" | "PUBLISHED";
   togglingStatus: boolean;
-  deleting: boolean;
   isPreviewing: boolean;
   previewableCount: number;
   currentPreviewIndex: number;
@@ -46,7 +45,6 @@ export default function EditorHeader(props: EditorHeaderProps) {
     savingDemo,
     demoStatus,
     togglingStatus,
-    deleting,
     isPreviewing,
     previewableCount,
     currentPreviewIndex,
@@ -245,11 +243,11 @@ export default function EditorHeader(props: EditorHeaderProps) {
                 {/* Destructive Actions */}
                 <DropdownMenuItem
                   onClick={() => onDelete()}
-                  disabled={!!deleting || !!savingDemo}
+                  disabled={!!savingDemo}
                   className="font-sans text-destructive focus:text-destructive"
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
-                  {deleting ? "Deleting..." : "Delete"}
+                  Delete
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

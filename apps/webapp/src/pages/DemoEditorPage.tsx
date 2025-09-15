@@ -25,6 +25,7 @@ import { type HotspotsMap, type TooltipStyle } from "@/lib/editor/deriveTooltipS
 import { applyGlobalStyleToHotspots } from "@/lib/editor/applyGlobalStyleToHotspots";
 import { extractLeadConfig } from "@/lib/editor/extractLeadConfig";
 import { Dialog as UIDialog, DialogContent as UIDialogContent } from "@/components/ui/dialog";
+import { DeleteDemoModal } from "@/components/DeleteConfirmationModal";
 
 export function DemoEditorPage() {
   const { user, isLoading } = useAuth();
@@ -61,12 +62,25 @@ export function DemoEditorPage() {
   // Lead step quick-insert MVP controls
   const [authOpen, setAuthOpen] = useState(false);
   const pendingDraftRef = useRef<EditedDraft | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+
+  // Delete handler function
+  const handleDeleteDemo = async () => {
+    if (!demoIdParam) return;
+    try {
+      await deleteDemo(demoIdParam);
+      window.location.href = "/dashboard";
+    } catch (e) {
+      console.error("Failed to delete demo", e);
+      alert("Failed to delete demo. Please try again.");
+      throw e; // Re-throw so the modal can handle the error state
+    }
+  };
   // Metadata for saved demo (when demoId exists)
   const [demoName, setDemoName] = useState<string>("");
   const [demoStatus, setDemoStatusLocal] = useState<"DRAFT" | "PUBLISHED">("DRAFT");
   const [savingTitle, setSavingTitle] = useState(false);
   const [togglingStatus, setTogglingStatus] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [savingDemo, setSavingDemo] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -732,7 +746,6 @@ export function DemoEditorPage() {
           savingDemo={savingDemo}
           demoStatus={demoStatus}
           togglingStatus={togglingStatus}
-          deleting={deleting}
           isPreviewing={isPreviewing}
           previewableCount={previewableIndices.length}
           currentPreviewIndex={Math.max(0, previewableIndices.indexOf(selectedStepIndex))}
@@ -788,20 +801,8 @@ export function DemoEditorPage() {
           }}
           onDelete={async () => {
             if (!demoIdParam) return;
-            const ok = confirm(
-              "Delete this demo? This cannot be undone.\n\nNote: Lead submissions will be preserved and can still be accessed from the leads page."
-            );
-            if (!ok) return;
-            try {
-              setDeleting(true);
-              await deleteDemo(demoIdParam);
-              window.location.href = "/dashboard";
-            } catch (e) {
-              console.error("Failed to delete demo", e);
-              alert("Failed to delete demo. Please try again.");
-            } finally {
-              setDeleting(false);
-            }
+            console.log("[DemoEditorPage] Opening delete modal. Demo name:", demoName, "Demo ID:", demoIdParam);
+            setDeleteModalOpen(true);
           }}
           onOpenBlogPreview={() => {
             const demoId = demoIdParam;
@@ -1222,6 +1223,14 @@ export function DemoEditorPage() {
           </div>
         </UIDialogContent>
       </UIDialog>
+
+      <DeleteDemoModal
+        isOpen={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        onConfirm={handleDeleteDemo}
+        demoName={demoName && demoName.trim() && demoName !== "Untitled Demo" ? demoName : "Untitled Demo"}
+      />
+
       {/* Lightweight template picker actions */}
       <></>
     </div>
