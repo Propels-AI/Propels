@@ -165,12 +165,13 @@ export default function EditorHeader(props: EditorHeaderProps) {
         {/* Right: Action Buttons */}
         <div className="flex items-center gap-3">
           {/* Primary Actions - Swapped order: Preview first, then Save */}
-          <Button onClick={() => onPreview()} variant="outline" className="font-sans">
+          <Button data-testid="preview-button" onClick={() => onPreview()} variant="outline" className="font-sans">
             <Eye className="h-4 w-4 mr-2" />
             Preview
           </Button>
 
           <Button
+            data-testid="main-save-button"
             onClick={() => onSave()}
             disabled={!!savingDemo}
             className={`font-sans ${

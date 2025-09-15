@@ -11,7 +11,6 @@ const defaultProps: EditorHeaderProps = {
   savingDemo: false,
   demoStatus: "DRAFT",
   togglingStatus: false,
-  deleting: false,
   isPreviewing: false,
   previewableCount: 3,
   currentPreviewIndex: 0,
@@ -316,21 +315,14 @@ describe("EditorHeader", () => {
     it("shows Preview button before Save button", () => {
       render(<EditorHeader {...defaultProps} />);
 
-      const buttons = screen.getAllByRole("button");
-      const previewButton = buttons.find((btn) => btn.textContent?.includes("Preview"));
-      const mainSaveButton = buttons.find(
-        (btn) => btn.textContent === "Save" && !btn.querySelector("svg[class*='check']")
-      );
+      const previewButton = screen.getByTestId("preview-button");
+      const mainSaveButton = screen.getByTestId("main-save-button");
 
       expect(previewButton).toBeInTheDocument();
       expect(mainSaveButton).toBeInTheDocument();
 
-      // Check order by comparing their positions
-      const allButtons = screen.getAllByRole("button");
-      const previewIndex = allButtons.indexOf(previewButton!);
-      const saveIndex = allButtons.indexOf(mainSaveButton!);
-
-      expect(previewIndex).toBeLessThan(saveIndex);
+      const position = previewButton.compareDocumentPosition(mainSaveButton);
+      expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
     it("shows dropdown menu when demoId exists", () => {
