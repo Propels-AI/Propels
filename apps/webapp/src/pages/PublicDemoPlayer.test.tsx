@@ -50,7 +50,10 @@ describe("PublicDemoPlayer", () => {
   it("renders empty state for drafts (no PublicDemo items)", async () => {
     (await listPublicDemoItems())!.mockResolvedValue([]);
     renderAt("demo-empty");
-    await waitFor(() => expect(screen.getByText(/No steps available/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/We couldn't load this demo/i)).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText(/It may have been deleted, moved, or not published yet./i)).toBeInTheDocument()
+    );
   });
 
   it("renders published items with style defaults applied and inserts lead step", async () => {

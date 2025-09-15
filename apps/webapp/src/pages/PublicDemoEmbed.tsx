@@ -7,6 +7,8 @@ import LeadCaptureOverlay from "@/components/LeadCaptureOverlay";
 import { usePublicDemo } from "@/features/public/hooks/usePublicDemo";
 import { useImageResolver } from "@/features/public/hooks/useImageResolver";
 import outputs from "../../../../amplify_outputs.json";
+import { Card, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 // type removed after refactor (now handled by usePublicDemo)
 
@@ -55,12 +57,10 @@ export default function PublicDemoEmbed() {
   }, [current]);
   const bucket = (outputs as any)?.storage?.bucket;
   const region = (outputs as any)?.aws_region || (outputs as any)?.awsRegion || (outputs as any)?.region;
-  const { resolvedSrc, naturalAspect } = useImageResolver(
-    current?.s3Key || current?.thumbnailS3Key,
-    imageSrc,
-    true,
-    { bucket, region }
-  );
+  const { resolvedSrc, naturalAspect } = useImageResolver(current?.s3Key || current?.thumbnailS3Key, imageSrc, true, {
+    bucket,
+    region,
+  });
 
   const currentHotspots = useMemo(() => {
     if (currentRealIndex < 0) return [] as any[];
@@ -81,10 +81,72 @@ export default function PublicDemoEmbed() {
     }));
   }, [steps, currentRealIndex, hotspotStyleDefaults]);
 
-  if (!demoId) return <div className="p-4 text-sm">Missing demoId</div>;
+  if (!demoId)
+    return (
+      <div className="w-full bg-transparent">
+        <div
+          className="relative w-full flex items-center justify-center p-4"
+          style={{ aspectRatio: forcedAspect || naturalAspect || "16 / 10" }}
+        >
+          <Card className="w-full max-w-md">
+            <CardHeader className="text-center">
+              <CardTitle className="text-base">We couldn't load this demo</CardTitle>
+              <CardDescription>It may have been deleted, moved, or not published yet.</CardDescription>
+            </CardHeader>
+            <CardFooter className="flex items-center justify-center gap-2">
+              <Button asChild variant="outline" size="sm">
+                <a href="https://propels.ai" target="_blank" rel="noreferrer">
+                  Visit propels.ai
+                </a>
+              </Button>
+              <Button asChild size="sm">
+                <a
+                  href={`mailto:support@propels.ai?subject=${encodeURIComponent("Public demo unavailable")}&body=${encodeURIComponent(
+                    `The demo ${demoId || "(unknown)"} isn't available.`
+                  )}`}
+                >
+                  Report an issue
+                </a>
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
+      </div>
+    );
   if (loading) return <div className="p-4 text-sm">Loading…</div>;
   if (error) return <div className="p-4 text-sm text-red-600">{error}</div>;
-  if (displayTotal === 0) return <div className="p-4 text-sm">No steps available</div>;
+  if (displayTotal === 0)
+    return (
+      <div className="w-full bg-transparent">
+        <div
+          className="relative w-full flex items-center justify-center p-4"
+          style={{ aspectRatio: forcedAspect || naturalAspect || "16 / 10" }}
+        >
+          <Card className="w-full max-w-md">
+            <CardHeader className="text-center">
+              <CardTitle className="text-base">We couldn't load this demo</CardTitle>
+              <CardDescription>It may have been deleted, moved, or not published yet.</CardDescription>
+            </CardHeader>
+            <CardFooter className="flex items-center justify-center gap-2">
+              <Button asChild variant="outline" size="sm">
+                <a href="https://propels.ai" target="_blank" rel="noreferrer">
+                  Visit propels.ai
+                </a>
+              </Button>
+              <Button asChild size="sm">
+                <a
+                  href={`mailto:support@propels.ai?subject=${encodeURIComponent("Public demo unavailable")}&body=${encodeURIComponent(
+                    `The demo ${demoId || "(unknown)"} isn't available.`
+                  )}`}
+                >
+                  Report an issue
+                </a>
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
+      </div>
+    );
 
   const go = (d: number) => {
     const next = Math.max(0, Math.min(displayTotal - 1, currentIndex + d));
@@ -151,6 +213,14 @@ export default function PublicDemoEmbed() {
               className="absolute left-0 top-0 bottom-0 bg-blue-600"
               style={{ width: `${((currentIndex + 1) / displayTotal) * 100}%` }}
             />
+          </div>
+        </div>
+        <div className="absolute right-3 bottom-6 z-40 pointer-events-auto" title="Powered by Propels">
+          <div className="rounded-sm border border-border bg-white shadow-sm px-2 py-1 text-[10px] text-muted-foreground">
+            Powered by{" "}
+            <a href="https://propels.ai" target="_blank" rel="noreferrer" className="underline">
+              Propels
+            </a>
           </div>
         </div>
       </div>
