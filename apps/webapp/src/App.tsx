@@ -9,6 +9,7 @@ import PublicDemoPlayer from "@/pages/PublicDemoPlayer";
 import PublicDemoEmbed from "@/pages/PublicDemoEmbed";
 import BlogPreviewPage from "./pages/BlogPreviewPage";
 import LeadSubmissionsPage from "@/pages/LeadSubmissionsPage";
+import AllLeadsPage from "@/pages/AllLeadsPage";
 import { AuthProvider } from "@/lib/providers/AuthProvider";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -29,6 +30,7 @@ function App() {
             <Route path="/embed/:demoId" element={<PublicDemoEmbed />} />
             <Route path="/preview-blog" element={<BlogPreviewPage />} />
             <Route path="/leads/:demoId" element={<LeadSubmissionsPage />} />
+            <Route path="/all-leads" element={<AllLeadsPage />} />
             <Route path="/" element={<SignInPage />} />
           </Routes>
         </Router>

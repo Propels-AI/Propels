@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import LeadSubmissionsPage from "./LeadSubmissionsPage";
 
 vi.mock("@/lib/providers/AuthProvider", () => ({
@@ -8,16 +9,16 @@ vi.mock("@/lib/providers/AuthProvider", () => ({
   AuthProvider: ({ children }: any) => children,
 }));
 
-vi.mock("@/lib/api/demos", () => ({
-  useLeadSubmissions: vi.fn(() => ({
-    data: [],
+vi.mock("@/lib/api/hooks", () => ({
+  useLeadSubmissionsSmartly: vi.fn(() => ({
+    data: { leads: [], isDemoDeleted: false, demoName: "Test Demo" },
     isLoading: false,
     error: null,
   })),
 }));
 
-const useLeadSubmissions = async () =>
-  (await import("@/lib/api/demos")).useLeadSubmissions as unknown as ReturnType<typeof vi.fn>;
+const useLeadSubmissionsSmartly = async () =>
+  (await import("@/lib/api/hooks")).useLeadSubmissionsSmartly as unknown as ReturnType<typeof vi.fn>;
 
 describe("LeadSubmissionsPage", () => {
   const origError = console.error;
@@ -33,41 +34,55 @@ describe("LeadSubmissionsPage", () => {
   });
 
   const renderAt = (demoId: string) => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          retry: false,
+        },
+      },
+    });
+
     return render(
-      <MemoryRouter initialEntries={[`/leads/${demoId}`]}>
-        <Routes>
-          <Route path="/leads/:demoId" element={<LeadSubmissionsPage />} />
-        </Routes>
-      </MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[`/leads/${demoId}`]}>
+          <Routes>
+            <Route path="/leads/:demoId" element={<LeadSubmissionsPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
     );
   };
 
   it("shows only columns that have any values", async () => {
-    (await useLeadSubmissions())!.mockReturnValue({
-      data: [
-      {
-        demoId: "demo-1",
-        itemSK: "LEAD#1",
-        email: "a@example.com",
-        stepIndex: 1,
-        pageUrl: "https://example.com",
-        source: "embed",
-        createdAt: "2025-01-01T00:00:00.000Z",
+    (await useLeadSubmissionsSmartly())!.mockReturnValue({
+      data: {
+        leads: [
+          {
+            demoId: "demo-1",
+            itemSK: "LEAD#1",
+            email: "a@example.com",
+            stepIndex: 1,
+            pageUrl: "https://example.com",
+            source: "embed",
+            createdAt: "2025-01-01T00:00:00.000Z",
+          },
+          {
+            demoId: "demo-1",
+            itemSK: "LEAD#2",
+            email: "b@example.com",
+            fields: { name: "Bob" },
+            stepIndex: 1,
+            pageUrl: "https://example.com",
+            source: "embed",
+            createdAt: "2025-01-02T00:00:00.000Z",
+          },
+        ],
+        isDemoDeleted: false,
+        demoName: "Test Demo",
       },
-      {
-        demoId: "demo-1",
-        itemSK: "LEAD#2",
-        email: "b@example.com",
-        fields: { name: "Bob" },
-        stepIndex: 1,
-        pageUrl: "https://example.com",
-        source: "embed",
-        createdAt: "2025-01-02T00:00:00.000Z",
-      },
-    ],
-    isLoading: false,
-    error: null,
-  });
+      isLoading: false,
+      error: null,
+    });
 
     renderAt("demo-1");
 

@@ -788,7 +788,9 @@ export function DemoEditorPage() {
           }}
           onDelete={async () => {
             if (!demoIdParam) return;
-            const ok = confirm("Delete this demo? This cannot be undone.");
+            const ok = confirm(
+              "Delete this demo? This cannot be undone.\n\nNote: Lead submissions will be preserved and can still be accessed from the leads page."
+            );
             if (!ok) return;
             try {
               setDeleting(true);

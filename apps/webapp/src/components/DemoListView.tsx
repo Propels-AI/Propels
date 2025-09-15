@@ -51,9 +51,7 @@ export function DemoListView(props: { statusFilter?: "ALL" | "DRAFT" | "PUBLISHE
           <div className="font-medium text-foreground">Sign in to view your demos</div>
           <div className="mt-1">You need to be signed in to fetch and manage your demos.</div>
           <Button asChild size="sm" className="mt-3">
-            <a href="/sign-in">
-              Go to Sign In
-            </a>
+            <a href="/sign-in">Go to Sign In</a>
           </Button>
         </div>
       </div>
@@ -70,12 +68,7 @@ export function DemoListView(props: { statusFilter?: "ALL" | "DRAFT" | "PUBLISHE
       <div className="text-sm text-destructive-foreground bg-destructive/10 border border-destructive/20 rounded p-3">
         <div className="font-medium">Error retrieving demos</div>
         <div className="mt-1">{message}</div>
-        <Button
-          onClick={() => refetch()}
-          variant="destructive"
-          size="sm"
-          className="mt-2"
-        >
+        <Button onClick={() => refetch()} variant="destructive" size="sm" className="mt-2">
           Retry
         </Button>
       </div>
@@ -89,12 +82,7 @@ export function DemoListView(props: { statusFilter?: "ALL" | "DRAFT" | "PUBLISHE
         <div className="text-sm text-muted-foreground border border-border rounded p-4 bg-card">
           <div className="font-medium text-foreground">No demos found</div>
           <div className="mt-1">Create one from the extension, then open the editor to save it.</div>
-          <Button
-            onClick={() => refetch()}
-            variant="secondary"
-            size="sm"
-            className="mt-3"
-          >
+          <Button onClick={() => refetch()} variant="secondary" size="sm" className="mt-3">
             Refresh
           </Button>
         </div>
@@ -184,10 +172,25 @@ export function DemoListView(props: { statusFilter?: "ALL" | "DRAFT" | "PUBLISHE
                   </Button>
                   <Button
                     size="sm"
+                    variant="outline"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/leads/${encodeURIComponent(demo.id)}`);
+                    }}
+                    className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                  >
+                    Leads
+                  </Button>
+                  <Button
+                    size="sm"
                     variant="destructive"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (confirm("Delete this demo? This cannot be undone.")) {
+                      if (
+                        confirm(
+                          "Delete this demo? This cannot be undone.\n\nNote: Lead submissions will be preserved and can still be accessed from the leads page."
+                        )
+                      ) {
                         deleteMut.mutate(demo.id);
                       }
                     }}

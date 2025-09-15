@@ -257,19 +257,36 @@ export async function createLeadSubmissionPublic(params: {
 
   const pubModels = getPublicMirrorModels();
   let ownerId: string | undefined;
+  let demoName: string | undefined;
   try {
     const metaRes = await (pubModels as any).PublicMirror.get({ PK: pkPub(params.demoId), SK: "METADATA" });
     ownerId = (metaRes as any)?.data?.ownerId;
+    demoName = (metaRes as any)?.data?.name; // Capture demo name for preservation
   } catch {}
   if (!ownerId) throw new Error("Lead submission failed: demo not found or owner unavailable");
 
   const li = getLeadIntakeWriteModels();
+
+  // Enhance fields to include demo name for preservation
+  let enhancedFields = params.fields || {};
+  if (typeof enhancedFields === "string") {
+    try {
+      enhancedFields = JSON.parse(enhancedFields);
+    } catch {
+      enhancedFields = {};
+    }
+  }
+
+  // Add demo metadata to fields (with reserved prefix to avoid conflicts)
+  enhancedFields._demo_name = demoName || `Demo ${params.demoId.slice(0, 8)}`;
+  enhancedFields._demo_id = params.demoId;
+
   const payload: any = {
     demoId: params.demoId,
     itemSK,
     ownerId,
     email: params.email,
-    fields: params.fields ? JSON.stringify(params.fields) : undefined,
+    fields: JSON.stringify(enhancedFields),
     pageUrl: params.pageUrl,
     stepIndex: params.stepIndex,
     source: params.source,
@@ -277,23 +294,7 @@ export async function createLeadSubmissionPublic(params: {
     referrer: params.referrer,
     createdAt: now,
   };
-  const sanitizeJson = (v: any) => {
-    try {
-      return v === undefined ? undefined : JSON.parse(JSON.stringify(v));
-    } catch {
-      return undefined;
-    }
-  };
-  const fs = sanitizeJson(payload.fields);
-  if (
-    fs === undefined ||
-    fs === null ||
-    (typeof fs === "object" && !Array.isArray(fs) && Object.keys(fs).length === 0)
-  ) {
-    delete payload.fields;
-  } else {
-    payload.fields = fs;
-  }
+  // Clean up undefined values
   Object.keys(payload).forEach((k) => (payload[k] === undefined ? delete payload[k] : undefined));
 
   const res = await (li as any).LeadIntake.create(payload);
@@ -801,6 +802,7 @@ export async function setDemoStatus(demoId: string, status: "DRAFT" | "PUBLISHED
 }
 
 export async function deleteDemo(demoId: string): Promise<void> {
+  // 1. Delete private demo data from AppData table
   const models = getPrivateModels();
   const listRes = await (models as any).AppData.list({ filter: { PK: { eq: pkDemo(demoId) } } });
   const items: any[] = listRes?.data || [];
@@ -811,6 +813,16 @@ export async function deleteDemo(demoId: string): Promise<void> {
       throw e;
     }
   }
+
+  // 2. Delete public mirror data to prevent orphaned public access
+  try {
+    await deletePublicDemoItems(demoId);
+  } catch (e) {
+    console.warn(`[deleteDemo] Failed to delete public mirror items for demo ${demoId}:`, e);
+    // Don't fail the entire operation if mirror cleanup fails
+  }
+  // Note: Lead submissions are intentionally preserved to maintain valuable contact data
+  // These will be handled through a separate archival/cleanup process
 }
 
 export type Hotspot = {
@@ -962,7 +974,13 @@ export async function listDemoItems(demoId: string) {
   }
 }
 
-export { useListMyDemos, useDemoItems, useLeadSubmissions, usePublicDemoItems } from "./hooks";
+export {
+  useListMyDemos,
+  useDemoItems,
+  useLeadSubmissions,
+  useLeadSubmissionsSmartly,
+  usePublicDemoItems,
+} from "./hooks";
 
 export async function listMyDemos(
   status?: "DRAFT" | "PUBLISHED"
