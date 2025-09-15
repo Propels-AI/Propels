@@ -27,17 +27,6 @@ function PasswordlessAuthComponent({
 }: PasswordlessAuthProps) {
   const id = useId();
   const formRef = useRef<HTMLFormElement>(null);
-  const log = (...args: any[]) => console.debug("[PasswordlessAuth]", ...args);
-  const logError = (context: string, err: unknown) => {
-    const anyErr = err as any;
-    const info = {
-      name: anyErr?.name,
-      message: anyErr?.message,
-      code: anyErr?.code,
-      $metadata: anyErr?.$metadata,
-    };
-    console.error(`[PasswordlessAuth] ${context}`, info, anyErr);
-  };
   const [mode, setMode] = useState<AuthMode>("emailEntry");
   const [email, setEmail] = useState("");
   const [otpCode, setOtpCode] = useState("");
@@ -67,7 +56,6 @@ function PasswordlessAuthComponent({
 
   useEffect(() => {
     const hubListenerCancel = Hub.listen("auth", ({ payload }) => {
-      log("Hub auth event:", payload?.event, payload);
       if (payload.event === "signedIn") {
         toast.success("Welcome!", {
           description: "You have been successfully signed in.",
@@ -79,7 +67,6 @@ function PasswordlessAuthComponent({
   }, [onAuthSuccess]);
 
   const handleBackToEmail = () => {
-    log("Back to email entry");
     setMode("emailEntry");
     setOtpCode("");
     setError(null);
@@ -91,7 +78,6 @@ function PasswordlessAuthComponent({
     if (!email.trim()) return;
     setIsLoading(true);
     setError(null);
-    log("Email submit start", { email: email.trim() });
 
     try {
       // If a user is already signed in
@@ -101,12 +87,10 @@ function PasswordlessAuthComponent({
           const currentUsername = (current as any)?.username || (current as any)?.userId;
           const same = String(currentUsername || "").toLowerCase() === email.trim().toLowerCase();
           if (same) {
-            log("Already signed in with same user; completing auth without OTP");
             onAuthSuccess?.();
             return;
           } else {
-            log("Different user already signed in; signing out before continuing");
-            await signOut({ global: true }).catch(() => {});
+            await signOut().catch(() => {}); // Only sign out this device
           }
         }
       } catch {
@@ -120,7 +104,6 @@ function PasswordlessAuthComponent({
           clientMetadata: { email: email.trim() },
         },
       });
-      log("signIn(CUSTOM_WITHOUT_SRP) succeeded; switching to otpVerification for existing user");
       setIsSignUpFlow(false);
       setError(null);
       setMode("otpVerification");
@@ -130,10 +113,8 @@ function PasswordlessAuthComponent({
         error.name === "UserNotFoundException" ||
         (error.name === "NotAuthorizedException" && (error.message || "").includes("Incorrect username or password"));
 
-      if (isExpectedFirstSignInFailure) {
-        log("Email submit: initial signIn indicates new user; proceeding to signUp flow");
-      } else {
-        logError("Email submit signIn failed", err);
+      if (!isExpectedFirstSignInFailure) {
+        // Unexpected error during sign in
       }
       // Recover if we hit 'already a signed in user'
       if (
@@ -141,8 +122,7 @@ function PasswordlessAuthComponent({
         /already\s+a?\s*signed\s*in\s*user/i.test(error.message || "")
       ) {
         try {
-          log("Encountered 'already signed in'; signing out and retrying signIn");
-          await signOut({ global: true });
+          await signOut(); // Only sign out this device
           await signIn({
             username: email.trim(),
             options: { authFlowType: "CUSTOM_WITHOUT_SRP", clientMetadata: { email: email.trim() } },
@@ -151,7 +131,7 @@ function PasswordlessAuthComponent({
           setMode("otpVerification");
           return;
         } catch (retryErr) {
-          logError("Retry after signOut failed", retryErr);
+          // Retry failed
         }
       }
       // If the user does not exist yet, create the user and use sign-up confirmation flow
@@ -167,7 +147,6 @@ function PasswordlessAuthComponent({
             password: tp,
             options: { userAttributes: { email: email.trim() } },
           });
-          log("signUp succeeded; immediately triggering custom challenge signIn to send OTP");
           // Immediately start custom auth flow to send email OTP
           await signIn({
             username: email.trim(),
@@ -179,7 +158,6 @@ function PasswordlessAuthComponent({
           setMode("otpVerification");
         } catch (signUpErr) {
           const suErr = signUpErr as { name?: string; message?: string };
-          logError("signUp failed after UserNotFoundException", signUpErr);
           if (suErr.name === "UsernameExistsException") {
             try {
               await signIn({
@@ -189,13 +167,11 @@ function PasswordlessAuthComponent({
                   clientMetadata: { email: email.trim() },
                 },
               });
-              log("Retry signIn after UsernameExistsException succeeded; switching to otpVerification");
               setError(null);
               setMode("otpVerification");
               return;
             } catch (retryErr) {
               const r = retryErr as { message?: string };
-              logError("Retry signIn after UsernameExistsException failed", retryErr);
               setError(r.message || suErr.message || "Failed to continue sign in.");
               return;
             }
@@ -203,7 +179,6 @@ function PasswordlessAuthComponent({
           setError(suErr.message || "Failed to start sign up. Please try again.");
         }
       } else if (error.name === "UserNotConfirmedException") {
-        log("User exists but not confirmed; triggering custom challenge signIn to send OTP");
         try {
           await signIn({
             username: email.trim(),
@@ -212,7 +187,6 @@ function PasswordlessAuthComponent({
           setIsSignUpFlow(false);
           setMode("otpVerification");
         } catch (resendErr) {
-          logError("Failed to trigger custom challenge signIn", resendErr);
           setError("Failed to send code. Please try again.");
         }
       } else if (
@@ -226,7 +200,6 @@ function PasswordlessAuthComponent({
             password: tp,
             options: { userAttributes: { email: email.trim() } },
           });
-          log("signUp succeeded after NotAuthorizedException; triggering custom challenge signIn to send OTP");
           await signIn({
             username: email.trim(),
             options: { authFlowType: "CUSTOM_WITHOUT_SRP", clientMetadata: { email: email.trim() } },
@@ -236,9 +209,7 @@ function PasswordlessAuthComponent({
           setMode("otpVerification");
         } catch (e2) {
           const e = e2 as { name?: string; message?: string };
-          logError("signUp failed after NotAuthorizedException", e2);
           if (e.name === "UsernameExistsException") {
-            log("User exists, checking if they need confirmation");
             setIsSignUpFlow(true);
             setMode("otpVerification");
             return;
@@ -246,14 +217,11 @@ function PasswordlessAuthComponent({
           setError(e.message || "Failed to sign up. Please try again.");
         }
       } else if (error.name === "NotAuthorizedException" && error.message?.toLowerCase().includes("email")) {
-        log("Email-related NotAuthorizedException encountered");
         setError("Failed to send email. Please check your email address and try again.");
       } else {
-        log("Unhandled error on email submit");
         setError(error.message || "Failed to start sign in. Please try again.");
       }
     } finally {
-      log("Email submit end");
       setIsLoading(false);
     }
   };
@@ -263,15 +231,12 @@ function PasswordlessAuthComponent({
     if (!otpCode.trim() || otpCode.length !== 6) return;
     setIsLoading(true);
     setError(null);
-    log("OTP submit start", { codeLen: otpCode.length });
     try {
       if (isSignUpFlow) {
-        log("Confirming sign-up with confirmation code");
         await confirmSignUp({
           username: email.trim(),
           confirmationCode: otpCode.trim(),
         });
-        log("Sign-up confirmed successfully, now signing in with temp password");
 
         if (!tempPassword) {
           throw new Error("Missing temporary password for sign-in");
@@ -280,15 +245,12 @@ function PasswordlessAuthComponent({
           username: email.trim(),
           password: tempPassword,
         });
-        log("Sign-in completed with temporary password");
       } else {
-        log("Confirming custom challenge for existing user");
         await confirmSignIn({ challengeResponse: otpCode.trim() });
       }
 
       onSyncAnonymousDemo?.();
     } catch (err) {
-      logError("OTP submit failed", err);
       const anyErr = err as any;
       const name = anyErr?.name as string | undefined;
       const msg = (anyErr?.message as string | undefined) || "Invalid code. Please try again.";
@@ -321,7 +283,6 @@ function PasswordlessAuthComponent({
         name !== "ExpiredCodeException"
       ) {
         try {
-          log("Attempting session recovery: re-triggering custom challenge signIn");
           await signIn({
             username: email.trim(),
             options: {
@@ -331,13 +292,11 @@ function PasswordlessAuthComponent({
           });
           setOtpCode("");
           setMode("otpVerification");
-          log("Session recovery succeeded; new OTP sent");
         } catch (recoverErr) {
-          logError("Session recovery failed", recoverErr);
+          // Session recovery failed
         }
       }
     } finally {
-      log("OTP submit end");
       setIsLoading(false);
     }
   };
@@ -502,7 +461,6 @@ function PasswordlessAuthComponent({
                       setError(null);
                       try {
                         // Always re-trigger custom challenge sign-in to send a fresh OTP
-                        log("Resend: re-trigger custom challenge signIn");
                         await signIn({
                           username: email.trim(),
                           options: {
@@ -514,7 +472,6 @@ function PasswordlessAuthComponent({
                         setResendDisabled(true);
                         setTimeout(() => setResendDisabled(false), 20000);
                       } catch (resendErr) {
-                        logError("Resend code failed", resendErr);
                         const rErr = resendErr as { message?: string };
                         let errorMsg = rErr.message || "Failed to resend code.";
                         // Transform generic auth errors for resend context
