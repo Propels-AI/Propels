@@ -162,6 +162,8 @@ export function DemoEditorPage() {
   const [isPreviewing, setIsPreviewing] = useState<boolean>(false);
   const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
   const [imageLoading, setImageLoading] = useState<boolean>(false);
+  // Track container size to trigger re-render on resize so tooltip positions recompute
+  const [containerSize, setContainerSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
   const isCurrentLeadStep = Boolean(steps[selectedStepIndex]?.isLeadCapture);
   // Keep canvas size consistent on lead steps: use last known naturalSize or a sane default
   const effectiveNaturalSize = isCurrentLeadStep && !naturalSize ? { w: 1280, h: 800 } : naturalSize;
@@ -324,6 +326,33 @@ export function DemoEditorPage() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Recompute positions on container resize (image area changes with responsive layout)
+  useEffect(() => {
+    const el = imageRef.current;
+    if (!el) return;
+    const update = () => {
+      try {
+        const rect = el.getBoundingClientRect();
+        setContainerSize({ w: Math.round(rect.width), h: Math.round(rect.height) });
+      } catch {}
+    };
+    update();
+    let observer: ResizeObserver | null = null;
+    try {
+      observer = new ResizeObserver(() => update());
+      observer.observe(el);
+    } catch {}
+    window.addEventListener("resize", update);
+    return () => {
+      try {
+        if (observer) observer.disconnect();
+      } catch {}
+      try {
+        window.removeEventListener("resize", update);
+      } catch {}
+    };
   }, []);
 
   const applyGlobalStyle = (
@@ -847,6 +876,8 @@ export function DemoEditorPage() {
         <div
           ref={imageRef}
           className="bg-gray-200 border rounded-xl w-full min-h-[320px] flex items-center justify-center relative overflow-hidden"
+          data-container-w={containerSize.w}
+          data-container-h={containerSize.h}
           style={
             effectiveNaturalSize
               ? {
