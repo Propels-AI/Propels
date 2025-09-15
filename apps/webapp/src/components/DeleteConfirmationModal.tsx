@@ -32,7 +32,14 @@ export function DeleteDemoModal({ isOpen, onClose, onConfirm, demoName }: Delete
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && !isDeleting) {
+          onClose();
+        }
+      }}
+    >
       <DialogContent className="sm:max-w-md">
         <DialogHeader className="space-y-4">
           <DialogTitle className="text-xl font-medium text-foreground">Delete Demo</DialogTitle>
