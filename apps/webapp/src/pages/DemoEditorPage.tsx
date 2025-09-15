@@ -804,6 +804,8 @@ export function DemoEditorPage() {
             const next = demoStatus === "PUBLISHED" ? "DRAFT" : "PUBLISHED";
             try {
               setTogglingStatus(true);
+              const loadingMsg = next === "PUBLISHED" ? "Publishing…" : "Unpublishing…";
+              const toastId = toast.loading(loadingMsg);
               if (next === "PUBLISHED") {
                 try {
                   const { leadStepIndex, leadConfig } = extractLeadConfig(steps, leadFormConfig);
@@ -821,8 +823,19 @@ export function DemoEditorPage() {
               console.info("[editor] setDemoStatus completed for:", { demoId: demoIdParam, status: next });
               setDemoStatusLocal(next);
               if (next === "PUBLISHED") setShareOpen(true);
+              try {
+                toast.dismiss(toastId);
+              } catch {}
+              if (next === "PUBLISHED") {
+                toast.success("Demo published", { description: "Your demo is now live." });
+              } else {
+                toast.success("Demo unpublished", { description: "Your demo is now private." });
+              }
             } catch (e) {
               console.error("Failed to update status", e);
+              try {
+                toast.error("Failed to update status", { description: "Please try again." });
+              } catch {}
               alert("Failed to update status. Please try again.");
             } finally {
               setTogglingStatus(false);
