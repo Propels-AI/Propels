@@ -123,41 +123,28 @@ describe("Demo Deletion Functionality", () => {
       // Click delete button
       const deleteButton = screen.getByRole("button", { name: "Delete Demo" });
 
-      // The component will throw an unhandled error, so we need to catch it
-      let thrownError: any = null;
+      await user.click(deleteButton);
 
-      // Add error event listener to catch unhandled rejections
-      const originalHandler = process.listeners("unhandledRejection");
-      process.removeAllListeners("unhandledRejection");
-      process.on("unhandledRejection", (error) => {
-        thrownError = error;
+      // Wait for the onConfirm to be called
+      await waitFor(() => {
+        expect(mockOnConfirm).toHaveBeenCalledTimes(1);
       });
 
-      try {
-        await user.click(deleteButton);
+      // Wait for the component to handle the error and update state
+      await waitFor(() => {
+        // Should show error UI
+        expect(screen.getByText(/Error: Deletion failed/)).toBeInTheDocument();
+      });
 
-        // Wait for the error to be handled and onConfirm to be called
-        await waitFor(() => {
-          expect(mockOnConfirm).toHaveBeenCalledTimes(1);
-        });
+      // Modal should remain open on error (onClose should not be called)
+      expect(mockOnClose).not.toHaveBeenCalled();
 
-        // Wait a bit for the unhandled rejection to occur
-        await new Promise((resolve) => setTimeout(resolve, 10));
+      // Modal should still be visible since error occurred
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
 
-        // Should have caught the error
-        expect(thrownError).toBeInstanceOf(Error);
-        expect(thrownError.message).toBe("Deletion failed");
-
-        // Modal should remain open on error (onClose should not be called)
-        expect(mockOnClose).not.toHaveBeenCalled();
-
-        // Modal should still be visible since error occurred
-        expect(screen.getByRole("dialog")).toBeInTheDocument();
-      } finally {
-        // Restore original error handlers
-        process.removeAllListeners("unhandledRejection");
-        originalHandler.forEach((handler) => process.on("unhandledRejection", handler));
-      }
+      // Buttons should be enabled again after error
+      expect(screen.getByRole("button", { name: "Cancel" })).not.toBeDisabled();
+      expect(screen.getByRole("button", { name: "Delete Demo" })).not.toBeDisabled();
     });
   });
 

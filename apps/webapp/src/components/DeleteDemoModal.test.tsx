@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { DeleteDemoModal } from "./DeleteConfirmationModal";
 
@@ -91,41 +91,50 @@ describe("DeleteDemoModal", () => {
 
     const deleteButton = screen.getByRole("button", { name: "Delete Demo" });
 
-    // The component will throw an unhandled error, so we need to catch it
-    let thrownError: any = null;
+    await user.click(deleteButton);
 
-    // Add error event listener to catch unhandled rejections
-    const originalHandler = process.listeners("unhandledRejection");
-    process.removeAllListeners("unhandledRejection");
-    process.on("unhandledRejection", (error) => {
-      thrownError = error;
+    // Wait for the onConfirm to be called
+    await waitFor(() => {
+      expect(mockOnConfirm).toHaveBeenCalledTimes(1);
     });
 
-    try {
-      await user.click(deleteButton);
+    // Wait for the component to handle the error and update state
+    await waitFor(() => {
+      // Should show error UI
+      expect(screen.getByText(/Error: Deletion failed/)).toBeInTheDocument();
+    });
 
-      // Wait for the error to be handled and onConfirm to be called
-      await waitFor(() => {
-        expect(mockOnConfirm).toHaveBeenCalledTimes(1);
-      });
+    // Modal should remain open on error (onClose should not be called)
+    expect(defaultProps.onClose).not.toHaveBeenCalled();
 
-      // Wait a bit for the unhandled rejection to occur
-      await new Promise((resolve) => setTimeout(resolve, 10));
+    // Modal should still be visible since error occurred
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
 
-      // Should have caught the error
-      expect(thrownError).toBeInstanceOf(Error);
-      expect(thrownError.message).toBe("Deletion failed");
+    // Buttons should be enabled again after error
+    expect(screen.getByRole("button", { name: "Cancel" })).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: "Delete Demo" })).not.toBeDisabled();
+  });
 
-      // Modal should remain open on error (onClose should not be called)
-      expect(defaultProps.onClose).not.toHaveBeenCalled();
+  it("should clear error when modal reopens", async () => {
+    const user = userEvent.setup();
+    const mockOnConfirm = vi.fn().mockRejectedValue(new Error("Deletion failed"));
 
-      // Modal should still be visible since error occurred
-      expect(screen.getByRole("dialog")).toBeInTheDocument();
-    } finally {
-      // Restore original error handlers
-      process.removeAllListeners("unhandledRejection");
-      originalHandler.forEach((handler) => process.on("unhandledRejection", handler));
-    }
+    const { rerender } = render(<DeleteDemoModal {...defaultProps} onConfirm={mockOnConfirm} />);
+
+    // Trigger error
+    await user.click(screen.getByRole("button", { name: "Delete Demo" }));
+    await waitFor(() => {
+      expect(screen.getByText(/Error: Deletion failed/)).toBeInTheDocument();
+    });
+
+    // Close modal
+    rerender(<DeleteDemoModal {...defaultProps} isOpen={false} onConfirm={mockOnConfirm} />);
+
+    // Reopen modal
+    rerender(<DeleteDemoModal {...defaultProps} onConfirm={mockOnConfirm} />);
+
+    // Error should be cleared
+    expect(screen.queryByText(/Error: Deletion failed/)).not.toBeInTheDocument();
   });
 
   it("should not render when isOpen is false", () => {

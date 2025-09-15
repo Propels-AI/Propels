@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 interface DeleteDemoModalProps {
   isOpen: boolean;
@@ -20,12 +21,28 @@ interface DeleteDemoModalProps {
 
 export function DeleteDemoModal({ isOpen, onClose, onConfirm, demoName }: DeleteDemoModalProps) {
   const [isDeleting, setIsDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Clear error when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setError(null);
+    }
+  }, [isOpen]);
 
   const handleDelete = async () => {
     setIsDeleting(true);
+    setError(null);
     try {
       await onConfirm();
       onClose();
+    } catch (err) {
+      // Handle rejection from onConfirm - don't let it bubble to process level
+      const errorMessage = err instanceof Error ? err.message : "Failed to delete demo";
+      setError(errorMessage);
+      toast.error("Deletion failed", {
+        description: errorMessage,
+      });
     } finally {
       setIsDeleting(false);
     }
@@ -56,6 +73,12 @@ export function DeleteDemoModal({ isOpen, onClose, onConfirm, demoName }: Delete
               <span className="font-medium">Note:</span> Lead submissions will be preserved and can still be accessed
               from the leads page.
             </p>
+
+            {error && (
+              <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                <p className="text-sm text-destructive font-medium">Error: {error}</p>
+              </div>
+            )}
           </DialogDescription>
         </DialogHeader>
 
