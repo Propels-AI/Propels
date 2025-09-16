@@ -740,11 +740,10 @@ export function DemoEditorPage() {
       const newSteps = [...prevSteps];
       const safeIndex = Math.max(0, Math.min(insertIndex, newSteps.length));
       newSteps.splice(safeIndex, 0, leadStep);
+      // Select the newly inserted lead step using clamped index
+      setSelectedStepIndex(safeIndex);
       return newSteps;
     });
-
-    // Select the newly inserted lead step
-    setSelectedStepIndex(insertIndex);
   };
 
   return (
