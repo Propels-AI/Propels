@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { syncAnonymousDemo, type EditedDraft } from "../lib/services/syncAnonymousDemo";
 import { useAuth } from "@/lib/providers/AuthProvider";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { deleteDemo, renameDemo, setDemoStatus } from "@/lib/api/demos";
+import { deleteDemo, renameDemo, setDemoStatus, createDemoStep, getOwnerId } from "@/lib/api/demos";
 import {
   updateDemoStepHotspots,
   updateDemoLeadConfig,
@@ -15,16 +15,17 @@ import {
 import { useEditorData } from "@/features/editor/hooks/useEditorData";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { PasswordlessAuth } from "@/components/auth/PasswordlessAuth";
+import { EditorSidebar } from "@/features/editor/components/EditorSidebar";
 import { toast } from "sonner";
 import { Loader2, Copy } from "lucide-react";
 import LeadCaptureOverlay from "@/components/LeadCaptureOverlay";
 import EditorHeader from "@/features/editor/components/EditorHeader";
-import LeadFormEditor from "@/features/editor/components/LeadFormEditor";
 import HotspotOverlay from "@/components/HotspotOverlay";
 import { type HotspotsMap, type TooltipStyle } from "@/lib/editor/deriveTooltipStyleFromHotspots";
 import { applyGlobalStyleToHotspots } from "@/lib/editor/applyGlobalStyleToHotspots";
 import { extractLeadConfig } from "@/lib/editor/extractLeadConfig";
 import { Dialog as UIDialog, DialogContent as UIDialogContent } from "@/components/ui/dialog";
+import { DeleteDemoModal } from "@/components/DeleteConfirmationModal";
 
 export function DemoEditorPage() {
   const { user, isLoading } = useAuth();
@@ -59,24 +60,37 @@ export function DemoEditorPage() {
   >([]);
   const [selectedStepIndex, setSelectedStepIndex] = useState<number>(0);
   // Lead step quick-insert MVP controls
-  const [leadUiOpen, setLeadUiOpen] = useState(false);
-  const [leadInsertPos, setLeadInsertPos] = useState<"before" | "after">("after");
-  const [leadInsertAnchor, setLeadInsertAnchor] = useState<number>(1); // 1-based for UI
   const [authOpen, setAuthOpen] = useState(false);
   const pendingDraftRef = useRef<EditedDraft | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+
+  // Delete handler function
+  const handleDeleteDemo = async () => {
+    if (!demoIdParam) return;
+    try {
+      await deleteDemo(demoIdParam);
+      window.location.href = "/dashboard";
+    } catch (e) {
+      console.error("Failed to delete demo", e);
+      alert("Failed to delete demo. Please try again.");
+      throw e; // Re-throw so the modal can handle the error state
+    }
+  };
   // Metadata for saved demo (when demoId exists)
   const [demoName, setDemoName] = useState<string>("");
   const [demoStatus, setDemoStatusLocal] = useState<"DRAFT" | "PUBLISHED">("DRAFT");
   const [savingTitle, setSavingTitle] = useState(false);
   const [togglingStatus, setTogglingStatus] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [savingDemo, setSavingDemo] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   // Retry counter for backend load (handle eventual consistency right after creation)
   const loadAttemptsRef = useRef<number>(0);
 
   // New: hook to load data for saved demos (backend path)
   const ed = useEditorData(demoIdParam || undefined);
+  // Track original step IDs loaded from backend
+  const [originalStepIds, setOriginalStepIds] = useState<Set<string>>(new Set());
 
   const [isDrawing, setIsDrawing] = useState(false);
   const [startPos, setStartPos] = useState({ x: 0, y: 0 });
@@ -108,7 +122,6 @@ export function DemoEditorPage() {
   const [hotspotsByStep, setHotspotsByStep] = useState<Record<string, Hotspot[]>>({});
   const [editingTooltip, setEditingTooltip] = useState<string | null>(null);
   const [tooltipText, setTooltipText] = useState("");
-  const [inspectorTab, setInspectorTab] = useState<"fill" | "stroke">("fill");
   // Lead form config
   const [leadFormConfig, setLeadFormConfig] = useState<any>({
     title: "Stay in the loop",
@@ -151,6 +164,8 @@ export function DemoEditorPage() {
   const [isPreviewing, setIsPreviewing] = useState<boolean>(false);
   const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
   const [imageLoading, setImageLoading] = useState<boolean>(false);
+  // Track container size to trigger re-render on resize so tooltip positions recompute
+  const [containerSize, setContainerSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
   const isCurrentLeadStep = Boolean(steps[selectedStepIndex]?.isLeadCapture);
   // Keep canvas size consistent on lead steps: use last known naturalSize or a sane default
   const effectiveNaturalSize = isCurrentLeadStep && !naturalSize ? { w: 1280, h: 800 } : naturalSize;
@@ -159,7 +174,6 @@ export function DemoEditorPage() {
   const currentHotspots: Hotspot[] = currentStepId ? (hotspotsByStep[currentStepId] ?? []) : [];
 
   useEffect(() => {
-
     const loadFromExtension = async () => {
       try {
         setLoadingSteps(true);
@@ -293,7 +307,18 @@ export function DemoEditorPage() {
     if (ed.leadFormConfig) setLeadFormConfig(ed.leadFormConfig);
     setTooltipStyle((prev) => ({ ...prev, ...ed.tooltipStyle }));
     setSelectedStepIndex(0);
-  }, [demoIdParam, ed.loading, ed.demoName, ed.demoStatus, ed.steps, ed.hotspotsByStep, ed.leadFormConfig, ed.tooltipStyle]);
+    // Track original step IDs from backend
+    setOriginalStepIds(new Set(ed.steps.map((s) => s.id)));
+  }, [
+    demoIdParam,
+    ed.loading,
+    ed.demoName,
+    ed.demoStatus,
+    ed.steps,
+    ed.hotspotsByStep,
+    ed.leadFormConfig,
+    ed.tooltipStyle,
+  ]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -305,6 +330,33 @@ export function DemoEditorPage() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Recompute positions on container resize (image area changes with responsive layout)
+  useEffect(() => {
+    const el = imageRef.current;
+    if (!el) return;
+    const update = () => {
+      try {
+        const rect = el.getBoundingClientRect();
+        setContainerSize({ w: Math.round(rect.width), h: Math.round(rect.height) });
+      } catch {}
+    };
+    update();
+    let observer: ResizeObserver | null = null;
+    try {
+      observer = new ResizeObserver(() => update());
+      observer.observe(el);
+    } catch {}
+    window.addEventListener("resize", update);
+    return () => {
+      try {
+        if (observer) observer.disconnect();
+      } catch {}
+      try {
+        window.removeEventListener("resize", update);
+      } catch {}
+    };
   }, []);
 
   const applyGlobalStyle = (
@@ -373,10 +425,35 @@ export function DemoEditorPage() {
     try {
       setSavingDemo(true);
       if (demoIdParam) {
-        const updates = steps.map(async (s) => {
+        const ownerId = await getOwnerId();
+        if (!ownerId) throw new Error("User not authenticated");
+
+        const updates = steps.map(async (s, idx) => {
           if (s.isLeadCapture) return;
           const hs = hotspotsByStep[s.id] ?? [];
-          await updateDemoStepHotspots({ demoId: demoIdParam, stepId: s.id, hotspots: hs as any });
+
+          // Check if this is a new step (not in original backend set)
+          if (!originalStepIds.has(s.id)) {
+            // New step - create it
+            const s3Key = (s as any).s3Key;
+            if (!s3Key) {
+              console.warn(`New step ${s.id} missing s3Key, skipping create`);
+              return;
+            }
+            await createDemoStep({
+              demoId: demoIdParam,
+              stepId: s.id,
+              s3Key,
+              hotspots: hs as any,
+              order: idx,
+              pageUrl: s.pageUrl,
+              thumbnailS3Key: (s as any).thumbnailS3Key,
+              ownerId,
+            });
+          } else {
+            // Existing step - update hotspots only
+            await updateDemoStepHotspots({ demoId: demoIdParam, stepId: s.id, hotspots: hs as any });
+          }
         });
         await Promise.all(updates);
         try {
@@ -680,8 +757,100 @@ export function DemoEditorPage() {
     if (nextPos >= 0) setSelectedStepIndex(previewableIndices[nextPos]);
   };
 
+  const addLeadStep = (insertIndex: number) => {
+    const leadStep = {
+      id: `LEAD-${Date.now()}`,
+      pageUrl: "",
+      isLeadCapture: true as const,
+      leadBg: "white" as const,
+    };
+
+    setSteps((prevSteps) => {
+      const newSteps = [...prevSteps];
+      const safeIndex = Math.max(0, Math.min(insertIndex, newSteps.length));
+      newSteps.splice(safeIndex, 0, leadStep);
+      // Select the newly inserted lead step using clamped index
+      setSelectedStepIndex(safeIndex);
+      return newSteps;
+    });
+  };
+
   return (
     <div className="min-h-screen flex">
+      <EditorSidebar
+        steps={steps}
+        loadingSteps={loadingSteps}
+        selectedStepIndex={selectedStepIndex}
+        onSelectStep={setSelectedStepIndex}
+        currentStepId={currentStepId}
+        currentHotspots={currentHotspots}
+        isCurrentLeadStep={isCurrentLeadStep}
+        leadFormConfig={leadFormConfig}
+        setLeadFormConfig={setLeadFormConfig}
+        tooltipStyle={tooltipStyle}
+        applyGlobalStyle={applyGlobalStyle}
+        handleSave={handleSave}
+        isCollapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+        onAddLeadStep={addLeadStep}
+        onDeleteStep={(index) => {
+          setSteps((prev) => {
+            if (index < 0 || index >= prev.length) return prev;
+            const removed = prev[index];
+            const next = [...prev.slice(0, index), ...prev.slice(index + 1)];
+            // Cleanup hotspots for removed step
+            setHotspotsByStep((prevHs) => {
+              const { [removed.id]: _omit, ...rest } = prevHs;
+              return rest;
+            });
+            // Adjust selection
+            setSelectedStepIndex((sel) => {
+              if (sel === index) return Math.max(0, Math.min(index, next.length - 1));
+              if (sel > index) return sel - 1;
+              return sel;
+            });
+            return next;
+          });
+        }}
+        onDuplicateStep={(index) => {
+          setSteps((prev) => {
+            if (index < 0 || index >= prev.length) return prev;
+            const original = prev[index];
+            const dupId = (crypto as any).randomUUID
+              ? (crypto as any).randomUUID()
+              : `DUP-${original.id}-${Date.now()}`;
+            const duplicate = { ...original, id: dupId } as (typeof prev)[number];
+            const next = [...prev.slice(0, index + 1), duplicate, ...prev.slice(index + 1)];
+            // Duplicate hotspots mapping
+            setHotspotsByStep((prevHs) => {
+              const clone = Array.isArray(prevHs[original.id])
+                ? prevHs[original.id].map((h) => ({ ...h, id: Math.random().toString(36).slice(2, 9) }))
+                : [];
+              return { ...prevHs, [dupId]: clone } as any;
+            });
+            // Select the duplicate
+            setSelectedStepIndex(index + 1);
+            return next;
+          });
+        }}
+        onReorderSteps={(from, to) => {
+          setSteps((prev) => {
+            if (from === to) return prev;
+            if (from < 0 || from >= prev.length) return prev;
+            const clampedTo = Math.max(0, Math.min(to, prev.length - 1));
+            const next = [...prev];
+            const [moved] = next.splice(from, 1);
+            next.splice(clampedTo, 0, moved);
+            // Maintain selection by id
+            setSelectedStepIndex((sel) => {
+              const currentId = prev[sel]?.id;
+              const newIndex = next.findIndex((s) => s.id === currentId);
+              return newIndex >= 0 ? newIndex : Math.max(0, Math.min(sel, next.length - 1));
+            });
+            return next;
+          });
+        }}
+      />
       <div className="flex-1 p-8">
         <EditorHeader
           demoId={demoIdParam || undefined}
@@ -691,9 +860,6 @@ export function DemoEditorPage() {
           savingDemo={savingDemo}
           demoStatus={demoStatus}
           togglingStatus={togglingStatus}
-          deleting={deleting}
-          loadingSteps={loadingSteps}
-          stepsCount={steps.length}
           isPreviewing={isPreviewing}
           previewableCount={previewableIndices.length}
           currentPreviewIndex={Math.max(0, previewableIndices.indexOf(selectedStepIndex))}
@@ -703,11 +869,14 @@ export function DemoEditorPage() {
           }}
           onPrevPreview={gotoPrevAnnotated}
           onNextPreview={gotoNextAnnotated}
-          onSaveTitle={async () => {
+          onPreview={() => setIsPreviewing(!isPreviewing)}
+          onSaveTitle={async (newTitle?: string) => {
             if (!demoIdParam) return;
             try {
               setSavingTitle(true);
-              await renameDemo(demoIdParam, demoName || "");
+              // Use the passed newTitle if provided, otherwise fall back to current demoName
+              const titleToSave = newTitle !== undefined ? newTitle : demoName || "";
+              await renameDemo(demoIdParam, titleToSave);
             } catch (e) {
               console.error("Failed to rename demo", e);
               alert("Failed to save title. Please try again.");
@@ -720,6 +889,8 @@ export function DemoEditorPage() {
             const next = demoStatus === "PUBLISHED" ? "DRAFT" : "PUBLISHED";
             try {
               setTogglingStatus(true);
+              const loadingMsg = next === "PUBLISHED" ? "Publishing…" : "Unpublishing…";
+              const toastId = toast.loading(loadingMsg);
               if (next === "PUBLISHED") {
                 try {
                   const { leadStepIndex, leadConfig } = extractLeadConfig(steps, leadFormConfig);
@@ -737,8 +908,19 @@ export function DemoEditorPage() {
               console.info("[editor] setDemoStatus completed for:", { demoId: demoIdParam, status: next });
               setDemoStatusLocal(next);
               if (next === "PUBLISHED") setShareOpen(true);
+              try {
+                toast.dismiss(toastId);
+              } catch {}
+              if (next === "PUBLISHED") {
+                toast.success("Demo published", { description: "Your demo is now live." });
+              } else {
+                toast.success("Demo unpublished", { description: "Your demo is now private." });
+              }
             } catch (e) {
               console.error("Failed to update status", e);
+              try {
+                toast.error("Failed to update status", { description: "Please try again." });
+              } catch {}
               alert("Failed to update status. Please try again.");
             } finally {
               setTogglingStatus(false);
@@ -746,18 +928,8 @@ export function DemoEditorPage() {
           }}
           onDelete={async () => {
             if (!demoIdParam) return;
-            const ok = confirm("Delete this demo? This cannot be undone.");
-            if (!ok) return;
-            try {
-              setDeleting(true);
-              await deleteDemo(demoIdParam);
-              window.location.href = "/dashboard";
-            } catch (e) {
-              console.error("Failed to delete demo", e);
-              alert("Failed to delete demo. Please try again.");
-            } finally {
-              setDeleting(false);
-            }
+            console.log("[DemoEditorPage] Opening delete modal. Demo name:", demoName, "Demo ID:", demoIdParam);
+            setDeleteModalOpen(true);
           }}
           onOpenBlogPreview={() => {
             const demoId = demoIdParam;
@@ -802,6 +974,8 @@ export function DemoEditorPage() {
         <div
           ref={imageRef}
           className="bg-gray-200 border rounded-xl w-full min-h-[320px] flex items-center justify-center relative overflow-hidden"
+          data-container-w={containerSize.w}
+          data-container-h={containerSize.h}
           style={
             effectiveNaturalSize
               ? {
@@ -1061,298 +1235,12 @@ export function DemoEditorPage() {
             })}
         </div>
       </div>
-      <div className="w-80 bg-gray-100 p-4 border-l space-y-6">
-        <h2 className="text-xl font-semibold mb-2 flex items-center justify-between">
-          <span>Steps</span>
-          <button
-            title="Add lead generation step"
-            className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50"
-            onClick={() => {
-              setLeadUiOpen((v) => !v);
-              const safeLen = Math.max(1, steps.length);
-              const suggested = Math.min(safeLen, selectedStepIndex + 1);
-              setLeadInsertAnchor(suggested);
-              setLeadInsertPos("after");
-            }}
-          >
-            + Lead
-          </button>
-        </h2>
-        {leadUiOpen && (
-          <div className="mb-3 p-3 bg-white border rounded-lg shadow-sm text-xs text-gray-700">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-medium">Add lead form</span>
-              <label className="inline-flex items-center gap-1">
-                <input
-                  type="radio"
-                  name="leadpos"
-                  className="accent-blue-600"
-                  checked={leadInsertPos === "before"}
-                  onChange={() => setLeadInsertPos("before")}
-                />
-                <span>before</span>
-              </label>
-              <label className="inline-flex items-center gap-1">
-                <input
-                  type="radio"
-                  name="leadpos"
-                  className="accent-blue-600"
-                  checked={leadInsertPos === "after"}
-                  onChange={() => setLeadInsertPos("after")}
-                />
-                <span>after</span>
-              </label>
-              <span>step</span>
-              <select
-                value={leadInsertAnchor}
-                onChange={(e) =>
-                  setLeadInsertAnchor(
-                    Math.max(1, Math.min(Math.max(1, steps.length), parseInt(e.target.value || "1", 10)))
-                  )
-                }
-                className="border rounded px-2 py-1 text-xs bg-white"
-              >
-                {Array.from({ length: Math.max(1, steps.length) }, (_, i) => i + 1).map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-              <div className="ml-auto flex items-center gap-2">
-                <button
-                  className="text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
-                  onClick={() => {
-                    const anchor0 = Math.max(1, Math.min(Math.max(1, steps.length), leadInsertAnchor)) - 1; // 0-based
-                    const insertIndex = leadInsertPos === "before" ? anchor0 : anchor0 + 1;
-                    const newStep = {
-                      id: `LEAD-${Math.random().toString(36).slice(2, 9)}`,
-                      pageUrl: "",
-                      screenshotUrl: undefined,
-                      isLeadCapture: true as const,
-                      leadBg: "white" as const,
-                    };
-                    setSteps((prev) => {
-                      const next = [...prev];
-                      const idx = Math.max(0, Math.min(next.length, insertIndex));
-                      next.splice(idx, 0, newStep);
-                      return next;
-                    });
-                    setHotspotsByStep((prev) => ({ ...prev }));
-                    const nextIndex = Math.max(0, Math.min(steps.length, insertIndex));
-                    setSelectedStepIndex(nextIndex);
-                    setLeadUiOpen(false);
-                  }}
-                >
-                  Insert
-                </button>
-                <button
-                  className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50"
-                  onClick={() => setLeadUiOpen(false)}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-        <div className="space-y-2">
-          {steps.length === 0 && !loadingSteps && (
-            <div className="text-xs text-gray-600">
-              No steps yet. Try recording again, or
-              <a href="#" className="text-blue-600 hover:underline mx-1">
-                read the guide
-              </a>
-              or
-              <a
-                href="https://cal.com/propels/demo-help"
-                target="_blank"
-                rel="noreferrer"
-                className="text-blue-600 hover:underline ml-1"
-              >
-                talk to our team
-              </a>
-              .
-            </div>
-          )}
-          {steps.map((s, idx) => (
-            <button
-              key={s.id}
-              onClick={() => setSelectedStepIndex(idx)}
-              className={`w-full flex gap-3 items-center bg-white p-2 rounded-lg shadow border text-left hover:border-blue-500 ${
-                idx === selectedStepIndex ? "border-blue-600" : "border-transparent"
-              }`}
-            >
-              {s.isLeadCapture ? (
-                <div
-                  className={`w-16 h-12 rounded flex items-center justify-center text-[10px] border ${s.leadBg === "black" ? "bg-black text-white" : "bg-white text-gray-700"}`}
-                >
-                  LEAD
-                </div>
-              ) : (
-                <img src={s.screenshotUrl} alt="thumb" className="w-16 h-12 object-cover rounded" />
-              )}
-              <div className="flex-1">
-                <p className="text-sm font-medium">Step {idx + 1}</p>
-                <p className="text-[10px] text-gray-500 truncate">{s.isLeadCapture ? "Lead capture" : s.pageUrl}</p>
-              </div>
-            </button>
-          ))}
-        </div>
-
-        <div className="pt-4 border-t mt-6">
-          <h3 className="text-lg font-semibold mb-3">Tooltip Inspector</h3>
-          {isCurrentLeadStep ? (
-            <div className="text-xs text-gray-600">Lead capture step has no hotspots.</div>
-          ) : currentHotspots.length === 0 ? (
-            <div className="text-xs text-gray-600">No tooltip on this step. Click on the image to add one.</div>
-          ) : (
-            <div className="space-y-3 text-sm">
-              <div className="flex gap-2 text-xs">
-                <button
-                  className={`px-2 py-1 rounded border ${inspectorTab === "fill" ? "bg-white border-blue-500 text-blue-700" : "bg-gray-50 border-transparent"}`}
-                  onClick={() => setInspectorTab("fill")}
-                >
-                  Fill
-                </button>
-                <button
-                  className={`px-2 py-1 rounded border ${inspectorTab === "stroke" ? "bg-white border-blue-500 text-blue-700" : "bg-gray-50 border-transparent"}`}
-                  onClick={() => setInspectorTab("stroke")}
-                >
-                  Stroke
-                </button>
-              </div>
-
-              {inspectorTab === "fill" ? (
-                <>
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">Size (px)</label>
-                    <input
-                      type="range"
-                      min={6}
-                      max={48}
-                      step={1}
-                      value={Number(tooltipStyle.dotSize)}
-                      onChange={(e) => applyGlobalStyle({ dotSize: Number(e.target.value) })}
-                      className="w-full"
-                    />
-                    <div className="text-[10px] text-gray-500 mt-0.5">{Number(tooltipStyle.dotSize)} px</div>
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">Color</label>
-                    <input
-                      type="color"
-                      value={tooltipStyle.dotColor}
-                      onChange={(e) => applyGlobalStyle({ dotColor: e.target.value })}
-                      className="w-10 h-8 p-0 border rounded"
-                      title="Choose color"
-                    />
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">Width (px)</label>
-                    <input
-                      type="range"
-                      min={0}
-                      max={8}
-                      step={1}
-                      value={Number(tooltipStyle.dotStrokePx)}
-                      onChange={(e) => applyGlobalStyle({ dotStrokePx: Number(e.target.value) })}
-                      className="w-full"
-                    />
-                    <div className="text-[10px] text-gray-500 mt-0.5">{Number(tooltipStyle.dotStrokePx)} px</div>
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">Color</label>
-                    <input
-                      type="color"
-                      value={tooltipStyle.dotStrokeColor}
-                      onChange={(e) => applyGlobalStyle({ dotStrokeColor: e.target.value })}
-                      className="w-10 h-8 p-0 border rounded"
-                      title="Choose stroke color"
-                    />
-                  </div>
-                </>
-              )}
-              <div>
-                <label className="block text-xs text-gray-600 mb-1">Tooltip background</label>
-                <input
-                  type="color"
-                  value={tooltipStyle.tooltipBgColor || "#2563eb"}
-                  onChange={(e) => applyGlobalStyle({ tooltipBgColor: e.target.value })}
-                  className="w-10 h-8 p-0 border rounded"
-                  title="Choose tooltip background"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-600 mb-1">Tooltip text color</label>
-                <input
-                  type="color"
-                  value={tooltipStyle.tooltipTextColor || "#ffffff"}
-                  onChange={(e) => applyGlobalStyle({ tooltipTextColor: e.target.value })}
-                  className="w-10 h-8 p-0 border rounded"
-                  title="Choose tooltip text color"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-600 mb-1">Tooltip text size (px)</label>
-                <input
-                  type="range"
-                  min={10}
-                  max={24}
-                  step={1}
-                  value={Number(tooltipStyle.tooltipTextSizePx || 12)}
-                  onChange={(e) => applyGlobalStyle({ tooltipTextSizePx: Number(e.target.value) })}
-                  className="w-full"
-                />
-                <div className="text-[10px] text-gray-500 mt-0.5">
-                  {Number(tooltipStyle.tooltipTextSizePx || 12)} px
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs text-gray-600 mb-1">Animation (applies to all steps)</label>
-                <select
-                  value={tooltipStyle.animation}
-                  onChange={(e) => applyGlobalStyle({ animation: e.target.value as any })}
-                  className="w-full border rounded p-1 bg-white"
-                >
-                  <option value="none">None</option>
-                  <option value="pulse">Pulse</option>
-                  <option value="breathe">Breathe</option>
-                  <option value="fade">Fade</option>
-                </select>
-              </div>
-              <div className="flex gap-2 pt-1">
-                <button
-                  onClick={handleSave}
-                  className="text-xs px-2 py-1 rounded border bg-blue-600 text-white hover:bg-blue-700"
-                >
-                  Save
-                </button>
-                <button
-                  onClick={() => {
-                    if (!currentStepId) return;
-                    setHotspotsByStep((prev) => ({ ...prev, [currentStepId]: [] }));
-                    setEditingTooltip(null);
-                    setTooltipText("");
-                  }}
-                  className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50"
-                >
-                  Delete Tooltip
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <LeadFormEditor leadFormConfig={leadFormConfig as any} setLeadFormConfig={setLeadFormConfig as any} />
-      </div>
+      {/* Auth dialog */}
       <Dialog
         open={authOpen}
         onOpenChange={(open) => {
-          setAuthOpen(open);
-          if (!open && !isAuthenticated) {
+          if (!open) {
+            setAuthOpen(false);
             setSavingDemo(false);
           }
         }}
@@ -1464,8 +1352,16 @@ export function DemoEditorPage() {
           </div>
         </UIDialogContent>
       </UIDialog>
+
+      <DeleteDemoModal
+        isOpen={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        onConfirm={handleDeleteDemo}
+        demoName={demoName && demoName.trim() && demoName !== "Untitled Demo" ? demoName : "Untitled Demo"}
+      />
+
       {/* Lightweight template picker actions */}
-  <></>
+      <></>
     </div>
   );
 }

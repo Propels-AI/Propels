@@ -72,7 +72,7 @@ describe("Public lead capture", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: /notify me/i })).toBeInTheDocument());
 
     // Fill email and submit
-    const email = screen.getByPlaceholderText(/you@company\.com/i) as HTMLInputElement;
+    const email = screen.getByPlaceholderText(/name@example\.com/i) as HTMLInputElement;
     fireEvent.change(email, { target: { value: "viewer@example.com" } });
     fireEvent.click(screen.getByRole("button", { name: /notify me/i }));
 
@@ -87,6 +87,6 @@ describe("Public lead capture", () => {
     });
 
     // Confirmation message appears
-    await waitFor(() => expect(screen.getByText(/we’ll be in touch/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/we'll be in touch shortly/i)).toBeInTheDocument());
   });
 });

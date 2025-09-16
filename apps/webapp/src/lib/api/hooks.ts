@@ -1,5 +1,6 @@
 import { useQuery, UseQueryResult } from "@tanstack/react-query";
 import { listMyDemos, listDemoItems, listPublicDemoItems, listLeadSubmissions } from "./demos";
+import { listLeadSubmissionsSmartly } from "./leads";
 
 export function useListMyDemos(
   status?: "DRAFT" | "PUBLISHED"
@@ -18,6 +19,21 @@ export function useLeadSubmissions(demoId: string): UseQueryResult<any[], Error>
   return useQuery({
     queryKey: ["leadSubmissions", demoId],
     queryFn: () => listLeadSubmissions(demoId),
+    enabled: !!demoId,
+  });
+}
+
+export function useLeadSubmissionsSmartly(demoId: string): UseQueryResult<
+  {
+    leads: any[];
+    isDemoDeleted: boolean;
+    demoName?: string;
+  },
+  Error
+> {
+  return useQuery({
+    queryKey: ["leadSubmissionsSmartly", demoId],
+    queryFn: () => listLeadSubmissionsSmartly(demoId),
     enabled: !!demoId,
   });
 }

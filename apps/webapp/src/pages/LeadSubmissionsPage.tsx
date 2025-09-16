@@ -1,15 +1,20 @@
 import { useMemo } from "react";
 import { useParams } from "react-router-dom";
-import { useLeadSubmissions } from "@/lib/api/demos";
+import { useLeadSubmissionsSmartly } from "@/lib/api/hooks";
 import { ProtectedRoute } from "@/lib/auth/ProtectedRoute";
 
 function LeadSubmissionsPageInner() {
   const { demoId } = useParams();
-  const { data, isLoading, error } = useLeadSubmissions(demoId || "");
+  const { data, isLoading, error } = useLeadSubmissionsSmartly(demoId || "");
+
+  // Extract leads, deletion status, and demo name from the smart response
+  const leads = data?.leads || [];
+  const isDemoDeleted = data?.isDemoDeleted || false;
+  const demoName = data?.demoName;
 
   // Normalize rows: parse fields if it is a JSON string
   const normalizedRows = useMemo(() => {
-    return (data ?? []).map((r) => {
+    return leads.map((r) => {
       let parsed = r?.fields;
       if (typeof parsed === "string") {
         try {
@@ -18,7 +23,7 @@ function LeadSubmissionsPageInner() {
       }
       return { ...r, fields: parsed };
     });
-  }, [data]);
+  }, [leads]);
 
   const columns = useMemo(() => {
     // Base columns that we always consider
@@ -101,7 +106,9 @@ function LeadSubmissionsPageInner() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `leads-${demoId || "demo"}.csv`;
+    // Use demo name for filename, fallback to demo ID
+    const safeName = (demoName || `demo-${demoId}`).replace(/[^a-zA-Z0-9-_]/g, "-");
+    a.download = `leads-${safeName}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -113,7 +120,16 @@ function LeadSubmissionsPageInner() {
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-semibold">Leads for {demoId}</h1>
+        <div>
+          <h1 className="text-xl font-semibold">Leads for {demoName || demoId}</h1>
+          {isDemoDeleted && (
+            <p className="text-sm text-amber-600 mt-1 flex items-center gap-1">
+              <span className="inline-block w-4 h-4 text-amber-500">⚠️</span>
+              Demo has been deleted, but lead submissions are preserved
+            </p>
+          )}
+          {demoName && demoId && <p className="text-xs text-muted-foreground mt-1">Demo ID: {demoId}</p>}
+        </div>
         <button onClick={downloadCsv} className="px-3 py-2 border rounded bg-white hover:bg-gray-50 text-sm">
           Export CSV
         </button>
@@ -146,7 +162,7 @@ function LeadSubmissionsPageInner() {
                 </tr>
               );
             })}
-            {(data?.length ?? 0) === 0 && (
+            {(leads?.length ?? 0) === 0 && (
               <tr>
                 <td className="p-4 text-gray-500" colSpan={10}>
                   No leads captured yet.

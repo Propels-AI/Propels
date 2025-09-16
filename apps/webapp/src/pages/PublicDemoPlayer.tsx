@@ -7,6 +7,8 @@ import StepsBar from "@/components/StepsBar";
 import { usePublicDemo } from "@/features/public/hooks/usePublicDemo";
 import { useImageResolver } from "@/features/public/hooks/useImageResolver";
 import outputs from "../../../../amplify_outputs.json";
+import { Card, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 type PublicStep = {
   itemSK: string;
@@ -36,9 +38,8 @@ type PublicStep = {
 export default function PublicDemoPlayer() {
   const { demoId } = useParams();
   const location = useLocation();
-  const { loading, error, metaName, leadStepIndex, leadBg, leadConfig, steps, hotspotStyleDefaults } = usePublicDemo(
-    demoId
-  );
+  const { loading, error, metaName, leadStepIndex, leadBg, leadConfig, steps, hotspotStyleDefaults } =
+    usePublicDemo(demoId);
   const [currentIndex, setCurrentIndex] = useState(0);
   useEffect(() => {
     // Reset index when steps reload
@@ -85,12 +86,10 @@ export default function PublicDemoPlayer() {
   }, [current]);
   const bucket = (outputs as any)?.storage?.bucket;
   const region = (outputs as any)?.aws_region || (outputs as any)?.awsRegion || (outputs as any)?.region;
-  const { resolvedSrc } = useImageResolver(
-    current?.s3Key || current?.thumbnailS3Key,
-    imageSrc,
-    false,
-    { bucket, region }
-  );
+  const { resolvedSrc } = useImageResolver(current?.s3Key || current?.thumbnailS3Key, imageSrc, false, {
+    bucket,
+    region,
+  });
 
   const goTo = (idx: number) => {
     if (idx < 0 || idx >= displayTotal) return;
@@ -123,10 +122,62 @@ export default function PublicDemoPlayer() {
     [steps, currentRealIndex, resolvedSrc, hotspotStyleDefaults]
   );
 
-  if (!demoId) return <div className="p-6">Missing demoId</div>;
+  if (!demoId)
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle className="text-lg">We couldn't load this demo</CardTitle>
+            <CardDescription>It may have been deleted, moved, or not published yet.</CardDescription>
+          </CardHeader>
+          <CardFooter className="flex items-center justify-center gap-2">
+            <Button asChild variant="outline" size="sm">
+              <a href="https://propels.ai" target="_blank" rel="noreferrer">
+                Visit propels.ai
+              </a>
+            </Button>
+            <Button asChild size="sm">
+              <a
+                href={`mailto:support@propels.ai?subject=${encodeURIComponent("Public demo unavailable")}&body=${encodeURIComponent(
+                  `The demo ${demoId || "(unknown)"} isn't available.`
+                )}`}
+              >
+                Report an issue
+              </a>
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+    );
   if (loading) return <div className="p-6">Loading…</div>;
   if (error) return <div className="p-6 text-red-600">{error}</div>;
-  if (displayTotal === 0) return <div className="p-6">No steps available</div>;
+  if (displayTotal === 0)
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle className="text-lg">We couldn't load this demo</CardTitle>
+            <CardDescription>It may have been deleted, moved, or not published yet.</CardDescription>
+          </CardHeader>
+          <CardFooter className="flex items-center justify-center gap-2">
+            <Button asChild variant="outline" size="sm">
+              <a href="https://propels.ai" target="_blank" rel="noreferrer">
+                Visit propels.ai
+              </a>
+            </Button>
+            <Button asChild size="sm">
+              <a
+                href={`mailto:support@propels.ai?subject=${encodeURIComponent("Public demo unavailable")}&body=${encodeURIComponent(
+                  `The demo ${demoId || "(unknown)"} isn't available.`
+                )}`}
+              >
+                Report an issue
+              </a>
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+    );
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -151,43 +202,51 @@ export default function PublicDemoPlayer() {
       </header>
 
       <div className="flex-1 p-8 flex items-center justify-center w-full">
-        {isLeadDisplayIndex ? (
-          <div className="w-full max-w-[1280px] aspect-[1280/800] bg-white border rounded-xl flex items-center justify-center relative overflow-hidden">
-            <LeadCaptureOverlay
-              bg={leadBg}
-              config={leadConfig as any}
-              onSubmit={async (form) => {
-                try {
-                  await createLeadSubmissionPublic({
-                    demoId: demoId!,
-                    email: form.email || form.Email,
-                    fields: form,
-                    pageUrl: window.location.href,
-                    stepIndex: leadStepIndex ?? undefined,
-                    source: "public",
-                    userAgent: navigator.userAgent,
-                    referrer: document.referrer,
-                  });
-                } catch (e) {
-                  console.warn("Lead submission failed", e);
-                }
+        <div className="w-full max-w-[1280px]">
+          {isLeadDisplayIndex ? (
+            <div className="w-full aspect-[1280/800] bg-white border rounded-xl flex items-center justify-center relative overflow-hidden">
+              <LeadCaptureOverlay
+                bg={leadBg}
+                config={leadConfig as any}
+                onSubmit={async (form) => {
+                  try {
+                    await createLeadSubmissionPublic({
+                      demoId: demoId!,
+                      email: form.email || form.Email,
+                      fields: form,
+                      pageUrl: window.location.href,
+                      stepIndex: leadStepIndex ?? undefined,
+                      source: "public",
+                      userAgent: navigator.userAgent,
+                      referrer: document.referrer,
+                    });
+                  } catch (e) {
+                    console.warn("Lead submission failed", e);
+                  }
+                }}
+              />
+              {/* Default lead form warning removed */}
+            </div>
+          ) : (
+            <DemoPreview
+              steps={previewSteps}
+              currentIndex={currentRealIndex}
+              onIndexChange={(realIdx) => {
+                // Map underlying media index -> display index (insert lead index if needed)
+                const di = effectiveLeadIndex !== null && realIdx >= effectiveLeadIndex ? realIdx + 1 : realIdx;
+                setCurrentIndex(di);
               }}
+              showNavigation={false}
+              className="w-full"
             />
-            {/* Default lead form warning removed */}
+          )}
+          <div className="w-full bg-white border text-[10px] text-gray-600 text-center py-1 mt-1 rounded-b-md">
+            Powered by{" "}
+            <a href="https://propels.ai" target="_blank" rel="noreferrer" className="underline">
+              Propels
+            </a>
           </div>
-        ) : (
-          <DemoPreview
-            steps={previewSteps}
-            currentIndex={currentRealIndex}
-            onIndexChange={(realIdx) => {
-              // Map underlying media index -> display index (insert lead index if needed)
-              const di = effectiveLeadIndex !== null && realIdx >= effectiveLeadIndex ? realIdx + 1 : realIdx;
-              setCurrentIndex(di);
-            }}
-            showNavigation={false}
-            className="w-full"
-          />
-        )}
+        </div>
       </div>
 
       <footer className="bg-gray-100 p-4 border-t">

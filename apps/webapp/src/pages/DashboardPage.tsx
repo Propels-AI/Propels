@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { signOut } from "aws-amplify/auth";
 import { DemoListView } from "@/components/DemoListView";
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
 
 export function DashboardPage() {
   const { user } = useAuth();
@@ -21,41 +22,38 @@ export function DashboardPage() {
 
   return (
     <ProtectPage>
-      <div className="min-h-screen flex flex-col items-center justify-center p-8">
+      <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-background text-foreground font-sans">
         <div className="w-full max-w-4xl">
           <div className="flex justify-between items-center mb-8">
-            <h1 className="text-3xl font-bold">Dashboard</h1>
-            <button
-              onClick={handleSignOut}
-              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-            >
-              Sign Out
-            </button>
+            <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
+            <div className="flex gap-3">
+              <Button onClick={() => navigate("/all-leads")} variant="outline">
+                All Leads
+              </Button>
+              <Button onClick={handleSignOut} variant="default">
+                Sign Out
+              </Button>
+            </div>
           </div>
 
           <div className="mb-8">
-            <p className="text-lg mb-2">Welcome, {user?.username}!</p>
-            <p className="text-gray-600">You've successfully signed in with passwordless authentication.</p>
+            <p className="text-lg mb-2 text-foreground">Welcome, {user?.username}!</p>
+            <p className="text-muted-foreground">You've successfully signed in with passwordless authentication.</p>
           </div>
 
           <div className="mb-4">
-            <div className="inline-flex rounded-lg border bg-white p-1">
-              <button
-                className={`px-4 py-2 text-sm font-medium rounded-md ${
-                  tab === "PUBLISHED" ? "bg-blue-600 text-white" : "text-gray-700 hover:bg-gray-100"
-                }`}
-                onClick={() => setTab("PUBLISHED")}
-              >
+            <div className="inline-flex rounded-lg border border-border bg-card p-1">
+              <Button variant={tab === "PUBLISHED" ? "default" : "ghost"} size="sm" onClick={() => setTab("PUBLISHED")}>
                 Published
-              </button>
-              <button
-                className={`ml-1 px-4 py-2 text-sm font-medium rounded-md ${
-                  tab === "DRAFT" ? "bg-blue-600 text-white" : "text-gray-700 hover:bg-gray-100"
-                }`}
+              </Button>
+              <Button
+                variant={tab === "DRAFT" ? "default" : "ghost"}
+                size="sm"
                 onClick={() => setTab("DRAFT")}
+                className="ml-1"
               >
                 Drafted
-              </button>
+              </Button>
             </div>
           </div>
 
