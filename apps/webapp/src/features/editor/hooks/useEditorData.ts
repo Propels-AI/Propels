@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { listDemoItems } from "@/lib/api/demos";
 import { resolveScreenshotUrl } from "@/features/editor/services/storage";
-import { deriveTooltipStyleFromHotspots, type HotspotsMap, type TooltipStyle } from "@/lib/editor/deriveTooltipStyleFromHotspots";
+import {
+  deriveTooltipStyleFromHotspots,
+  type HotspotsMap,
+  type TooltipStyle,
+} from "@/lib/editor/deriveTooltipStyleFromHotspots";
 
 export type EditorHotspot = {
   id: string;
@@ -26,6 +30,8 @@ export type EditorStep = {
   id: string;
   pageUrl: string;
   screenshotUrl?: string;
+  s3Key?: string;
+  thumbnailS3Key?: string;
   isLeadCapture?: boolean;
   leadBg?: "white" | "black";
 };
@@ -69,7 +75,10 @@ export function useEditorData(demoId?: string) {
           // lead config
           try {
             if ((meta as any).leadConfig) {
-              const cfg = typeof (meta as any).leadConfig === "string" ? JSON.parse((meta as any).leadConfig) : (meta as any).leadConfig;
+              const cfg =
+                typeof (meta as any).leadConfig === "string"
+                  ? JSON.parse((meta as any).leadConfig)
+                  : (meta as any).leadConfig;
               if (cfg && typeof cfg === "object") setLeadFormConfig(cfg);
             }
           } catch {}
@@ -106,11 +115,18 @@ export function useEditorData(demoId?: string) {
             if (!raw) continue;
             const screenshotUrl = await resolveScreenshotUrl(raw as string);
             if (!screenshotUrl) continue;
-            urls.push({ id: String(si.itemSK).slice("STEP#".length), pageUrl: si.pageUrl || "", screenshotUrl });
+            urls.push({
+              id: String(si.itemSK).slice("STEP#".length),
+              pageUrl: si.pageUrl || "",
+              screenshotUrl,
+              s3Key: si.s3Key,
+              thumbnailS3Key: si.thumbnailS3Key,
+            });
             if (si.hotspots) {
               try {
                 const parsed = typeof si.hotspots === "string" ? JSON.parse(si.hotspots) : si.hotspots;
-                if (Array.isArray(parsed)) hotspotsMap[String(si.itemSK).slice("STEP#".length)] = parsed as EditorHotspot[];
+                if (Array.isArray(parsed))
+                  hotspotsMap[String(si.itemSK).slice("STEP#".length)] = parsed as EditorHotspot[];
               } catch {}
             }
           } catch (e) {
@@ -147,12 +163,20 @@ export function useEditorData(demoId?: string) {
           let leadBgSaved: "white" | "black" = "white";
           if ((meta as any)?.leadConfig) {
             try {
-              const cfg = typeof (meta as any).leadConfig === "string" ? JSON.parse((meta as any).leadConfig) : (meta as any).leadConfig;
+              const cfg =
+                typeof (meta as any).leadConfig === "string"
+                  ? JSON.parse((meta as any).leadConfig)
+                  : (meta as any).leadConfig;
               if (cfg && (cfg.bg === "white" || cfg.bg === "black")) leadBgSaved = cfg.bg;
             } catch {}
           }
           if (typeof leadIdxSaved === "number" && leadIdxSaved >= 0 && leadIdxSaved <= urls.length) {
-            const leadStep = { id: "LEAD-SAVED", pageUrl: "", isLeadCapture: true as const, leadBg: leadBgSaved } as any;
+            const leadStep = {
+              id: "LEAD-SAVED",
+              pageUrl: "",
+              isLeadCapture: true as const,
+              leadBg: leadBgSaved,
+            } as any;
             urls.splice(leadIdxSaved, 0, leadStep);
           }
         } catch {}

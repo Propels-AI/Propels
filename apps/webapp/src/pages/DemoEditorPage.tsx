@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { syncAnonymousDemo, type EditedDraft } from "../lib/services/syncAnonymousDemo";
 import { useAuth } from "@/lib/providers/AuthProvider";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { deleteDemo, renameDemo, setDemoStatus } from "@/lib/api/demos";
+import { deleteDemo, renameDemo, setDemoStatus, createDemoStep, getOwnerId } from "@/lib/api/demos";
 import {
   updateDemoStepHotspots,
   updateDemoLeadConfig,
@@ -89,6 +89,8 @@ export function DemoEditorPage() {
 
   // New: hook to load data for saved demos (backend path)
   const ed = useEditorData(demoIdParam || undefined);
+  // Track original step IDs loaded from backend
+  const [originalStepIds, setOriginalStepIds] = useState<Set<string>>(new Set());
 
   const [isDrawing, setIsDrawing] = useState(false);
   const [startPos, setStartPos] = useState({ x: 0, y: 0 });
@@ -305,6 +307,8 @@ export function DemoEditorPage() {
     if (ed.leadFormConfig) setLeadFormConfig(ed.leadFormConfig);
     setTooltipStyle((prev) => ({ ...prev, ...ed.tooltipStyle }));
     setSelectedStepIndex(0);
+    // Track original step IDs from backend
+    setOriginalStepIds(new Set(ed.steps.map((s) => s.id)));
   }, [
     demoIdParam,
     ed.loading,
@@ -421,10 +425,35 @@ export function DemoEditorPage() {
     try {
       setSavingDemo(true);
       if (demoIdParam) {
-        const updates = steps.map(async (s) => {
+        const ownerId = await getOwnerId();
+        if (!ownerId) throw new Error("User not authenticated");
+
+        const updates = steps.map(async (s, idx) => {
           if (s.isLeadCapture) return;
           const hs = hotspotsByStep[s.id] ?? [];
-          await updateDemoStepHotspots({ demoId: demoIdParam, stepId: s.id, hotspots: hs as any });
+
+          // Check if this is a new step (not in original backend set)
+          if (!originalStepIds.has(s.id)) {
+            // New step - create it
+            const s3Key = (s as any).s3Key;
+            if (!s3Key) {
+              console.warn(`New step ${s.id} missing s3Key, skipping create`);
+              return;
+            }
+            await createDemoStep({
+              demoId: demoIdParam,
+              stepId: s.id,
+              s3Key,
+              hotspots: hs as any,
+              order: idx,
+              pageUrl: s.pageUrl,
+              thumbnailS3Key: (s as any).thumbnailS3Key,
+              ownerId,
+            });
+          } else {
+            // Existing step - update hotspots only
+            await updateDemoStepHotspots({ demoId: demoIdParam, stepId: s.id, hotspots: hs as any });
+          }
         });
         await Promise.all(updates);
         try {
@@ -764,6 +793,63 @@ export function DemoEditorPage() {
         isCollapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
         onAddLeadStep={addLeadStep}
+        onDeleteStep={(index) => {
+          setSteps((prev) => {
+            if (index < 0 || index >= prev.length) return prev;
+            const removed = prev[index];
+            const next = [...prev.slice(0, index), ...prev.slice(index + 1)];
+            // Cleanup hotspots for removed step
+            setHotspotsByStep((prevHs) => {
+              const { [removed.id]: _omit, ...rest } = prevHs;
+              return rest;
+            });
+            // Adjust selection
+            setSelectedStepIndex((sel) => {
+              if (sel === index) return Math.max(0, Math.min(index, next.length - 1));
+              if (sel > index) return sel - 1;
+              return sel;
+            });
+            return next;
+          });
+        }}
+        onDuplicateStep={(index) => {
+          setSteps((prev) => {
+            if (index < 0 || index >= prev.length) return prev;
+            const original = prev[index];
+            const dupId = (crypto as any).randomUUID
+              ? (crypto as any).randomUUID()
+              : `DUP-${original.id}-${Date.now()}`;
+            const duplicate = { ...original, id: dupId } as (typeof prev)[number];
+            const next = [...prev.slice(0, index + 1), duplicate, ...prev.slice(index + 1)];
+            // Duplicate hotspots mapping
+            setHotspotsByStep((prevHs) => {
+              const clone = Array.isArray(prevHs[original.id])
+                ? prevHs[original.id].map((h) => ({ ...h, id: Math.random().toString(36).slice(2, 9) }))
+                : [];
+              return { ...prevHs, [dupId]: clone } as any;
+            });
+            // Select the duplicate
+            setSelectedStepIndex(index + 1);
+            return next;
+          });
+        }}
+        onReorderSteps={(from, to) => {
+          setSteps((prev) => {
+            if (from === to) return prev;
+            if (from < 0 || from >= prev.length) return prev;
+            const clampedTo = Math.max(0, Math.min(to, prev.length - 1));
+            const next = [...prev];
+            const [moved] = next.splice(from, 1);
+            next.splice(clampedTo, 0, moved);
+            // Maintain selection by id
+            setSelectedStepIndex((sel) => {
+              const currentId = prev[sel]?.id;
+              const newIndex = next.findIndex((s) => s.id === currentId);
+              return newIndex >= 0 ? newIndex : Math.max(0, Math.min(sel, next.length - 1));
+            });
+            return next;
+          });
+        }}
       />
       <div className="flex-1 p-8">
         <EditorHeader
