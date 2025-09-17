@@ -1,5 +1,8 @@
 // Popup script with single Start/Stop toggle
 (function () {
+  // Environment configuration - check if this is a dev build
+  const isDev = chrome.runtime.getManifest().version.includes("dev");
+  const APP_BASE_URL = isDev ? "http://localhost:5173" : "https://app.propels.ai";
   document.addEventListener("DOMContentLoaded", () => {
     const toggleBtn = document.getElementById("recordToggle");
     const recBadge = document.getElementById("recBadge");

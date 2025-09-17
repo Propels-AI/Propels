@@ -1,6 +1,10 @@
 // Popup script for extension UI interactions
 console.log("Demo Builder Extension: Popup script loaded");
 
+// Environment configuration
+const isDev = chrome.runtime.getManifest().version.includes("dev");
+const APP_BASE_URL = isDev ? "http://localhost:5173" : "https://app.propels.ai";
+
 document.addEventListener("DOMContentLoaded", () => {
   const startButton = document.getElementById("startCapture") as HTMLButtonElement;
   const stopButton = document.getElementById("stopCapture") as HTMLButtonElement;
@@ -123,7 +127,7 @@ document.addEventListener("DOMContentLoaded", () => {
     console.log("View demos clicked");
 
     // Open webapp to view demos
-    const webappUrl = "http://localhost:5173/dashboard"; // Dashboard URL
+    const webappUrl = `${APP_BASE_URL}/dashboard`; // Dashboard URL
     chrome.tabs.create({ url: webappUrl });
   }
 

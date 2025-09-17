@@ -29,7 +29,11 @@ interface CaptureSessionResponse {
   error?: string;
 }
 
-const ALLOWED_ORIGINS = new Set<string>(["http://localhost:5173", "https://app.propels.ai"]);
+// Environment configuration
+const isDev = chrome.runtime.getManifest().version.includes("dev");
+const APP_BASE_URL = isDev ? "http://localhost:5173" : "https://app.propels.ai";
+
+const ALLOWED_ORIGINS = new Set<string>([APP_BASE_URL]);
 
 try {
   chrome.action.setBadgeText({ text: "" });
@@ -285,7 +289,7 @@ function handleStopCapture() {
   chrome.storage.local.get(["isAuthenticated"], (result) => {
     if (!result.isAuthenticated) {
       chrome.storage.local.set({ hasAnonymousDemo: true });
-      chrome.tabs.create({ url: "http://localhost:5173/editor" });
+      chrome.tabs.create({ url: `${APP_BASE_URL}/editor` });
     } else {
       triggerAuthenticatedUpload();
     }
