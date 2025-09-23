@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { DemoPreview } from "@/components/DemoPreview";
 import { createLeadSubmissionPublic } from "@/lib/api/demos";
@@ -41,10 +41,8 @@ export default function PublicDemoPlayer() {
   const { loading, error, metaName, leadStepIndex, leadBg, leadConfig, steps, hotspotStyleDefaults } =
     usePublicDemo(demoId);
   const [currentIndex, setCurrentIndex] = useState(0);
-  useEffect(() => {
-    // Reset index when steps reload
-    setCurrentIndex(0);
-  }, [steps?.length]);
+  // Note: Do not reset currentIndex on data refresh to avoid jarring UX
+  // Users expect to remain on the same step when data revalidates in the background.
 
   // Prepare variables; will be finalized after computing effectiveLeadIndex
   let realStepsCount = steps.length;
@@ -98,6 +96,9 @@ export default function PublicDemoPlayer() {
 
   // (mapping moved above, effectiveLeadIndex already computed)
 
+  // Stable step IDs to prevent unnecessary re-renders during data refresh
+  const stepIds = useMemo(() => steps.map(s => s.itemSK).join(','), [steps]);
+  
   const previewSteps = useMemo(
     () =>
       steps.map((s, i) => ({
@@ -119,7 +120,7 @@ export default function PublicDemoPlayer() {
         })) as any,
         pageUrl: s.pageUrl,
       })),
-    [steps, currentRealIndex, resolvedSrc, hotspotStyleDefaults]
+    [stepIds, currentRealIndex, resolvedSrc, hotspotStyleDefaults]
   );
 
   if (!demoId)
@@ -223,6 +224,10 @@ export default function PublicDemoPlayer() {
                   } catch (e) {
                     console.warn("Lead submission failed", e);
                   }
+                }}
+                onDismiss={() => {
+                  // Continue to next step after lead form
+                  goTo(currentIndex + 1);
                 }}
               />
               {/* Default lead form warning removed */}
