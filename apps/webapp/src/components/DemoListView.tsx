@@ -213,9 +213,9 @@ export function DemoListView(props: { statusFilter?: "ALL" | "DRAFT" | "PUBLISHE
       <DeleteDemoModal
         isOpen={deleteModalOpen}
         onClose={() => setDeleteModalOpen(false)}
-        onConfirm={() => {
+        onConfirm={async () => {
           if (demoToDelete) {
-            deleteMut.mutate(demoToDelete.id);
+            await deleteMut.mutateAsync(demoToDelete.id);
           }
         }}
         demoName={demoToDelete?.name || "Untitled Demo"}
