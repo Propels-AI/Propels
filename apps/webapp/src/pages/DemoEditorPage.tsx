@@ -5,6 +5,7 @@ import { syncAnonymousDemo, type EditedDraft } from "../lib/services/syncAnonymo
 import { useAuth } from "@/lib/providers/AuthProvider";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { deleteDemo, renameDemo, setDemoStatus, createDemoStep, getOwnerId } from "@/lib/api/demos";
+import { trackEditorEntered, trackStepAdded, trackDemoSaved } from "@/lib/analytics";
 import {
   updateDemoStepHotspots,
   updateDemoLeadConfig,
@@ -222,6 +223,10 @@ export function DemoEditorPage() {
             }
             setSteps(urls);
             setSelectedStepIndex(0);
+
+            // Track editor entry with extension data
+            trackEditorEntered('extension', undefined);
+
             (async () => {
               try {
                 const DEFAULT_W = 12;
@@ -512,9 +517,16 @@ export function DemoEditorPage() {
           }
         }
         toast.success("Saved annotations");
+
+        // Track demo saved for authenticated users
+        trackDemoSaved(demoIdParam, demoStatus === "PUBLISHED", steps.length);
       } else {
         const { demoId, stepCount } = await syncAnonymousDemo({ inlineDraft: draft });
         console.log("Saved demo", demoId, "with steps:", stepCount);
+
+        // Track demo saved for anonymous users
+        trackDemoSaved(demoId, false, steps.length);
+
         try {
           const url = new URL(window.location.href);
           url.searchParams.set("demoId", demoId);
@@ -707,6 +719,10 @@ export function DemoEditorPage() {
 
   const handleTooltipSubmit = (id: string) => {
     handleTooltipChange(id, tooltipText);
+
+    // Track first step editing
+    trackStepAdded(selectedStepIndex + 1, 'manual');
+
     setEditingTooltip(null);
     setTooltipText("");
     setSelectedStepIndex((idx) => {
