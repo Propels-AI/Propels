@@ -18,7 +18,7 @@ export default function LeadFormEditor(props: {
   const [editingCustomField, setEditingCustomField] = useState<any>(null);
 
   return (
-    <div className="pt-4 border-t border-border mt-6">
+    <div className="space-y-4">
       <h3 className="text-lg font-semibold mb-3 text-foreground font-sans">Lead Form</h3>
       <div className="space-y-3 text-sm text-foreground font-sans">
         <div className="space-y-2">

@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { ColorPicker } from "@/components/ui/color-picker";
 import LeadFormEditor from "@/features/editor/components/LeadFormEditor";
 import { type TooltipStyle } from "@/lib/editor/deriveTooltipStyleFromHotspots";
-import { MousePointer2, Palette, FormInput, PanelLeft, PanelLeftClose, GripVertical, Copy, Trash2 } from "lucide-react";
+import { PanelLeft, PanelLeftClose, GripVertical, Copy, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface EditorSidebarProps {
@@ -187,16 +187,13 @@ export function EditorSidebar({
             <div className="p-4 border-b border-sidebar-border">
               <Tabs defaultValue="steps" className="w-full">
                 <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="steps" className="text-[8px] px-1 py-1">
-                    <MousePointer2 className="w-3 h-3 mr-1" />
+                  <TabsTrigger value="steps" className="text-[7px] px-1 py-1">
                     Steps
                   </TabsTrigger>
-                  <TabsTrigger value="tooltip" className="text-[8px] px-1 py-1">
-                    <Palette className="w-3 h-3 mr-1" />
+                  <TabsTrigger value="tooltip" className="text-[7px] px-1 py-1">
                     Tooltip
                   </TabsTrigger>
-                  <TabsTrigger value="lead" className="text-[8px] px-1 py-1">
-                    <FormInput className="w-3 h-3 mr-1" />
+                  <TabsTrigger value="lead" className="text-[7px] px-1 py-1">
                     Lead Form
                   </TabsTrigger>
                 </TabsList>
@@ -417,8 +414,8 @@ export function EditorSidebar({
 
                 <TabsContent value="tooltip" className="mt-4 space-y-4">
                   <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-foreground">Tooltip</h3>
                     <div>
-                      <Label className="text-sm font-medium">Global Styling</Label>
                       <div className="space-y-3 mt-2">
                         <div>
                           <Label className="text-xs text-muted-foreground">Animation</Label>
@@ -572,10 +569,7 @@ export function EditorSidebar({
                 </TabsContent>
 
                 <TabsContent value="lead" className="mt-4 space-y-4">
-                  <div className="space-y-4">
-                    <Label className="text-sm font-medium">Lead Form Editor</Label>
-                    <LeadFormEditor leadFormConfig={leadFormConfig} setLeadFormConfig={setLeadFormConfig} />
-                  </div>
+                  <LeadFormEditor leadFormConfig={leadFormConfig} setLeadFormConfig={setLeadFormConfig} />
                 </TabsContent>
               </Tabs>
             </div>
