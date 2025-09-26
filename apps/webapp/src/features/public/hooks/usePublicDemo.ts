@@ -208,11 +208,18 @@ export function usePublicDemo(demoId?: string) {
 
     const debouncedRefresh = () => {
       if (debounceTimer) clearTimeout(debounceTimer);
+      
+      // Calculate remaining time until inactivity window elapses
+      const inactivityWindow = 3000; // 3 seconds
+      const timeSinceActivity = Date.now() - lastUserActivity;
+      const remainingDelay = Math.max(inactivityWindow - timeSinceActivity, 100); // minimum 100ms
+      
       debounceTimer = setTimeout(() => {
-        // Don't refresh if user was active in the last 3 seconds
-        if (Date.now() - lastUserActivity < 3000) return;
-        setRefreshTick((t) => t + 1);
-      }, 2000); // 2 second debounce
+        // Double-check user hasn't been active since we scheduled this
+        if (Date.now() - lastUserActivity >= inactivityWindow) {
+          setRefreshTick((t) => t + 1);
+        }
+      }, remainingDelay);
     };
 
     const onFocus = () => {

@@ -214,8 +214,15 @@ export function DemoListView(props: { statusFilter?: "ALL" | "DRAFT" | "PUBLISHE
         isOpen={deleteModalOpen}
         onClose={() => setDeleteModalOpen(false)}
         onConfirm={async () => {
-          if (demoToDelete) {
+          if (!demoToDelete) return;
+          
+          try {
             await deleteMut.mutateAsync(demoToDelete.id);
+          } catch (error) {
+            console.error('Failed to delete demo:', error);
+            // Error is handled by the mutation's onError callback
+          } finally {
+            setDeleteModalOpen(false);
           }
         }}
         demoName={demoToDelete?.name || "Untitled Demo"}
