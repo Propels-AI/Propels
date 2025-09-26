@@ -7,6 +7,7 @@ import { postAuthentication } from "./auth/post-authentication/resource";
 import { leadNotificationHandler } from "./functions/lead-notification/resource";
 import { Effect, PolicyStatement, Policy } from "aws-cdk-lib/aws-iam";
 import { EventSourceMapping, StartingPosition } from "aws-cdk-lib/aws-lambda";
+import { StreamViewType, CfnTable } from "aws-cdk-lib/aws-dynamodb";
 
 const backend = defineBackend({
   auth,
@@ -46,8 +47,15 @@ const leadIntakeTable = backend.data.resources.tables["LeadIntake"];
 const appDataTable = backend.data.resources.tables["AppData"];
 
 if (leadIntakeTable && appDataTable) {
+  // Enable DynamoDB stream on LeadIntake table
+  const cfnLeadIntakeTable = leadIntakeTable.node.defaultChild as CfnTable;
+  cfnLeadIntakeTable.streamSpecification = {
+    streamViewType: StreamViewType.NEW_AND_OLD_IMAGES,
+  };
+
   // Add environment variables
   backend.leadNotificationHandler.addEnvironment("AMPLIFY_AUTH_USERPOOL_ID", backend.auth.resources.userPool.userPoolId);
+  
   // Create IAM policy for DynamoDB stream access
   const streamPolicy = new Policy(backend.leadNotificationHandler.stack, "LeadNotificationStreamPolicy", {
     statements: [
@@ -60,7 +68,7 @@ if (leadIntakeTable && appDataTable) {
           "dynamodb:ListStreams",
         ],
         resources: [
-          leadIntakeTable.tableStreamArn || `${leadIntakeTable.tableArn}/stream/*`
+          `${leadIntakeTable.tableArn}/stream/*`
         ],
       }),
     ],
@@ -76,11 +84,6 @@ if (leadIntakeTable && appDataTable) {
         effect: Effect.ALLOW,
         actions: ["ses:SendEmail", "ses:SendRawEmail"],
         resources: ["*"],
-        conditions: {
-          StringEquals: {
-            "ses:FromAddress": "notifications@propels.ai"
-          }
-        }
       }),
     ],
   });
@@ -100,14 +103,16 @@ if (leadIntakeTable && appDataTable) {
   backend.leadNotificationHandler.resources.lambda.role?.attachInlinePolicy(cognitoPolicy);
 
   // Create EventSourceMapping to connect Lambda to DynamoDB Stream
+  // Only create after the stream is enabled
   const eventSourceMapping = new EventSourceMapping(backend.leadNotificationHandler.stack, "LeadIntakeStreamMapping", {
     target: backend.leadNotificationHandler.resources.lambda,
-    eventSourceArn: leadIntakeTable.tableStreamArn,
+    eventSourceArn: leadIntakeTable.tableStreamArn!,
     startingPosition: StartingPosition.LATEST,
     batchSize: 10,
+    reportBatchItemFailures: true, // Enable partial batch failure reporting
   });
 
-  // Ensure the policies are created before the event source mapping
+  // Ensure the policies and stream are created before the event source mapping
   eventSourceMapping.node.addDependency(streamPolicy);
   eventSourceMapping.node.addDependency(sesPolicy);
   eventSourceMapping.node.addDependency(cognitoPolicy);

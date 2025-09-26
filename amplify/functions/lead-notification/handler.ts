@@ -3,8 +3,9 @@ import { unmarshall } from "@aws-sdk/util-dynamodb";
 import { SES } from "@aws-sdk/client-ses";
 import { CognitoIdentityProviderClient, AdminGetUserCommand } from "@aws-sdk/client-cognito-identity-provider";
 
-const ses = new SES({ region: "ap-southeast-1" });
-const cognitoClient = new CognitoIdentityProviderClient({ region: "ap-southeast-1" });
+const region = process.env.AWS_REGION || "ap-southeast-1";
+const ses = new SES({ region });
+const cognitoClient = new CognitoIdentityProviderClient({ region });
 
 async function getOwnerEmail(ownerId: string): Promise<string | null> {
   try {
@@ -47,7 +48,7 @@ async function sendLeadNotificationEmail(leadData: any) {
     }
 
     const recipientEmail = ownerEmail;
-    const sourceEmail = process.env.NOTIFICATION_EMAIL || "notifications@propels.ai";
+    const sourceEmail = "notifications@propels.ai";
     const dashboardUrl = `https://app.propels.ai/leads/${leadData.demoId}`;
     const emailBody = `You've received a new contact submission: ${leadData.email}
 
@@ -94,7 +95,8 @@ This is an automated notification from Propels.`;
 
 export const handler: DynamoDBStreamHandler = async (event) => {
   const processedRecords = [];
-  const errors = [];
+  const failedRecords: { itemIdentifier: string; error: string }[] = [];
+
   for (const record of event.Records) {
     try {
       if (record.eventName !== "INSERT") {
@@ -110,27 +112,37 @@ export const handler: DynamoDBStreamHandler = async (event) => {
 
       const emailResult = await sendLeadNotificationEmail(leadData);
 
-      processedRecords.push({
-        eventID: record.eventID,
-        demoId: leadData.demoId,
-        email: leadData.email,
-        emailSent: emailResult.success,
-        messageId: emailResult.messageId,
-      });
+      if (emailResult.success) {
+        processedRecords.push({
+          eventID: record.eventID,
+          demoId: leadData.demoId,
+          email: leadData.email,
+          emailSent: true,
+          messageId: emailResult.messageId,
+        });
+      } else {
+        console.error(`❌ Email send failed for record ${record.eventID}:`, emailResult.error);
+        failedRecords.push({
+          itemIdentifier: record.eventID!,
+          error: emailResult.error || "Email send failed",
+        });
+      }
     } catch (error) {
       console.error(`❌ Error processing record ${record.eventID}:`, error);
-      errors.push({
-        eventID: record.eventID,
+      failedRecords.push({
+        itemIdentifier: record.eventID!,
         error: error instanceof Error ? error.message : String(error),
       });
     }
   }
 
-  if (errors.length > 0) {
-    console.error("❌ Processing errors:", errors);
+  if (failedRecords.length > 0) {
+    console.error("❌ Failed records that will be retried:", failedRecords);
   }
 
+  console.log(`📊 Processing summary: ${processedRecords.length} successful, ${failedRecords.length} failed`);
+
   return {
-    batchItemFailures: [],
+    batchItemFailures: failedRecords.map((failed) => ({ itemIdentifier: failed.itemIdentifier })),
   };
 };
