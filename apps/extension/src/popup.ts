@@ -2,7 +2,7 @@
 console.log("Demo Builder Extension: Popup script loaded");
 
 // Environment configuration
-const isDev = chrome.runtime.getManifest().version.includes("dev");
+const isDev = true;
 const APP_BASE_URL = isDev ? "http://localhost:5173" : "https://app.propels.ai";
 
 document.addEventListener("DOMContentLoaded", () => {

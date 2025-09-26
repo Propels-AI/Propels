@@ -30,7 +30,7 @@ interface CaptureSessionResponse {
 }
 
 // Environment configuration
-const isDev = chrome.runtime.getManifest().version.includes("dev");
+const isDev = true;
 const APP_BASE_URL = isDev ? "http://localhost:5173" : "https://app.propels.ai";
 
 const ALLOWED_ORIGINS = new Set<string>([APP_BASE_URL]);
@@ -241,6 +241,10 @@ chrome.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
         sendResponse(response);
       });
       return true;
+    case "DELETE_RECORDING":
+      handleDeleteRecording();
+      sendResponse({ success: true });
+      return false;
     default:
       console.warn("Unknown message type:", message.type);
       sendResponse({ success: false, error: "Unknown message type" });
@@ -348,6 +352,24 @@ async function handleClearCaptureSession() {
   } catch (error) {
     console.error("Error clearing capture session:", error);
   }
+}
+
+function handleDeleteRecording() {
+  console.log("Deleting recording...");
+  isRecording = false;
+  stopAggressiveKeepAlive();
+
+  const storageData = {
+    isRecording: false,
+    stepCount: 0,
+  };
+  chrome.storage.local.set(storageData, () => {});
+
+  try {
+    chrome.action.setBadgeText({ text: "" });
+    chrome.action.setTitle({ title: "Demo Builder" });
+    updateActionIcon({ recording: false, count: 0 });
+  } catch (_e) {}
 }
 
 async function handleCaptureScreenshot(captureData: DemoCapture, sendResponse: (response: any) => void) {

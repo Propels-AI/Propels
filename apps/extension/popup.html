@@ -117,9 +117,12 @@
         color: inherit;
         cursor: pointer;
         padding: 0;
-        display: inline-flex;
+        display: flex;
         align-items: center;
+        justify-content: center;
         gap: 4px;
+        width: 100%;
+        margin-top: 8px;
       }
       .link:hover {
         color: var(--primary);
@@ -143,11 +146,7 @@
       <div class="content">
         <button id="recordToggle" class="btn btn-primary">Start Recording</button>
         <div id="recordDesc" class="helper">Records the current browser tab</div>
-      </div>
-
-      <div class="footer">
-        <button class="link" id="helpLink">Help</button>
-        <button class="link" id="privacyLink">See Example</button>
+        <button id="deleteRecording" class="link hidden">Delete Recording</button>
       </div>
     </div>
 
