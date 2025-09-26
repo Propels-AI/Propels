@@ -49,9 +49,11 @@ const appDataTable = backend.data.resources.tables["AppData"];
 if (leadIntakeTable && appDataTable) {
   // Enable DynamoDB stream on LeadIntake table
   const cfnLeadIntakeTable = leadIntakeTable.node.defaultChild as CfnTable;
-  cfnLeadIntakeTable.streamSpecification = {
-    streamViewType: StreamViewType.NEW_AND_OLD_IMAGES,
-  };
+  if (cfnLeadIntakeTable) {
+    cfnLeadIntakeTable.streamSpecification = {
+      streamViewType: StreamViewType.NEW_AND_OLD_IMAGES,
+    };
+  }
 
   // Add environment variables
   backend.leadNotificationHandler.addEnvironment("AMPLIFY_AUTH_USERPOOL_ID", backend.auth.resources.userPool.userPoolId);
@@ -65,11 +67,13 @@ if (leadIntakeTable && appDataTable) {
           "dynamodb:DescribeStream",
           "dynamodb:GetRecords",
           "dynamodb:GetShardIterator",
-          "dynamodb:ListStreams",
         ],
-        resources: [
-          `${leadIntakeTable.tableArn}/stream/*`
-        ],
+        resources: [`${leadIntakeTable.tableArn}/stream/*`],
+      }),
+      new PolicyStatement({
+        effect: Effect.ALLOW,
+        actions: ["dynamodb:ListStreams"],
+        resources: ["*"],
       }),
     ],
   });

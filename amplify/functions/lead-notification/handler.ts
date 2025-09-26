@@ -7,6 +7,16 @@ const region = process.env.AWS_REGION || "ap-southeast-1";
 const ses = new SES({ region });
 const cognitoClient = new CognitoIdentityProviderClient({ region });
 
+// Helper function to redact PII from logs
+const redactEmail = (email: string): string => {
+  if (!email || !email.includes('@')) return '[REDACTED]';
+  const [localPart, domain] = email.split('@');
+  const redactedLocal = localPart.length > 2 
+    ? localPart.substring(0, 2) + '***'
+    : '***';
+  return `${redactedLocal}@${domain}`;
+};
+
 async function getOwnerEmail(ownerId: string): Promise<string | null> {
   try {
     const userPoolId = process.env.AMPLIFY_AUTH_USERPOOL_ID;
@@ -43,7 +53,7 @@ async function sendLeadNotificationEmail(leadData: any) {
     const ownerEmail = await getOwnerEmail(leadData.ownerId);
 
     if (!ownerEmail) {
-      console.warn("⚠️ No owner email found, skipping notification for lead:", leadData.email);
+      console.warn("⚠️ No owner email found, skipping notification for lead:", redactEmail(leadData.email || ''));
       return { success: false, error: "No owner email found" };
     }
 
@@ -58,9 +68,9 @@ Open the dashboard to check it out: ${dashboardUrl}
 This is an automated notification from Propels.`;
 
     console.log("📧 Preparing to send email", {
-      to: recipientEmail,
+      to: redactEmail(recipientEmail),
       from: sourceEmail,
-      subject: `You've received a new contact submission: ${leadData.email}`,
+      subject: `You've received a new contact submission: ${redactEmail(leadData.email || '')}`,
       dashboardUrl,
     });
 
@@ -84,6 +94,8 @@ This is an automated notification from Propels.`;
     const result = await ses.sendEmail(params);
     console.log("📧 Lead notification email sent successfully", {
       messageId: result.MessageId,
+      to: redactEmail(recipientEmail),
+      leadEmail: redactEmail(leadData.email || ''),
     });
 
     return { success: true, messageId: result.MessageId };
@@ -116,12 +128,12 @@ export const handler: DynamoDBStreamHandler = async (event) => {
         processedRecords.push({
           eventID: record.eventID,
           demoId: leadData.demoId,
-          email: leadData.email,
+          email: redactEmail(leadData.email || ''),
           emailSent: true,
           messageId: emailResult.messageId,
         });
       } else {
-        console.error(`❌ Email send failed for record ${record.eventID}:`, emailResult.error);
+        console.error(`❌ Email send failed for record ${record.eventID} (lead: ${redactEmail(leadData.email || '')}):`, emailResult.error);
         failedRecords.push({
           itemIdentifier: record.eventID!,
           error: emailResult.error || "Email send failed",
