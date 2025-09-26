@@ -2,12 +2,15 @@ import mixpanel from "mixpanel-browser";
 
 const MIXPANEL_TOKEN = import.meta.env.VITE_MIXPANEL_TOKEN;
 
-mixpanel.init(MIXPANEL_TOKEN || "", {
-  debug: true,
-  track_pageview: true,
-  persistence: "localStorage",
-  api_host: "https://api.mixpanel.com",
-});
+// Only initialize Mixpanel if token is available
+if (MIXPANEL_TOKEN) {
+  mixpanel.init(MIXPANEL_TOKEN, {
+    debug: true,
+    track_pageview: true,
+    persistence: "localStorage",
+    api_host: "https://api.mixpanel.com",
+  });
+}
 
 // Anonymous user management
 const getAnonymousId = (): string => {
