@@ -29,6 +29,5 @@
     "matches": ["http://localhost:5173/*", "https://app.propels.ai/*"],
     "accepts_tls_channel_id": false
   },
-  "homepage_url": "https://propels.ai",
-  "privacy_policy": "https://propels.ai/privacy"
+  "homepage_url": "https://propels.ai"
 }
