@@ -1,4 +1,5 @@
 import { type ClientSchema, a, defineData } from "@aws-amplify/backend";
+import { leadNotificationHandler } from "../functions/lead-notification/resource";
 
 // - AppData (private, userPool): single-table modeling for owner data (demos, steps, leads, templates, settings, versions)
 //   PK/SK with rich prefixes, GSIs for owner listings. Strictly NO public access on this table.
@@ -127,4 +128,8 @@ export const data = defineData({
       expiresInDays: 30,
     },
   },
+  functions: {
+    leadNotificationHandler,
+  },
 });
+

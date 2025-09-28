@@ -80,7 +80,7 @@ describe("DemoEditorPage loader behavior", () => {
 
     // Wait for tab content to be visible and check tooltip controls
     await waitFor(() => {
-      expect(screen.getByText(/global styling/i)).toBeInTheDocument();
+      expect(screen.getByText(/Animation/i)).toBeInTheDocument();
     });
 
     // Size display should reflect 18 px

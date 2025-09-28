@@ -92,8 +92,14 @@ export function usePublicDemo(demoId?: string) {
         const privateItems = await listPrivateDemoItemsPublic(demoId);
         const privateMeta = (privateItems || []).find((it: any) => it.itemSK === "METADATA");
         let privateCfg: any = privateMeta?.leadConfig;
-        try { privateCfg = typeof privateCfg === "string" ? JSON.parse(privateCfg) : privateCfg; } catch {}
-        if (typeof privateCfg === "string") { try { privateCfg = JSON.parse(privateCfg); } catch {} }
+        try {
+          privateCfg = typeof privateCfg === "string" ? JSON.parse(privateCfg) : privateCfg;
+        } catch {}
+        if (typeof privateCfg === "string") {
+          try {
+            privateCfg = JSON.parse(privateCfg);
+          } catch {}
+        }
         const privateFields = Array.isArray(privateCfg?.fields) ? privateCfg.fields : [];
         const isDraft = String(privateMeta?.status || "DRAFT").toUpperCase() !== "PUBLISHED";
         // If still DRAFT and private has a richer config, prefer it (for editor previews before publish)
@@ -106,7 +112,11 @@ export function usePublicDemo(demoId?: string) {
         try {
           const pubCfgRaw: any = metadata?.leadConfig;
           let pubCfg: any = typeof pubCfgRaw === "string" ? JSON.parse(pubCfgRaw) : pubCfgRaw;
-          if (typeof pubCfg === "string") { try { pubCfg = JSON.parse(pubCfg); } catch {} }
+          if (typeof pubCfg === "string") {
+            try {
+              pubCfg = JSON.parse(pubCfg);
+            } catch {}
+          }
           const publicFields = Array.isArray(pubCfg?.fields) ? pubCfg.fields : [];
           const looksDefault =
             pubCfg &&
@@ -118,14 +128,24 @@ export function usePublicDemo(demoId?: string) {
           // privateMeta/privateCfg already loaded above; clone into local var
           let pCfg: any = privateCfg;
           if (pCfg) {
-            try { pCfg = typeof pCfg === "string" ? JSON.parse(pCfg) : pCfg; } catch {}
-            if (typeof pCfg === "string") { try { pCfg = JSON.parse(pCfg); } catch {} }
+            try {
+              pCfg = typeof pCfg === "string" ? JSON.parse(pCfg) : pCfg;
+            } catch {}
+            if (typeof pCfg === "string") {
+              try {
+                pCfg = JSON.parse(pCfg);
+              } catch {}
+            }
           }
           const privateFields = Array.isArray(pCfg?.fields) ? pCfg.fields : [];
           const differs = (() => {
-            try { return JSON.stringify(pCfg || {}) !== JSON.stringify(pubCfg || {}); } catch { return false; }
+            try {
+              return JSON.stringify(pCfg || {}) !== JSON.stringify(pubCfg || {});
+            } catch {
+              return false;
+            }
           })();
-          const shouldUsePrivate = (privateFields.length > 0) && (looksDefault || publicFields.length === 0 || differs);
+          const shouldUsePrivate = privateFields.length > 0 && (looksDefault || publicFields.length === 0 || differs);
           if (shouldUsePrivate) {
             setLeadConfig(pCfg);
             if (pCfg.bg === "black" || pCfg.bg === "white") setLeadBg(pCfg.bg as any);
@@ -177,15 +197,55 @@ export function usePublicDemo(demoId?: string) {
     };
   }, [demoId, refreshTick]);
 
-  // Refetch on tab focus/visibility changes to pick up recent mirrors quickly
+  // Debounce and avoid refreshing during active user interaction
   useEffect(() => {
-    const onFocus = () => setRefreshTick((t) => t + 1);
-    const onVis = () => {
-      if (document.visibilityState === "visible") setRefreshTick((t) => t + 1);
+    let debounceTimer: NodeJS.Timeout | null = null;
+    let lastUserActivity = Date.now();
+
+    const updateActivity = () => {
+      lastUserActivity = Date.now();
     };
+
+    const debouncedRefresh = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      
+      // Calculate remaining time until inactivity window elapses
+      const inactivityWindow = 3000; // 3 seconds
+      const timeSinceActivity = Date.now() - lastUserActivity;
+      const remainingDelay = Math.max(inactivityWindow - timeSinceActivity, 100); // minimum 100ms
+      
+      debounceTimer = setTimeout(() => {
+        // Double-check user hasn't been active since we scheduled this
+        if (Date.now() - lastUserActivity >= inactivityWindow) {
+          setRefreshTick((t) => t + 1);
+        }
+      }, remainingDelay);
+    };
+
+    const onFocus = () => {
+      updateActivity();
+      debouncedRefresh();
+    };
+    const onVis = () => {
+      if (document.visibilityState === "visible") {
+        updateActivity();
+        debouncedRefresh();
+      }
+    };
+
+    // Track user activity to avoid refreshing during interaction
+    const activityEvents = ["mousedown", "keydown", "touchstart", "scroll"];
+    activityEvents.forEach((event) => {
+      document.addEventListener(event, updateActivity, { passive: true });
+    });
+
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVis);
     return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      activityEvents.forEach((event) => {
+        document.removeEventListener(event, updateActivity);
+      });
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVis);
     };

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useReducer, ReactNode } from "react";
 import { Hub } from "@aws-amplify/core";
 import { fetchUserAttributes, getCurrentUser, signOut } from "aws-amplify/auth";
+import { identifyUser } from "@/lib/analytics";
 
 interface AuthState {
   user: any | null;
@@ -49,6 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const user = await getCurrentUser();
         if (user) {
           const attributes = await fetchUserAttributes();
+          identifyUser(user.userId, attributes.email);
           dispatch({ type: "SET_USER", user: { ...user, attributes } });
         } else {
           dispatch({ type: "SET_USER", user: null });

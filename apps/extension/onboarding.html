@@ -52,9 +52,9 @@
         padding: 0; /* remove padding so height matches iframe */
       }
       .title {
-        font-size: 22px;
+        font-size: 32px;
         font-weight: 700;
-        margin: 0 0 8px 0;
+        margin: 0 0 16px 0;
         letter-spacing: 0.2px;
         text-align: center;
       }
@@ -69,11 +69,22 @@
       }
       ol.steps-list {
         margin: 0;
-        padding-left: 18px;
+        padding-left: 0;
+        list-style: none;
+        counter-reset: step-counter;
       }
       ol.steps-list li {
-        margin: 12px 0;
+        margin: 16px 0;
         line-height: 1.6;
+        counter-increment: step-counter;
+        position: relative;
+        padding-left: 0;
+        text-align: left;
+      }
+      ol.steps-list li::before {
+        content: counter(step-counter) ".";
+        font-weight: 600;
+        margin-right: 8px;
       }
       .step-title {
         font-weight: 600;
@@ -98,7 +109,9 @@
       }
       .instructions {
         font-size: 16px;
-        padding: 24px; /* inner spacing moved from card */
+        text-align: center;
+        max-width: 600px;
+        margin: 0 auto 32px auto;
       }
       .card {
         height: 100%;
@@ -107,9 +120,10 @@
       }
       .lead {
         display: block;
-        margin: 4px 0 16px 0;
+        margin: 0 0 32px 0;
         text-align: center;
         color: var(--muted);
+        font-size: 18px;
       }
       .embed iframe {
         width: 100%;
@@ -171,33 +185,35 @@
       <div class="container">
         <h1 class="title">Welcome to Propels!</h1>
         <span class="lead">Propels is a demo showroom that allows you to embed anywhere to capture leads!</span>
-        <div class="two-col">
-          <div class="card">
-            <div class="instructions">
-              <ol class="steps-list" style="font-size: 18px">
-                <li>
-                  Click the extensions
-                  <span class="kbd">🧩</span> icon and pin <strong>Propels Demo Capturer</strong>.
-                </li>
-                <li>
-                  Go to the page you want to show. Click the Propels icon and hit <strong>Start Recording</strong>.
-                </li>
-                <li>
-                  Navigate like you're showing a customer. Click the icon again and choose <strong>Stop</strong> — we'll
-                  open the Editor.
-                </li>
-              </ol>
-            </div>
-          </div>
-          <div class="embed">
-            <iframe src="https://propels.ai" title="Propels" loading="lazy"></iframe>
-          </div>
+        <div class="instructions">
+          <ol class="steps-list" style="font-size: 18px">
+            <li>Click the extensions and pin <strong>Propels Demo Capturer</strong>.</li>
+            <li>Go to the page you want to show. Click the Propels icon and hit <strong>Start Recording</strong>.</li>
+            <li>
+              Navigate like you're showing a customer in a video call. When you're finished, click the icon again and
+              choose
+              <strong>Stop Recording</strong>. We'll then open the editor.
+            </li>
+          </ol>
         </div>
-        <div class="cta-row">
-          <a class="btn primary" href="https://app.propels.ai" target="_blank" rel="noreferrer">Open Web App</a>
-          <a class="btn primary" href="https://propels.ai" target="_blank" rel="noreferrer">See Our Demo</a>
+        <div class="footer">
+          Need help? Contact support at support@propels.ai. Or check out our website at
+          <a
+            href="https://propels.ai"
+            target="_blank"
+            rel="noreferrer"
+            style="color: var(--text); text-decoration: underline"
+            >propels.ai</a
+          >
+          <br />
+          <a
+            href="https://propels.ai/privacy"
+            target="_blank"
+            rel="noreferrer"
+            style="color: var(--muted); text-decoration: underline; font-size: 11px"
+            >Privacy Policy</a
+          >
         </div>
-        <div class="footer">Need help? Contact support at support@propels.ai</div>
       </div>
     </div>
   </body>
