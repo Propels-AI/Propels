@@ -1,9 +1,4 @@
-// Popup script for extension UI interactions
-console.log("Demo Builder Extension: Popup script loaded");
-
-// Environment configuration
-const isDev = true;
-const APP_BASE_URL = isDev ? "http://localhost:5173" : "https://app.propels.ai";
+const APP_BASE_URL = "https://app.propels.ai";
 
 document.addEventListener("DOMContentLoaded", () => {
   const startButton = document.getElementById("startCapture") as HTMLButtonElement;
@@ -20,8 +15,6 @@ document.addEventListener("DOMContentLoaded", () => {
   viewButton.addEventListener("click", handleViewDemos);
 
   async function handleStartCapture() {
-    console.log("Start capture clicked");
-
     try {
       // Get current active tab
       const [tab] = await chrome.tabs.query({
@@ -51,8 +44,6 @@ document.addEventListener("DOMContentLoaded", () => {
           target: { tabId: tab.id },
           files: ["content.js"],
         });
-        console.log("Content script injected successfully");
-        // Small delay to ensure content script is ready
         await new Promise((resolve) => setTimeout(resolve, 300));
       } catch (injectionError) {
         console.error("Failed to inject content script:", injectionError);
@@ -80,8 +71,6 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function handleStopCapture() {
-    console.log("Stop capture clicked");
-
     try {
       // Get current active tab
       const [tab] = await chrome.tabs.query({
@@ -98,7 +87,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // Send message to content script
         await chrome.tabs.sendMessage(tab.id, { type: "STOP_CAPTURE" });
       } catch (messageError) {
-        console.log("Content script may not be available:", messageError);
+        console.error("Content script may not be available:", messageError);
       }
 
       // Send message to background script
@@ -124,8 +113,6 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function handleViewDemos() {
-    console.log("View demos clicked");
-
     // Open webapp to view demos
     const webappUrl = `${APP_BASE_URL}/dashboard`; // Dashboard URL
     chrome.tabs.create({ url: webappUrl });
@@ -169,7 +156,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
     } catch (error) {
-      console.log("Error checking recording state:", error);
       updateUI(false);
       updateStatus("Ready to start recording");
     }

@@ -29,9 +29,7 @@ interface CaptureSessionResponse {
   error?: string;
 }
 
-// Environment configuration
-const isDev = true;
-const APP_BASE_URL = isDev ? "http://localhost:5173" : "https://app.propels.ai";
+const APP_BASE_URL = "https://app.propels.ai";
 
 const ALLOWED_ORIGINS = new Set<string>([APP_BASE_URL]);
 
@@ -336,7 +334,6 @@ async function handleGetCaptureSession(sendResponse: (response: CaptureSessionRe
 }
 
 async function handleClearCaptureSession() {
-  console.log("Clearing capture session...");
   try {
     await indexedDBManager.clearCaptures();
     currentCaptureSession = [];
@@ -355,7 +352,6 @@ async function handleClearCaptureSession() {
 }
 
 function handleDeleteRecording() {
-  console.log("Deleting recording...");
   isRecording = false;
   stopAggressiveKeepAlive();
 
@@ -413,10 +409,7 @@ async function handleCaptureScreenshot(captureData: DemoCapture, sendResponse: (
   }
 }
 
-function triggerAuthenticatedUpload() {
-  console.log("Triggering authenticated upload flow...");
-  console.log("Would upload screenshots to S3 and create demo records in backend");
-}
+function triggerAuthenticatedUpload() {}
 
 chrome.runtime.onMessageExternal.addListener((message: any, sender, sendResponse) => {
   const origin = (sender as any)?.origin || (sender.url ? new URL(sender.url).origin : undefined);
@@ -433,8 +426,6 @@ chrome.runtime.onMessageExternal.addListener((message: any, sender, sendResponse
     sendResponse({ success: false, error: "Invalid message type" });
     return false;
   }
-
-  console.log("Received external message from web app:", message, "from", origin);
 
   switch (type) {
     case "REQUEST_CAPTURE_DATA":
@@ -496,7 +487,6 @@ chrome.runtime.onMessageExternal.addListener((message: any, sender, sendResponse
       })();
       return true;
     default:
-      console.log("Unknown external message type:", type);
       sendResponse({ success: false, error: "Unknown message type" });
   }
 

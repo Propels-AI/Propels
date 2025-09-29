@@ -1,6 +1,6 @@
 {
   "name": "@demo/extension",
-  "version": "0.0.0",
+  "version": "1.0.1",
   "scripts": {
     "build": "tsc && npm run copy-assets",
     "dev": "tsc --watch",
