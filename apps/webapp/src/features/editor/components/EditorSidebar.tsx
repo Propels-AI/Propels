@@ -2,6 +2,7 @@ import React from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Combobox } from "@/components/ui/combobox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 import { Label } from "@/components/ui/label";
 import { ColorPicker } from "@/components/ui/color-picker";
@@ -213,7 +214,7 @@ export function EditorSidebar({
                         setLeadInsertPos("after");
                       }}
                     >
-                      + Lead
+                      + Lead Form
                     </Button>
                   </div>
                   {leadUiOpen && (
@@ -241,21 +242,25 @@ export function EditorSidebar({
                           <span>after</span>
                         </label>
                         <span>step</span>
-                        <select
-                          value={leadInsertAnchor}
-                          onChange={(e) =>
+                        <Select
+                          value={String(leadInsertAnchor)}
+                          onValueChange={(value) =>
                             setLeadInsertAnchor(
-                              Math.max(1, Math.min(Math.max(1, steps.length), parseInt(e.target.value || "1", 10)))
+                              Math.max(1, Math.min(Math.max(1, steps.length), parseInt(value || "1", 10)))
                             )
                           }
-                          className="bg-background border border-input text-foreground rounded-md px-2 py-1 text-xs focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
                         >
-                          {Array.from({ length: Math.max(1, steps.length) }, (_, i) => i + 1).map((n) => (
-                            <option key={n} value={n}>
-                              {n}
-                            </option>
-                          ))}
-                        </select>
+                          <SelectTrigger className="w-[70px] h-7 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: Math.max(1, steps.length) }, (_, i) => i + 1).map((n) => (
+                              <SelectItem key={n} value={String(n)}>
+                                {n}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                         <div className="ml-auto flex items-center gap-2">
                           <Button
                             size="sm"
