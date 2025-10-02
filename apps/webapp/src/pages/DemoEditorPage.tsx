@@ -754,9 +754,6 @@ export function DemoEditorPage() {
   const handleTooltipSubmit = (id: string) => {
     handleTooltipChange(id, tooltipTitle, tooltipDescription);
 
-    // Track first step editing
-    trackStepAdded(selectedStepIndex + 1, "manual");
-
     setEditingTooltip(null);
     setTooltipTitle("");
     setTooltipDescription("");
