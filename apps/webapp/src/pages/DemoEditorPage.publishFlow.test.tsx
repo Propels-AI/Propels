@@ -91,18 +91,16 @@ describe("DemoEditorPage publish flow", () => {
       expect(mainSaveButton).toBeInTheDocument();
     });
 
-    // Wait for the actions menu to appear and click it
+    // Publish button is now in the main button area for DRAFT demos with demoId
     const user = userEvent.setup();
-    const dropdownBtn = await screen.findByTestId("actions-menu");
-    await user.click(dropdownBtn);
-
-    // Wait a bit for the dropdown to open
+    
+    // Wait for the Publish button to appear in main area
     await waitFor(() => {
-      expect(screen.getByText(/Publish/i)).toBeInTheDocument();
+      expect(screen.getByTestId("publish-button")).toBeInTheDocument();
     });
 
     // Find and click the Publish button
-    const publishBtn = screen.getByText(/Publish/i);
+    const publishBtn = screen.getByTestId("publish-button");
     await user.click(publishBtn);
 
     await waitFor(async () => {

@@ -75,7 +75,7 @@ describe("DemoEditorPage loader behavior", () => {
     renderWithDemoId("demo-1");
 
     // Switch to Tooltip tab to access the tooltip inspector
-    const tooltipTab = screen.getByRole("tab", { name: /tooltip/i });
+    const tooltipTab = screen.getByRole("tab", { name: /style/i });
     await user.click(tooltipTab);
 
     // Wait for tab content to be visible and check tooltip controls
