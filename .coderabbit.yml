@@ -1,0 +1,10 @@
+# CodeRabbit Configuration
+# Enable auto-reviews only when merging into the staging branch
+
+reviews:
+  # Enable automatic reviews
+  auto_review:
+    enabled: true
+    # Only run reviews on PRs targeting the staging branch
+    base_branches:
+      - staging
