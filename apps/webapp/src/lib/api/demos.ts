@@ -833,7 +833,7 @@ export type Hotspot = {
   height: number;
   xNorm?: number;
   yNorm?: number;
-  tooltip?: string;
+  tooltip?: string | { title?: string; description?: string; text?: string }; // Support both plain text and structured tooltips
 };
 
 export async function createDemoMetadata(params: {
