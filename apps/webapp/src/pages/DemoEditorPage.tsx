@@ -126,9 +126,9 @@ export function DemoEditorPage() {
   const [tooltipDescription, setTooltipDescription] = useState("");
   // Lead form config
   const [leadFormConfig, setLeadFormConfig] = useState<any>({
-    title: "Stay in the loop",
-    subtitle: "Enjoying the demo? Leave your details and we’ll reach out.",
-    ctaText: "Notify me",
+    title: "Like what you see?",
+    subtitle: "Drop your email and we'll help you implement this in your workflow.",
+    ctaText: "Get started",
     fields: [{ key: "email", type: "email", label: "Email", required: true, placeholder: "you@company.com" }],
   });
   // Global tooltip style for consistency across all steps
@@ -226,7 +226,7 @@ export function DemoEditorPage() {
             setSelectedStepIndex(0);
 
             // Track editor entry with extension data
-            trackEditorEntered('extension', undefined);
+            trackEditorEntered("extension", undefined);
 
             (async () => {
               try {
@@ -262,12 +262,14 @@ export function DemoEditorPage() {
                           }
 
                           // Add educational tooltip for first step
-                          const defaultTooltip = index === 0 
-                            ? {
-                                title: "👋 Welcome to the Editor!",
-                                description: "Click this dot to add your own tooltip text. Guide your viewers through each step of your demo."
-                              }
-                            : "";
+                          const defaultTooltip =
+                            index === 0
+                              ? {
+                                  title: "👋 Welcome to the Editor!",
+                                  description:
+                                    "Click this dot to add your own tooltip text. Guide your viewers through each step of your demo.",
+                                }
+                              : "";
 
                           const hotspot: Hotspot = {
                             id: Math.random().toString(36).slice(2, 9),
@@ -741,9 +743,7 @@ export function DemoEditorPage() {
     setHotspotsByStep((prev) => {
       const list = prev[currentStepId] ?? [];
       // Create structured tooltip object if title exists, otherwise use plain description for backward compatibility
-      const tooltipValue = title.trim() 
-        ? { title: title.trim(), description: description.trim() }
-        : description.trim();
+      const tooltipValue = title.trim() ? { title: title.trim(), description: description.trim() } : description.trim();
       return {
         ...prev,
         [currentStepId]: list.map((h) => (h.id === id ? { ...h, tooltip: tooltipValue } : h)),
@@ -755,7 +755,7 @@ export function DemoEditorPage() {
     handleTooltipChange(id, tooltipTitle, tooltipDescription);
 
     // Track first step editing
-    trackStepAdded(selectedStepIndex + 1, 'manual');
+    trackStepAdded(selectedStepIndex + 1, "manual");
 
     setEditingTooltip(null);
     setTooltipTitle("");
@@ -1194,90 +1194,93 @@ export function DemoEditorPage() {
                     />
                   )}
 
-                  {editingTooltip !== hotspot.id && hotspot.tooltip && (() => {
-                    // Parse tooltip for display - support both string and object format
-                    const tooltipData = typeof hotspot.tooltip === "string" 
-                      ? { title: "", description: hotspot.tooltip }
-                      : { 
-                          title: hotspot.tooltip.title || "", 
-                          description: hotspot.tooltip.description || hotspot.tooltip.text || "" 
-                        };
-                    const hasTitle = tooltipData.title.trim().length > 0;
-                    
-                    return (
-                      <div
-                        className="absolute rounded py-2 px-3 shadow-lg max-w-sm break-words"
-                        style={{
-                          left: `${tooltipLeft}px`,
-                          top: `${tooltipTop}px`,
-                          backgroundColor: hotspot.tooltipBgColor || tooltipStyle.tooltipBgColor || "#2563eb",
-                          color: hotspot.tooltipTextColor || tooltipStyle.tooltipTextColor || "#ffffff",
-                        }}
-                        onMouseDown={(e) => {
-                          // Enable dragging bubble in edit mode (not preview)
-                          if (isPreviewing) return;
-                          e.stopPropagation();
-                          // Prevent text/image selection while dragging the bubble
-                          e.preventDefault();
-                          try {
-                            document.body.style.userSelect = "none";
-                          } catch {}
-                          const rect = imageRef.current?.getBoundingClientRect();
-                          if (!rect || !naturalSize) return;
-                          const startX = e.clientX;
-                          const startY = e.clientY;
-                          const startLeft = tooltipLeft;
-                          const startTop = tooltipTop;
-                          const boxRect = computeRenderRect(rect.width, rect.height, naturalSize.w, naturalSize.h);
-                          const onMove = (ev: MouseEvent) => {
-                            const dx = ev.clientX - startX;
-                            const dy = ev.clientY - startY;
-                            const newLeft = startLeft + dx;
-                            const newTop = startTop + dy;
-                            const dxNorm = (newLeft - centerX) / boxRect.w;
-                            const dyNorm = (newTop - centerY) / boxRect.h;
-                            setHotspotsByStep((prev) => {
-                              const list = Array.isArray(prev[currentStepId!]) ? [...prev[currentStepId!]] : [];
-                              const idx = list.findIndex((h) => h.id === hotspot.id);
-                              if (idx === -1) return prev;
-                              const existing = list[idx] as any;
-                              list[idx] = { ...existing, tooltipOffsetXNorm: dxNorm, tooltipOffsetYNorm: dyNorm };
-                              return { ...prev, [currentStepId!]: list } as any;
-                            });
-                          };
-                          const onUp = () => {
-                            document.removeEventListener("mousemove", onMove);
-                            document.removeEventListener("mouseup", onUp);
-                            // Restore selection after bubble drag ends
-                            try {
-                              document.body.style.userSelect = "";
-                            } catch {}
-                          };
-                          document.addEventListener("mousemove", onMove);
-                          document.addEventListener("mouseup", onUp);
-                        }}
-                      >
-                        {hasTitle && (
-                          <div 
-                            className="font-semibold mb-1"
-                            style={{
-                              fontSize: `${Number(hotspot.tooltipTextSizePx || tooltipStyle.tooltipTextSizePx || 12) + 2}px`,
-                            }}
-                          >
-                            {tooltipData.title}
-                          </div>
-                        )}
+                  {editingTooltip !== hotspot.id &&
+                    hotspot.tooltip &&
+                    (() => {
+                      // Parse tooltip for display - support both string and object format
+                      const tooltipData =
+                        typeof hotspot.tooltip === "string"
+                          ? { title: "", description: hotspot.tooltip }
+                          : {
+                              title: hotspot.tooltip.title || "",
+                              description: hotspot.tooltip.description || hotspot.tooltip.text || "",
+                            };
+                      const hasTitle = tooltipData.title.trim().length > 0;
+
+                      return (
                         <div
-                          className="whitespace-pre-wrap break-words"
+                          className="absolute rounded py-2 px-3 shadow-lg max-w-sm break-words"
                           style={{
-                            fontSize: `${Number(hotspot.tooltipTextSizePx || tooltipStyle.tooltipTextSizePx || 12)}px`,
+                            left: `${tooltipLeft}px`,
+                            top: `${tooltipTop}px`,
+                            backgroundColor: hotspot.tooltipBgColor || tooltipStyle.tooltipBgColor || "#2563eb",
+                            color: hotspot.tooltipTextColor || tooltipStyle.tooltipTextColor || "#ffffff",
+                          }}
+                          onMouseDown={(e) => {
+                            // Enable dragging bubble in edit mode (not preview)
+                            if (isPreviewing) return;
+                            e.stopPropagation();
+                            // Prevent text/image selection while dragging the bubble
+                            e.preventDefault();
+                            try {
+                              document.body.style.userSelect = "none";
+                            } catch {}
+                            const rect = imageRef.current?.getBoundingClientRect();
+                            if (!rect || !naturalSize) return;
+                            const startX = e.clientX;
+                            const startY = e.clientY;
+                            const startLeft = tooltipLeft;
+                            const startTop = tooltipTop;
+                            const boxRect = computeRenderRect(rect.width, rect.height, naturalSize.w, naturalSize.h);
+                            const onMove = (ev: MouseEvent) => {
+                              const dx = ev.clientX - startX;
+                              const dy = ev.clientY - startY;
+                              const newLeft = startLeft + dx;
+                              const newTop = startTop + dy;
+                              const dxNorm = (newLeft - centerX) / boxRect.w;
+                              const dyNorm = (newTop - centerY) / boxRect.h;
+                              setHotspotsByStep((prev) => {
+                                const list = Array.isArray(prev[currentStepId!]) ? [...prev[currentStepId!]] : [];
+                                const idx = list.findIndex((h) => h.id === hotspot.id);
+                                if (idx === -1) return prev;
+                                const existing = list[idx] as any;
+                                list[idx] = { ...existing, tooltipOffsetXNorm: dxNorm, tooltipOffsetYNorm: dyNorm };
+                                return { ...prev, [currentStepId!]: list } as any;
+                              });
+                            };
+                            const onUp = () => {
+                              document.removeEventListener("mousemove", onMove);
+                              document.removeEventListener("mouseup", onUp);
+                              // Restore selection after bubble drag ends
+                              try {
+                                document.body.style.userSelect = "";
+                              } catch {}
+                            };
+                            document.addEventListener("mousemove", onMove);
+                            document.addEventListener("mouseup", onUp);
                           }}
                         >
-                          {tooltipData.description}
+                          {hasTitle && (
+                            <div
+                              className="font-semibold mb-1"
+                              style={{
+                                fontSize: `${Number(hotspot.tooltipTextSizePx || tooltipStyle.tooltipTextSizePx || 12) + 2}px`,
+                              }}
+                            >
+                              {tooltipData.title}
+                            </div>
+                          )}
+                          <div
+                            className="whitespace-pre-wrap break-words"
+                            style={{
+                              fontSize: `${Number(hotspot.tooltipTextSizePx || tooltipStyle.tooltipTextSizePx || 12)}px`,
+                            }}
+                          >
+                            {tooltipData.description}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })()}
+                      );
+                    })()}
                 </div>
               );
             })}
