@@ -760,10 +760,6 @@ export function DemoEditorPage() {
     setEditingTooltip(null);
     setTooltipTitle("");
     setTooltipDescription("");
-    setSelectedStepIndex((idx) => {
-      const next = idx + 1;
-      return next < steps.length ? next : idx;
-    });
   };
 
   useKeyboardShortcut(
