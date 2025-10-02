@@ -1,74 +1,28 @@
 import { useMemo, useState } from "react";
-import { useLocation, useParams } from "react-router-dom";
-import { DemoPreview } from "@/components/DemoPreview";
+import { useParams } from "react-router-dom";
 import { createLeadSubmissionPublic } from "@/lib/api/demos";
+import HotspotOverlay from "@/components/HotspotOverlay";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import LeadCaptureOverlay from "@/components/LeadCaptureOverlay";
-import StepsBar from "@/components/StepsBar";
 import { usePublicDemo } from "@/features/public/hooks/usePublicDemo";
 import { useImageResolver } from "@/features/public/hooks/useImageResolver";
 import outputs from "../../../../amplify_outputs.json";
 import { Card, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
-type PublicStep = {
-  itemSK: string;
-  order?: number;
-  s3Key?: string;
-  thumbnailS3Key?: string;
-  pageUrl?: string;
-  hotspots?: Array<{
-    id: string;
-    x?: number;
-    y?: number;
-    width: number;
-    height: number;
-    xNorm?: number;
-    yNorm?: number;
-    tooltip?: string;
-    targetStep?: number;
-    // Styling (optional; if absent, we will apply defaults from METADATA.hotspotStyle)
-    dotSize?: number;
-    dotColor?: string;
-    animation?: "none" | "pulse" | "breathe" | "fade";
-    dotStrokePx?: number;
-    dotStrokeColor?: string;
-  }>;
-};
-
 export default function PublicDemoPlayer() {
   const { demoId } = useParams();
-  const location = useLocation();
-  const { loading, error, metaName, leadStepIndex, leadBg, leadConfig, steps, hotspotStyleDefaults } =
-    usePublicDemo(demoId);
+  const { loading, error, leadStepIndex, leadBg, leadConfig, steps, hotspotStyleDefaults } = usePublicDemo(demoId);
   const [currentIndex, setCurrentIndex] = useState(0);
-  // Note: Do not reset currentIndex on data refresh to avoid jarring UX
-  // Users expect to remain on the same step when data revalidates in the background.
 
-  // Prepare variables; will be finalized after computing effectiveLeadIndex
-  let realStepsCount = steps.length;
-  let displayTotal = steps.length;
-  let isLeadDisplayIndex = false;
-  let currentRealIndex = currentIndex;
-  let current: PublicStep | undefined = steps[currentIndex];
-  // Determine effective lead index first (supports ?leadAt override)
-  const leadAtOverride = useMemo(() => {
-    const p = new URLSearchParams(location.search).get("leadAt");
-    if (!p) return null;
-    const n = parseInt(p, 10);
-    return Number.isFinite(n) && n >= 1 ? n - 1 : null; // user-facing 1-based -> 0-based
-  }, [location.search]);
-  const effectiveLeadIndex = leadAtOverride ?? leadStepIndex;
-
-  // Compute mapping using effectiveLeadIndex
-  realStepsCount = steps.length;
-  displayTotal = realStepsCount + (effectiveLeadIndex !== null ? 1 : 0);
-  isLeadDisplayIndex = effectiveLeadIndex !== null && currentIndex === effectiveLeadIndex;
+  let displayTotal = steps.length + (leadStepIndex !== null ? 1 : 0);
+  const isLeadDisplayIndex = leadStepIndex !== null && currentIndex === leadStepIndex;
   const mapDisplayToReal = (di: number) => {
-    if (effectiveLeadIndex === null) return di;
-    return di < effectiveLeadIndex ? di : di - 1;
+    if (leadStepIndex === null) return di;
+    return di < leadStepIndex ? di : di - 1;
   };
-  currentRealIndex = isLeadDisplayIndex ? -1 : mapDisplayToReal(currentIndex);
-  current = currentRealIndex >= 0 ? steps[currentRealIndex] : undefined;
+  const currentRealIndex = isLeadDisplayIndex ? -1 : mapDisplayToReal(currentIndex);
+  const current = currentRealIndex >= 0 ? steps[currentRealIndex] : undefined;
 
   const imageSrc = useMemo(() => {
     const raw = current?.s3Key || current?.thumbnailS3Key;
@@ -84,44 +38,32 @@ export default function PublicDemoPlayer() {
   }, [current]);
   const bucket = (outputs as any)?.storage?.bucket;
   const region = (outputs as any)?.aws_region || (outputs as any)?.awsRegion || (outputs as any)?.region;
-  const { resolvedSrc } = useImageResolver(current?.s3Key || current?.thumbnailS3Key, imageSrc, false, {
+  const { resolvedSrc, naturalAspect } = useImageResolver(current?.s3Key || current?.thumbnailS3Key, imageSrc, true, {
     bucket,
     region,
   });
 
-  const goTo = (idx: number) => {
-    if (idx < 0 || idx >= displayTotal) return;
-    setCurrentIndex(idx);
-  };
-
-  // (mapping moved above, effectiveLeadIndex already computed)
-
   // Stable step IDs to prevent unnecessary re-renders during data refresh
   const stepIds = useMemo(() => steps.map(s => s.itemSK).join(','), [steps]);
   
-  const previewSteps = useMemo(
-    () =>
-      steps.map((s, i) => ({
-        id: s.itemSK,
-        imageUrl: i === currentRealIndex ? resolvedSrc : undefined,
-        hotspots: (s.hotspots || []).map((h) => ({
-          ...h,
-          dotSize: h.dotSize ?? hotspotStyleDefaults.dotSize,
-          dotColor: h.dotColor ?? hotspotStyleDefaults.dotColor,
-          dotStrokePx: h.dotStrokePx ?? hotspotStyleDefaults.dotStrokePx,
-          dotStrokeColor: h.dotStrokeColor ?? hotspotStyleDefaults.dotStrokeColor,
-          animation: (h.animation ?? hotspotStyleDefaults.animation) as any,
-          // Tooltip bubble styling & offsets defaults from METADATA.hotspotStyle
-          tooltipBgColor: (h as any).tooltipBgColor ?? hotspotStyleDefaults.tooltipBgColor,
-          tooltipTextColor: (h as any).tooltipTextColor ?? hotspotStyleDefaults.tooltipTextColor,
-          tooltipTextSizePx: (h as any).tooltipTextSizePx ?? hotspotStyleDefaults.tooltipTextSizePx,
-          tooltipOffsetXNorm: (h as any).tooltipOffsetXNorm ?? hotspotStyleDefaults.tooltipOffsetXNorm,
-          tooltipOffsetYNorm: (h as any).tooltipOffsetYNorm ?? hotspotStyleDefaults.tooltipOffsetYNorm,
-        })) as any,
-        pageUrl: s.pageUrl,
-      })),
-    [stepIds, currentRealIndex, resolvedSrc, hotspotStyleDefaults]
-  );
+  const currentHotspots = useMemo(() => {
+    if (currentRealIndex < 0) return [] as any[];
+    const s = steps[currentRealIndex];
+    return (s?.hotspots || []).map((h) => ({
+      ...h,
+      dotSize: h.dotSize ?? hotspotStyleDefaults.dotSize,
+      dotColor: h.dotColor ?? hotspotStyleDefaults.dotColor,
+      dotStrokePx: h.dotStrokePx ?? hotspotStyleDefaults.dotStrokePx,
+      dotStrokeColor: h.dotStrokeColor ?? hotspotStyleDefaults.dotStrokeColor,
+      animation: (h.animation ?? hotspotStyleDefaults.animation) as any,
+      // Tooltip bubble styling & offsets defaults from METADATA.hotspotStyle
+      tooltipBgColor: (h as any).tooltipBgColor ?? hotspotStyleDefaults.tooltipBgColor,
+      tooltipTextColor: (h as any).tooltipTextColor ?? hotspotStyleDefaults.tooltipTextColor,
+      tooltipTextSizePx: (h as any).tooltipTextSizePx ?? hotspotStyleDefaults.tooltipTextSizePx,
+      tooltipOffsetXNorm: (h as any).tooltipOffsetXNorm ?? hotspotStyleDefaults.tooltipOffsetXNorm,
+      tooltipOffsetYNorm: (h as any).tooltipOffsetYNorm ?? hotspotStyleDefaults.tooltipOffsetYNorm,
+    }));
+  }, [stepIds, currentRealIndex, hotspotStyleDefaults]);
 
   if (!demoId)
     return (
@@ -180,72 +122,79 @@ export default function PublicDemoPlayer() {
       </div>
     );
 
-  return (
-    <div className="min-h-screen flex flex-col">
-      <header className="p-4 border-b flex items-center justify-between">
-        <h1 className="text-lg font-semibold">{metaName || "Demo"}</h1>
-        <div className="space-x-2">
-          <button
-            className="px-3 py-1 border rounded"
-            onClick={() => goTo(currentIndex - 1)}
-            disabled={currentIndex === 0}
-          >
-            Prev
-          </button>
-          <button
-            className="px-3 py-1 border rounded"
-            onClick={() => goTo(currentIndex + 1)}
-            disabled={currentIndex >= displayTotal - 1}
-          >
-            Next
-          </button>
-        </div>
-      </header>
+  const go = (d: number) => {
+    const next = Math.max(0, Math.min(displayTotal - 1, currentIndex + d));
+    setCurrentIndex(next);
+  };
 
-      <div className="flex-1 p-8 flex items-center justify-center w-full">
-        <div className="w-full max-w-[1280px]">
-          {isLeadDisplayIndex ? (
-            <div className="w-full aspect-[1280/800] bg-white border rounded-xl flex items-center justify-center relative overflow-hidden">
-              <LeadCaptureOverlay
-                bg={leadBg}
-                config={leadConfig as any}
-                onSubmit={async (form) => {
-                  try {
-                    await createLeadSubmissionPublic({
-                      demoId: demoId!,
-                      email: form.email || form.Email,
-                      fields: form,
-                      pageUrl: window.location.href,
-                      stepIndex: leadStepIndex ?? undefined,
-                      source: "public",
-                      userAgent: navigator.userAgent,
-                      referrer: document.referrer,
-                    });
-                  } catch (e) {
-                    console.warn("Lead submission failed", e);
-                  }
-                }}
-                onDismiss={() => {
-                  // Continue to next step after lead form
-                  goTo(currentIndex + 1);
-                }}
-              />
-              {/* Default lead form warning removed */}
-            </div>
-          ) : (
-            <DemoPreview
-              steps={previewSteps}
-              currentIndex={currentRealIndex}
-              onIndexChange={(realIdx) => {
-                // Map underlying media index -> display index (insert lead index if needed)
-                const di = effectiveLeadIndex !== null && realIdx >= effectiveLeadIndex ? realIdx + 1 : realIdx;
-                setCurrentIndex(di);
+  return (
+    <div className="w-full bg-transparent">
+      <div className="relative w-full" style={{ aspectRatio: naturalAspect || "16 / 10" }}>
+        {isLeadDisplayIndex ? (
+          <>
+            <LeadCaptureOverlay
+              bg={leadBg}
+              config={leadConfig as any}
+              onSubmit={async (form) => {
+                try {
+                  await createLeadSubmissionPublic({
+                    demoId: demoId!,
+                    email: form.email || form.Email,
+                    fields: form,
+                    pageUrl: window.location.href,
+                    stepIndex: leadStepIndex ?? undefined,
+                    source: "public",
+                    userAgent: navigator.userAgent,
+                    referrer: document.referrer,
+                  });
+                } catch (e) {
+                  console.warn("Lead submission failed", e);
+                }
               }}
-              showNavigation={false}
-              className="w-full"
+              onDismiss={() => {
+                // Continue to next step after lead form
+                go(1);
+              }}
             />
-          )}
-          <div className="w-full bg-white border text-[10px] text-gray-600 text-center py-1 mt-1 rounded-b-md">
+            {/* Default lead form warning removed */}
+          </>
+        ) : (
+          <HotspotOverlay
+            className="absolute inset-0 w-full h-full"
+            imageUrl={resolvedSrc}
+            hotspots={currentHotspots as any}
+          />
+        )}
+        <button
+          aria-label="Previous step"
+          onClick={() => go(-1)}
+          disabled={currentIndex === 0}
+          className={`absolute left-2 top-1/2 -translate-y-1/2 z-50 rounded-full p-2 bg-white/80 hover:bg-white shadow ${
+            currentIndex === 0 ? "opacity-50 cursor-not-allowed" : ""
+          }`}
+        >
+          <ChevronLeft className="h-5 w-5" />
+        </button>
+        <button
+          aria-label="Next step"
+          onClick={() => go(1)}
+          disabled={currentIndex >= displayTotal - 1}
+          className={`absolute right-2 top-1/2 -translate-y-1/2 z-50 rounded-full p-2 bg-white/80 hover:bg-white shadow ${
+            currentIndex >= displayTotal - 1 ? "opacity-50 cursor-not-allowed" : ""
+          }`}
+        >
+          <ChevronRight className="h-5 w-5" />
+        </button>
+        <div className="absolute left-3 right-3 bottom-3 z-40 pointer-events-none">
+          <div className="relative w-full h-1.5 bg-black/15 rounded overflow-hidden">
+            <div
+              className="absolute left-0 top-0 bottom-0 bg-blue-600"
+              style={{ width: `${((currentIndex + 1) / displayTotal) * 100}%` }}
+            />
+          </div>
+        </div>
+        <div className="absolute right-3 bottom-6 z-40 pointer-events-auto" title="Powered by Propels">
+          <div className="rounded-sm border border-border bg-white shadow-sm px-2 py-1 text-[10px] text-muted-foreground">
             Powered by{" "}
             <a href="https://propels.ai" target="_blank" rel="noreferrer" className="underline">
               Propels
@@ -253,19 +202,6 @@ export default function PublicDemoPlayer() {
           </div>
         </div>
       </div>
-
-      <footer className="bg-gray-100 p-4 border-t">
-        <div className="max-w-5xl mx-auto">
-          <StepsBar
-            total={displayTotal}
-            current={currentIndex}
-            onSelect={(idx) => goTo(idx)}
-            leadIndex={effectiveLeadIndex}
-            className="mx-auto"
-          />
-          <div className="sr-only">{`Step ${currentIndex + 1} of ${displayTotal}`}</div>
-        </div>
-      </footer>
     </div>
   );
 }
