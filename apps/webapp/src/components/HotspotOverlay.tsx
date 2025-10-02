@@ -203,13 +203,11 @@ export const HotspotOverlay: React.FC<HotspotOverlayProps> = ({
             const top = box.top + h.yNorm * box.height - dotSize / 2;
             style.left = `${left}px`;
             style.top = `${top}px`;
-            style.width = `${dotSize}px`;
-            style.height = `${dotSize}px`;
+            // Don't set width/height on parent - it constrains the tooltip bubble
           } else if (!box && typeof h.x === "number" && typeof h.y === "number") {
             style.left = `${h.x}px`;
             style.top = `${h.y}px`;
-            style.width = `${(h as any).width || dotSize}px`;
-            style.height = `${(h as any).height || dotSize}px`;
+            // Don't set width/height on parent - it constrains the tooltip bubble
           }
 
           const tooltipText = normalizeTooltip((h as any).tooltip ?? h);
@@ -235,11 +233,9 @@ export const HotspotOverlay: React.FC<HotspotOverlayProps> = ({
             (h as any).tooltipTextSizePx ?? (stepStyleDefaults as any).tooltipTextSizePx ?? 12
           );
 
-          // Compute bubble position relative to the dot center and optional offsets
+          // Compute bubble position (absolute positioning relative to container)
           let bubbleLeft = 0;
           let bubbleTop = 0;
-          let bubbleLeftLocal = 0;
-          let bubbleTopLocal = 0;
           if (box && typeof h.xNorm === "number" && typeof h.yNorm === "number") {
             const left = box.left + h.xNorm * box.width - dotSize / 2;
             const top = box.top + h.yNorm * box.height - dotSize / 2;
@@ -252,61 +248,86 @@ export const HotspotOverlay: React.FC<HotspotOverlayProps> = ({
             const dyPx = typeof dyNorm === "number" ? dyNorm * box.height : -8;
             bubbleLeft = centerX + dxPx;
             bubbleTop = centerY + dyPx;
-            bubbleLeftLocal = bubbleLeft - left;
-            bubbleTopLocal = bubbleTop - top;
           } else if (!box && typeof h.x === "number" && typeof h.y === "number") {
             const centerX = Number(h.x) + dotSize / 2;
             const centerY = Number(h.y) + dotSize / 2;
             bubbleLeft = centerX + (dotSize + 6);
             bubbleTop = centerY - 8;
-            bubbleLeftLocal = bubbleLeft - Number(h.x);
-            bubbleTopLocal = bubbleTop - Number(h.y);
           }
 
           return (
-            <div key={h.id} className="absolute group" style={style} onClick={() => onHotspotClick?.(h.id)}>
-              <div
-                className={`rounded-full shadow ${anim === "pulse" ? "animate-pulse" : ""}`}
-                style={{
-                  width: dotSize,
-                  height: dotSize,
-                  backgroundColor: color,
-                  borderStyle: "solid",
-                  borderWidth: stroke,
-                  borderColor: strokeColor,
-                  ...animStyle,
-                }}
-              />
-              {hasTooltip && (
+            <React.Fragment key={h.id}>
+              <div className="absolute group" style={style} onClick={() => onHotspotClick?.(h.id)}>
                 <div
-                  className={`absolute whitespace-pre px-2 py-1 rounded shadow opacity-100 ${enableBubbleDrag ? "cursor-grab" : ""}`}
+                  className={`rounded-full shadow ${anim === "pulse" ? "animate-pulse" : ""}`}
                   style={{
-                    backgroundColor: bubbleBg,
-                    color: bubbleText,
-                    fontSize: `${bubbleSizePx}px`,
-                    left: bubbleLeftLocal,
-                    top: bubbleTopLocal,
+                    width: dotSize,
+                    height: dotSize,
+                    backgroundColor: color,
+                    borderStyle: "solid",
+                    borderWidth: stroke,
+                    borderColor: strokeColor,
+                    ...animStyle,
                   }}
-                  onMouseDown={(e) => {
-                    if (!enableBubbleDrag || !box) return;
-                    e.stopPropagation();
-                    (e.currentTarget as HTMLDivElement).classList.add("cursor-grabbing");
-                    const left = box.left + (h.xNorm ?? 0) * box.width - dotSize / 2;
-                    const top = box.top + (h.yNorm ?? 0) * box.height - dotSize / 2;
-                    const centerX = left + dotSize / 2;
-                    const centerY = top + dotSize / 2;
-                    dragRef.current = { id: h.id, centerX, centerY, el: e.currentTarget as HTMLDivElement };
-                    (dragRef as any).start?.();
-                  }}
-                  onMouseUp={(e) => {
-                    if (!enableBubbleDrag) return;
-                    (e.currentTarget as HTMLDivElement).classList.remove("cursor-grabbing");
-                  }}
-                >
-                  {tooltipText}
-                </div>
-              )}
-            </div>
+                />
+              </div>
+              {hasTooltip && (() => {
+                // Parse tooltip for display - support both string and object format
+                const tooltipData = typeof (h as any).tooltip === "string" 
+                  ? { title: "", description: (h as any).tooltip }
+                  : { 
+                      title: (h as any).tooltip?.title || "", 
+                      description: (h as any).tooltip?.description || (h as any).tooltip?.text || tooltipText
+                    };
+                const hasTitle = tooltipData.title.trim().length > 0;
+                
+                return (
+                  <div
+                    className={`absolute px-3 py-2 rounded shadow-lg opacity-100 max-w-sm break-words ${enableBubbleDrag ? "cursor-grab" : ""}`}
+                    style={{
+                      backgroundColor: bubbleBg,
+                      color: bubbleText,
+                      left: `${bubbleLeft}px`,
+                      top: `${bubbleTop}px`,
+                    }}
+                    onMouseDown={(e) => {
+                      if (!enableBubbleDrag || !box) return;
+                      e.stopPropagation();
+                      (e.currentTarget as HTMLDivElement).classList.add("cursor-grabbing");
+                      const left = box.left + (h.xNorm ?? 0) * box.width - dotSize / 2;
+                      const top = box.top + (h.yNorm ?? 0) * box.height - dotSize / 2;
+                      const centerX = left + dotSize / 2;
+                      const centerY = top + dotSize / 2;
+                      dragRef.current = { id: h.id, centerX, centerY, el: e.currentTarget as HTMLDivElement };
+                      (dragRef as any).start?.();
+                    }}
+                    onMouseUp={(e) => {
+                      if (!enableBubbleDrag) return;
+                      (e.currentTarget as HTMLDivElement).classList.remove("cursor-grabbing");
+                    }}
+                  >
+                    {hasTitle && (
+                      <div 
+                        className="font-semibold mb-1"
+                        style={{
+                          fontSize: `${bubbleSizePx + 2}px`,
+                        }}
+                      >
+                        {tooltipData.title}
+                      </div>
+                    )}
+                    <div
+                      className="whitespace-pre-wrap break-words"
+                      style={{
+                        fontSize: `${bubbleSizePx}px`,
+                      }}
+                    >
+                      {tooltipData.description}
+                    </div>
+                  </div>
+                );
+              })()}
+            </React.Fragment>
           );
         })}
       </div>

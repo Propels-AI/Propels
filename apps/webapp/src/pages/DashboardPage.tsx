@@ -5,7 +5,6 @@ import { signOut } from "aws-amplify/auth";
 import { DemoListView } from "@/components/DemoListView";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { trackEvent } from "@/lib/analytics";
 
 export function DashboardPage() {
   const { user } = useAuth();
@@ -21,19 +20,6 @@ export function DashboardPage() {
     }
   };
 
-  const handleTestMixpanelEvent = () => {
-    trackEvent("Test Event", {
-      event_type: "button_click",
-      button_name: "Test Mixpanel",
-      timestamp: new Date().toISOString(),
-      user_id: user?.username,
-      test_data: {
-        random_number: Math.floor(Math.random() * 1000),
-        message: "Mixpanel integration test successful!"
-      }
-    });
-  };
-
   return (
     <ProtectPage>
       <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-background text-foreground font-sans">
@@ -43,9 +29,6 @@ export function DashboardPage() {
             <div className="flex gap-3">
               <Button onClick={() => navigate("/all-leads")} variant="outline">
                 All Leads
-              </Button>
-              <Button onClick={handleTestMixpanelEvent} variant="secondary">
-                Test Mixpanel Event
               </Button>
               <Button onClick={handleSignOut} variant="default">
                 Sign Out

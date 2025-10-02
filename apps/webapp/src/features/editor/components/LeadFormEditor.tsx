@@ -320,7 +320,8 @@ function TemplatePicker(props: { getConfig: () => any; applyConfig: (cfg: any) =
   const { getConfig, applyConfig } = props;
   const [loading, setLoading] = useState(false);
   const [templates, setTemplates] = useState<Array<{ templateId: string; name: string; leadConfig: any }>>([]);
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [mainDialogOpen, setMainDialogOpen] = useState(false);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -335,10 +336,12 @@ function TemplatePicker(props: { getConfig: () => any; applyConfig: (cfg: any) =
     }
   };
 
-  // Auto-load templates on mount
+  // Auto-load templates when main dialog opens
   useEffect(() => {
-    loadTemplates();
-  }, []);
+    if (mainDialogOpen) {
+      loadTemplates();
+    }
+  }, [mainDialogOpen]);
 
   const templateOptions = templates.map((t) => ({
     value: t.templateId,
@@ -350,6 +353,7 @@ function TemplatePicker(props: { getConfig: () => any; applyConfig: (cfg: any) =
     if (template?.leadConfig) {
       const cfg = typeof template.leadConfig === "string" ? JSON.parse(template.leadConfig) : template.leadConfig;
       applyConfig(cfg);
+      setMainDialogOpen(false);
     }
   };
 
@@ -360,7 +364,7 @@ function TemplatePicker(props: { getConfig: () => any; applyConfig: (cfg: any) =
       setSaving(true);
       await saveLeadTemplate(templateName.trim(), getConfig());
       setTemplateName("");
-      setDialogOpen(false);
+      setSaveDialogOpen(false);
       await loadTemplates(); // Refresh the list
     } catch (error) {
       console.error("Failed to save template:", error);
@@ -371,32 +375,49 @@ function TemplatePicker(props: { getConfig: () => any; applyConfig: (cfg: any) =
 
   return (
     <>
-      <div className="space-y-3">
-        {/* Template Loading Section */}
-        <div>
-          <p className="text-xs text-muted-foreground mb-2 font-sans">Or load a template</p>
-          <Combobox
-            options={templateOptions}
-            value=""
-            onValueChange={handleTemplateSelect}
-            placeholder={loading ? "Loading templates..." : "Select a template..."}
-            className="w-full"
-          />
+      {/* Template actions */}
+      <div className="flex items-center justify-between text-sm font-sans">
+        <div className="text-muted-foreground">
+          <button
+            type="button"
+            onClick={() => setMainDialogOpen(true)}
+            className="underline hover:text-foreground transition-colors cursor-pointer"
+          >
+            Load from template
+          </button>
         </div>
-
-        {/* Template Saving Section */}
-        <div>
-          <Button variant="outline" size="sm" onClick={() => setDialogOpen(true)} className="w-full font-sans">
-            Save as template
-          </Button>
-          <p className="text-xs text-muted-foreground mt-1 font-sans">
-            Save this configuration to load in future forms
-          </p>
-        </div>
+        <button
+          type="button"
+          onClick={() => setSaveDialogOpen(true)}
+          className="text-muted-foreground underline hover:text-foreground transition-colors cursor-pointer"
+        >
+          Save as template
+        </button>
       </div>
 
+      {/* Load Template Dialog */}
+      <Dialog open={mainDialogOpen} onOpenChange={setMainDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-sans">Load Template</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground font-sans">Select a template</label>
+              <Combobox
+                options={templateOptions}
+                value=""
+                onValueChange={handleTemplateSelect}
+                placeholder={loading ? "Loading templates..." : "Select a template..."}
+                className="w-full"
+              />
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Save Template Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="font-sans">Save Template</DialogTitle>
@@ -416,7 +437,7 @@ function TemplatePicker(props: { getConfig: () => any; applyConfig: (cfg: any) =
             <Button
               variant="outline"
               onClick={() => {
-                setDialogOpen(false);
+                setSaveDialogOpen(false);
                 setTemplateName("");
               }}
               disabled={saving}
