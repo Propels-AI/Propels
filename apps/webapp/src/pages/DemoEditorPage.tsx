@@ -18,7 +18,7 @@ import { PasswordlessAuth } from "@/components/auth/PasswordlessAuth";
 import { EditorSidebar } from "@/features/editor/components/EditorSidebar";
 import { TooltipEditor } from "@/features/editor/components/TooltipEditor";
 import { toast } from "sonner";
-import { Loader2, Copy } from "lucide-react";
+import { Loader2, Copy, Eye } from "lucide-react";
 import LeadCaptureOverlay from "@/components/LeadCaptureOverlay";
 import EditorHeader from "@/features/editor/components/EditorHeader";
 import HotspotOverlay from "@/components/HotspotOverlay";
@@ -965,15 +965,6 @@ export function DemoEditorPage() {
             console.log("[DemoEditorPage] Opening delete modal. Demo name:", demoName, "Demo ID:", demoIdParam);
             setDeleteModalOpen(true);
           }}
-          onOpenBlogPreview={() => {
-            const demoId = demoIdParam;
-            if (!demoId) {
-              alert("Save your demo first to preview in blog.");
-              return;
-            }
-            const url = `/preview-blog?demoId=${encodeURIComponent(demoId)}`;
-            window.open(url, "_blank", "noopener,noreferrer");
-          }}
           onCopyPublicUrl={async () => {
             try {
               const url = demoIdParam ? `${window.location.origin}/p/${demoIdParam}` : "";
@@ -1004,6 +995,7 @@ export function DemoEditorPage() {
             }
           }}
           onSave={handleSave}
+          onOpenShareDialog={() => setShareOpen(true)}
         />
         <div
           ref={imageRef}
@@ -1160,7 +1152,7 @@ export function DemoEditorPage() {
               return (
                 <div key={hotspot.id}>
                   <div
-                    className={`absolute rounded-full shadow ${anim === "pulse" ? "animate-pulse" : ""}`}
+                    className={`absolute rounded-full shadow cursor-grab active:cursor-grabbing ${anim === "pulse" ? "animate-pulse" : ""}`}
                     style={{
                       left: `${centerX - dotSize / 2}px`,
                       top: `${centerY - dotSize / 2}px`,
@@ -1206,7 +1198,7 @@ export function DemoEditorPage() {
 
                       return (
                         <div
-                          className="absolute rounded py-2 px-3 shadow-lg max-w-sm break-words"
+                          className="absolute rounded py-2 px-3 shadow-lg max-w-sm break-words cursor-grab active:cursor-grabbing"
                           style={{
                             left: `${tooltipLeft}px`,
                             top: `${tooltipTop}px`,
@@ -1221,6 +1213,7 @@ export function DemoEditorPage() {
                             e.preventDefault();
                             try {
                               document.body.style.userSelect = "none";
+                              document.body.style.cursor = "grabbing";
                             } catch {}
                             const rect = imageRef.current?.getBoundingClientRect();
                             if (!rect || !naturalSize) return;
@@ -1248,9 +1241,10 @@ export function DemoEditorPage() {
                             const onUp = () => {
                               document.removeEventListener("mousemove", onMove);
                               document.removeEventListener("mouseup", onUp);
-                              // Restore selection after bubble drag ends
+                              // Restore selection and cursor after bubble drag ends
                               try {
                                 document.body.style.userSelect = "";
+                                document.body.style.cursor = "";
                               } catch {}
                             };
                             document.addEventListener("mousemove", onMove);
@@ -1336,21 +1330,38 @@ export function DemoEditorPage() {
                     <span className="font-medium">1.</span>
                     <span>Copy the embed code and add it to your site</span>
                   </div>
-                  <button
-                    className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50"
-                    onClick={async () => {
-                      try {
-                        const code = demoIdParam
-                          ? `<iframe src="${window.location.origin}/embed/${demoIdParam}?ar=16:9" style="width:100%;aspect-ratio:16/9;border:0;" allow="fullscreen"></iframe>`
-                          : "";
-                        await navigator.clipboard.writeText(code);
-                        toast.success("Embed code copied");
-                      } catch {}
-                    }}
-                    title="Copy embed code"
-                  >
-                    <Copy className="w-3.5 h-3.5" /> Copy
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50"
+                      onClick={() => {
+                        const demoId = demoIdParam;
+                        if (!demoId) {
+                          alert("Save your demo first to preview in blog.");
+                          return;
+                        }
+                        const url = `/preview-blog?demoId=${encodeURIComponent(demoId)}`;
+                        window.open(url, "_blank", "noopener,noreferrer");
+                      }}
+                      title="Preview embed"
+                    >
+                      <Eye className="w-3.5 h-3.5" /> Preview
+                    </button>
+                    <button
+                      className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50"
+                      onClick={async () => {
+                        try {
+                          const code = demoIdParam
+                            ? `<iframe src="${window.location.origin}/embed/${demoIdParam}?ar=16:9" style="width:100%;aspect-ratio:16/9;border:0;" allow="fullscreen"></iframe>`
+                            : "";
+                          await navigator.clipboard.writeText(code);
+                          toast.success("Embed code copied");
+                        } catch {}
+                      }}
+                      title="Copy embed code"
+                    >
+                      <Copy className="w-3.5 h-3.5" /> Copy
+                    </button>
+                  </div>
                 </div>
                 <textarea
                   readOnly
