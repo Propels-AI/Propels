@@ -91,7 +91,7 @@ describe("DemoEditorPage lead form editor", () => {
 
     // Verify all tabs are present
     const stepsTab = screen.getByRole("tab", { name: /steps/i });
-    const tooltipTab = screen.getByRole("tab", { name: /tooltip/i });
+    const tooltipTab = screen.getByRole("tab", { name: /style/i });
     const leadFormTab = screen.getByRole("tab", { name: /lead form/i });
     
     expect(stepsTab).toBeInTheDocument();
