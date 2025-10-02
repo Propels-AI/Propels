@@ -163,6 +163,7 @@ export default function PublicDemoPlayer() {
             className="absolute inset-0 w-full h-full"
             imageUrl={resolvedSrc}
             hotspots={currentHotspots as any}
+            onHotspotClick={() => go(1)}
           />
         )}
         <button
