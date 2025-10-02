@@ -142,11 +142,11 @@ export function DemoEditorPage() {
     tooltipTextColor?: string;
     tooltipTextSizePx?: number;
   }>({
-    dotSize: 12,
+    dotSize: 36,
     dotColor: "#2563eb",
     dotStrokePx: 2,
     dotStrokeColor: "#ffffff",
-    animation: "none",
+    animation: "pulse",
     tooltipBgColor: "#2563eb",
     tooltipTextColor: "#ffffff",
     tooltipTextSizePx: 12,
@@ -237,7 +237,7 @@ export function DemoEditorPage() {
 
                 await Promise.all(
                   urls.map(
-                    (s) =>
+                    (s, index) =>
                       new Promise<void>((resolve) => {
                         const img = new Image();
                         img.onload = () => {
@@ -261,13 +261,21 @@ export function DemoEditorPage() {
                             return;
                           }
 
+                          // Add educational tooltip for first step
+                          const defaultTooltip = index === 0 
+                            ? {
+                                title: "👋 Welcome to the Editor!",
+                                description: "Click this dot to add your own tooltip text. Guide your viewers through each step of your demo."
+                              }
+                            : "";
+
                           const hotspot: Hotspot = {
                             id: Math.random().toString(36).slice(2, 9),
                             xNorm,
                             yNorm,
                             width: DEFAULT_W,
                             height: DEFAULT_H,
-                            tooltip: "",
+                            tooltip: defaultTooltip,
                             dotSize: tooltipStyle.dotSize,
                             dotColor: tooltipStyle.dotColor,
                             dotStrokePx: tooltipStyle.dotStrokePx,
