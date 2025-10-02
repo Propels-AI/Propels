@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Combobox } from "@/components/ui/combobox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 import { Label } from "@/components/ui/label";
 import { ColorPicker } from "@/components/ui/color-picker";
@@ -21,14 +22,12 @@ interface EditorSidebarProps {
   loadingSteps: boolean;
   selectedStepIndex: number;
   onSelectStep: (index: number) => void;
-  currentStepId?: string;
   currentHotspots: Array<any>;
   isCurrentLeadStep: boolean;
   leadFormConfig: any;
   setLeadFormConfig: React.Dispatch<React.SetStateAction<any>>;
   tooltipStyle: TooltipStyle;
   applyGlobalStyle: (style: Partial<TooltipStyle>) => void;
-  handleSave: () => void;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
   onAddLeadStep: (insertIndex: number) => void;
@@ -42,14 +41,12 @@ export function EditorSidebar({
   loadingSteps,
   selectedStepIndex,
   onSelectStep,
-  currentStepId,
   currentHotspots,
   isCurrentLeadStep,
   leadFormConfig,
   setLeadFormConfig,
   tooltipStyle,
   applyGlobalStyle,
-  handleSave,
   isCollapsed,
   onToggleCollapse,
   onAddLeadStep,
@@ -73,6 +70,13 @@ export function EditorSidebar({
     { value: "breathe", label: "Breathe" },
     { value: "fade", label: "Fade" },
   ];
+
+  // Sync globalColor with tooltipStyle.dotColor when it changes
+  useEffect(() => {
+    if (tooltipStyle.dotColor && tooltipStyle.dotColor !== globalColor) {
+      setGlobalColor(tooltipStyle.dotColor);
+    }
+  }, [tooltipStyle.dotColor]);
 
   // Enhanced drag and drop handlers
   const handleDragStart = React.useCallback((e: React.DragEvent, index: number) => {
@@ -191,7 +195,7 @@ export function EditorSidebar({
                     Steps
                   </TabsTrigger>
                   <TabsTrigger value="tooltip" className="text-[7px] px-1 py-1">
-                    Tooltip
+                    Style
                   </TabsTrigger>
                   <TabsTrigger value="lead" className="text-[7px] px-1 py-1">
                     Lead Form
@@ -213,7 +217,7 @@ export function EditorSidebar({
                         setLeadInsertPos("after");
                       }}
                     >
-                      + Lead
+                      + Lead Form
                     </Button>
                   </div>
                   {leadUiOpen && (
@@ -241,21 +245,25 @@ export function EditorSidebar({
                           <span>after</span>
                         </label>
                         <span>step</span>
-                        <select
-                          value={leadInsertAnchor}
-                          onChange={(e) =>
+                        <Select
+                          value={String(leadInsertAnchor)}
+                          onValueChange={(value) =>
                             setLeadInsertAnchor(
-                              Math.max(1, Math.min(Math.max(1, steps.length), parseInt(e.target.value || "1", 10)))
+                              Math.max(1, Math.min(Math.max(1, steps.length), parseInt(value || "1", 10)))
                             )
                           }
-                          className="bg-background border border-input text-foreground rounded-md px-2 py-1 text-xs focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
                         >
-                          {Array.from({ length: Math.max(1, steps.length) }, (_, i) => i + 1).map((n) => (
-                            <option key={n} value={n}>
-                              {n}
-                            </option>
-                          ))}
-                        </select>
+                          <SelectTrigger className="w-[70px] h-7 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: Math.max(1, steps.length) }, (_, i) => i + 1).map((n) => (
+                              <SelectItem key={n} value={String(n)}>
+                                {n}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                         <div className="ml-auto flex items-center gap-2">
                           <Button
                             size="sm"
@@ -414,49 +422,7 @@ export function EditorSidebar({
 
                 <TabsContent value="tooltip" className="mt-4 space-y-4">
                   <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-foreground">Tooltip</h3>
-                    <div>
-                      <div className="space-y-3 mt-2">
-                        <div>
-                          <Label className="text-xs text-muted-foreground">Animation</Label>
-                          <Combobox
-                            options={animationOptions}
-                            value={tooltipStyle.animation}
-                            onValueChange={(value) => applyGlobalStyle({ animation: value as any })}
-                            placeholder="Select animation..."
-                            className="w-full mt-2"
-                          />
-                        </div>
-
-                        <div>
-                          <Label className="text-xs text-muted-foreground">Dot Size</Label>
-                          <input
-                            type="range"
-                            min={6}
-                            max={48}
-                            step={1}
-                            value={Number(tooltipStyle.dotSize)}
-                            onChange={(e) => applyGlobalStyle({ dotSize: Number(e.target.value) })}
-                            className="w-full mt-2"
-                          />
-                          <div className="text-[10px] text-muted-foreground mt-1">
-                            {Number(tooltipStyle.dotSize)} px
-                          </div>
-                        </div>
-
-                        <div>
-                          <Label className="text-xs text-muted-foreground">Color</Label>
-                          <ColorPicker
-                            value={globalColor}
-                            onChange={(color: string) => {
-                              setGlobalColor(color);
-                              applyGlobalStyle({ dotColor: color });
-                            }}
-                            className="mt-2"
-                          />
-                        </div>
-                      </div>
-                    </div>
+                    <h3 className="text-lg font-semibold text-foreground">Style</h3>
 
                     {isCurrentLeadStep ? (
                       <div className="text-xs text-muted-foreground">Lead capture step has no hotspots.</div>
@@ -466,25 +432,59 @@ export function EditorSidebar({
                       </div>
                     ) : (
                       <div className="space-y-3 text-sm">
-                        <div className="flex gap-2 text-xs">
-                          <Button
-                            size="sm"
-                            variant={inspectorTab === "fill" ? "default" : "outline"}
-                            onClick={() => setInspectorTab("fill")}
-                          >
-                            Fill
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant={inspectorTab === "stroke" ? "default" : "outline"}
-                            onClick={() => setInspectorTab("stroke")}
-                          >
-                            Stroke
-                          </Button>
-                        </div>
+                        <Tabs
+                          value={inspectorTab}
+                          onValueChange={(value) => setInspectorTab(value as "fill" | "stroke")}
+                        >
+                          <TabsList className="grid w-full grid-cols-2">
+                            <TabsTrigger value="fill" className="text-xs">
+                              Dot
+                            </TabsTrigger>
+                            <TabsTrigger value="stroke" className="text-xs">
+                              Text
+                            </TabsTrigger>
+                          </TabsList>
 
-                        {inspectorTab === "stroke" && (
-                          <>
+                          <TabsContent value="fill" className="mt-3 space-y-3">
+                            <div>
+                              <Label className="text-xs text-muted-foreground">Animation</Label>
+                              <Combobox
+                                options={animationOptions}
+                                value={tooltipStyle.animation}
+                                onValueChange={(value) => applyGlobalStyle({ animation: value as any })}
+                                placeholder="Select animation..."
+                                className="w-full mt-2"
+                              />
+                            </div>
+
+                            <div>
+                              <Label className="text-xs text-muted-foreground">Size</Label>
+                              <input
+                                type="range"
+                                min={6}
+                                max={48}
+                                step={1}
+                                value={Number(tooltipStyle.dotSize)}
+                                onChange={(e) => applyGlobalStyle({ dotSize: Number(e.target.value) })}
+                                className="w-full mt-2"
+                              />
+                              <div className="text-[10px] text-muted-foreground mt-1">
+                                {Number(tooltipStyle.dotSize)} px
+                              </div>
+                            </div>
+
+                            <div>
+                              <Label className="text-xs text-muted-foreground">Fill Color</Label>
+                              <ColorPicker
+                                value={globalColor}
+                                onChange={(color: string) => {
+                                  setGlobalColor(color);
+                                  applyGlobalStyle({ dotColor: color });
+                                }}
+                                className="mt-2"
+                              />
+                            </div>
+
                             <div>
                               <Label className="text-xs text-muted-foreground">Stroke Width</Label>
                               <input
@@ -500,69 +500,53 @@ export function EditorSidebar({
                                 {Number(tooltipStyle.dotStrokePx)} px
                               </div>
                             </div>
+
                             <div>
                               <Label className="text-xs text-muted-foreground">Stroke Color</Label>
-                              <input
-                                type="color"
+                              <ColorPicker
                                 value={tooltipStyle.dotStrokeColor}
-                                onChange={(e) => applyGlobalStyle({ dotStrokeColor: e.target.value })}
-                                className="w-10 h-8 p-0 border rounded mt-2"
-                                title="Choose stroke color"
+                                onChange={(color: string) => applyGlobalStyle({ dotStrokeColor: color })}
+                                className="mt-2"
                               />
                             </div>
-                          </>
-                        )}
-                        <div>
-                          <Label className="text-xs text-muted-foreground">Tooltip Background</Label>
-                          <input
-                            type="color"
-                            value={tooltipStyle.tooltipBgColor || "#2563eb"}
-                            onChange={(e) => applyGlobalStyle({ tooltipBgColor: e.target.value })}
-                            className="w-10 h-8 p-0 border rounded mt-2"
-                            title="Choose tooltip background"
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-xs text-muted-foreground">Tooltip Text Color</Label>
-                          <input
-                            type="color"
-                            value={tooltipStyle.tooltipTextColor || "#ffffff"}
-                            onChange={(e) => applyGlobalStyle({ tooltipTextColor: e.target.value })}
-                            className="w-10 h-8 p-0 border rounded mt-2"
-                            title="Choose tooltip text color"
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-xs text-muted-foreground">Tooltip Text Size</Label>
-                          <input
-                            type="range"
-                            min={8}
-                            max={24}
-                            step={1}
-                            value={Number(tooltipStyle.tooltipTextSizePx || 12)}
-                            onChange={(e) => applyGlobalStyle({ tooltipTextSizePx: Number(e.target.value) })}
-                            className="w-full mt-2"
-                          />
-                          <div className="text-[10px] text-muted-foreground mt-1">
-                            {Number(tooltipStyle.tooltipTextSizePx || 12)} px
-                          </div>
-                        </div>
-                        <div className="flex gap-2 pt-1">
-                          <Button onClick={handleSave} size="sm">
-                            Save
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => {
-                              if (!currentStepId) return;
-                              // This should be handled by parent component
-                              console.log("Delete tooltip for step:", currentStepId);
-                            }}
-                          >
-                            Delete Tooltip
-                          </Button>
-                        </div>
+                          </TabsContent>
+
+                          <TabsContent value="stroke" className="mt-3 space-y-3">
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <Label className="text-xs text-muted-foreground">Background</Label>
+                                <ColorPicker
+                                  value={tooltipStyle.tooltipBgColor || "#2563eb"}
+                                  onChange={(color: string) => applyGlobalStyle({ tooltipBgColor: color })}
+                                  className="mt-2"
+                                />
+                              </div>
+                              <div>
+                                <Label className="text-xs text-muted-foreground">Text Color</Label>
+                                <ColorPicker
+                                  value={tooltipStyle.tooltipTextColor || "#ffffff"}
+                                  onChange={(color: string) => applyGlobalStyle({ tooltipTextColor: color })}
+                                  className="mt-2"
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <Label className="text-xs text-muted-foreground">Text Size</Label>
+                              <input
+                                type="range"
+                                min={8}
+                                max={24}
+                                step={1}
+                                value={Number(tooltipStyle.tooltipTextSizePx || 12)}
+                                onChange={(e) => applyGlobalStyle({ tooltipTextSizePx: Number(e.target.value) })}
+                                className="w-full mt-2"
+                              />
+                              <div className="text-[10px] text-muted-foreground mt-1">
+                                {Number(tooltipStyle.tooltipTextSizePx || 12)} px
+                              </div>
+                            </div>
+                          </TabsContent>
+                        </Tabs>
                       </div>
                     )}
                   </div>

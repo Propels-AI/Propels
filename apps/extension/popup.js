@@ -1,8 +1,5 @@
 // Popup script with single Start/Stop toggle
 (function () {
-  // Environment configuration - check if this is a dev build
-  const isDev = true;
-  const APP_BASE_URL = isDev ? "http://localhost:5173" : "https://app.propels.ai";
   document.addEventListener("DOMContentLoaded", () => {
     const toggleBtn = document.getElementById("recordToggle");
     const recBadge = document.getElementById("recBadge");
@@ -105,7 +102,6 @@
         }
         await chrome.runtime.sendMessage({ type: "DELETE_RECORDING" });
         updateUI(false);
-        console.log("Recording deleted");
       } catch (e) {
         console.error("Error deleting recording:", e);
       }
