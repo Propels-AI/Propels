@@ -4,7 +4,7 @@ import { syncAnonymousDemo, type EditedDraft } from "../lib/services/syncAnonymo
 import { useAuth } from "@/lib/providers/AuthProvider";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { deleteDemo, renameDemo, setDemoStatus, createDemoStep, getOwnerId } from "@/lib/api/demos";
-import { trackEditorEntered, trackStepAdded, trackDemoSaved } from "@/lib/analytics";
+import { trackEditorEntered, trackDemoSaved } from "@/lib/analytics";
 import {
   updateDemoStepHotspots,
   updateDemoLeadConfig,
