@@ -821,14 +821,12 @@ export function DemoEditorPage() {
         loadingSteps={loadingSteps}
         selectedStepIndex={selectedStepIndex}
         onSelectStep={setSelectedStepIndex}
-        currentStepId={currentStepId}
         currentHotspots={currentHotspots}
         isCurrentLeadStep={isCurrentLeadStep}
         leadFormConfig={leadFormConfig}
         setLeadFormConfig={setLeadFormConfig}
         tooltipStyle={tooltipStyle}
         applyGlobalStyle={applyGlobalStyle}
-        handleSave={handleSave}
         isCollapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
         onAddLeadStep={addLeadStep}
