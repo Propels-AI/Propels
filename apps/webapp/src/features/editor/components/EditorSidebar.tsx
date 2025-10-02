@@ -192,7 +192,7 @@ export function EditorSidebar({
                     Steps
                   </TabsTrigger>
                   <TabsTrigger value="tooltip" className="text-[7px] px-1 py-1">
-                    Tooltip
+                    Style
                   </TabsTrigger>
                   <TabsTrigger value="lead" className="text-[7px] px-1 py-1">
                     Lead Form
@@ -419,7 +419,7 @@ export function EditorSidebar({
 
                 <TabsContent value="tooltip" className="mt-4 space-y-4">
                   <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-foreground">Tooltip</h3>
+                    <h3 className="text-lg font-semibold text-foreground">Style</h3>
                     <div>
                       <div className="space-y-3 mt-2">
                         <div>
@@ -471,87 +471,81 @@ export function EditorSidebar({
                       </div>
                     ) : (
                       <div className="space-y-3 text-sm">
-                        <div className="flex gap-2 text-xs">
-                          <Button
-                            size="sm"
-                            variant={inspectorTab === "fill" ? "default" : "outline"}
-                            onClick={() => setInspectorTab("fill")}
-                          >
-                            Fill
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant={inspectorTab === "stroke" ? "default" : "outline"}
-                            onClick={() => setInspectorTab("stroke")}
-                          >
-                            Stroke
-                          </Button>
-                        </div>
+                        <Tabs value={inspectorTab} onValueChange={(value) => setInspectorTab(value as "fill" | "stroke")}>
+                          <TabsList className="grid w-full grid-cols-2">
+                            <TabsTrigger value="fill" className="text-xs">
+                              Fill
+                            </TabsTrigger>
+                            <TabsTrigger value="stroke" className="text-xs">
+                              Stroke
+                            </TabsTrigger>
+                          </TabsList>
 
-                        {inspectorTab === "stroke" && (
-                          <>
-                            <div>
-                              <Label className="text-xs text-muted-foreground">Stroke Width</Label>
-                              <input
-                                type="range"
-                                min={0}
-                                max={8}
-                                step={1}
-                                value={Number(tooltipStyle.dotStrokePx)}
-                                onChange={(e) => applyGlobalStyle({ dotStrokePx: Number(e.target.value) })}
-                                className="w-full mt-2"
-                              />
-                              <div className="text-[10px] text-muted-foreground mt-1">
-                                {Number(tooltipStyle.dotStrokePx)} px
-                              </div>
+                        <TabsContent value="stroke" className="mt-3 space-y-3">
+                          <div>
+                            <Label className="text-xs text-muted-foreground">Stroke Width</Label>
+                            <input
+                              type="range"
+                              min={0}
+                              max={8}
+                              step={1}
+                              value={Number(tooltipStyle.dotStrokePx)}
+                              onChange={(e) => applyGlobalStyle({ dotStrokePx: Number(e.target.value) })}
+                              className="w-full mt-2"
+                            />
+                            <div className="text-[10px] text-muted-foreground mt-1">
+                              {Number(tooltipStyle.dotStrokePx)} px
                             </div>
-                            <div>
-                              <Label className="text-xs text-muted-foreground">Stroke Color</Label>
-                              <input
-                                type="color"
-                                value={tooltipStyle.dotStrokeColor}
-                                onChange={(e) => applyGlobalStyle({ dotStrokeColor: e.target.value })}
-                                className="w-10 h-8 p-0 border rounded mt-2"
-                                title="Choose stroke color"
-                              />
-                            </div>
-                          </>
-                        )}
-                        <div>
-                          <Label className="text-xs text-muted-foreground">Tooltip Background</Label>
-                          <input
-                            type="color"
-                            value={tooltipStyle.tooltipBgColor || "#2563eb"}
-                            onChange={(e) => applyGlobalStyle({ tooltipBgColor: e.target.value })}
-                            className="w-10 h-8 p-0 border rounded mt-2"
-                            title="Choose tooltip background"
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-xs text-muted-foreground">Tooltip Text Color</Label>
-                          <input
-                            type="color"
-                            value={tooltipStyle.tooltipTextColor || "#ffffff"}
-                            onChange={(e) => applyGlobalStyle({ tooltipTextColor: e.target.value })}
-                            className="w-10 h-8 p-0 border rounded mt-2"
-                            title="Choose tooltip text color"
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-xs text-muted-foreground">Tooltip Text Size</Label>
-                          <input
-                            type="range"
-                            min={8}
-                            max={24}
-                            step={1}
-                            value={Number(tooltipStyle.tooltipTextSizePx || 12)}
-                            onChange={(e) => applyGlobalStyle({ tooltipTextSizePx: Number(e.target.value) })}
-                            className="w-full mt-2"
-                          />
-                          <div className="text-[10px] text-muted-foreground mt-1">
-                            {Number(tooltipStyle.tooltipTextSizePx || 12)} px
                           </div>
-                        </div>
+                          <div>
+                            <Label className="text-xs text-muted-foreground">Stroke Color</Label>
+                            <input
+                              type="color"
+                              value={tooltipStyle.dotStrokeColor}
+                              onChange={(e) => applyGlobalStyle({ dotStrokeColor: e.target.value })}
+                              className="w-10 h-8 p-0 border rounded mt-2"
+                              title="Choose stroke color"
+                            />
+                          </div>
+                        </TabsContent>
+
+                        <TabsContent value="fill" className="mt-3 space-y-3">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <Label className="text-xs text-muted-foreground">Background</Label>
+                              <ColorPicker
+                                value={tooltipStyle.tooltipBgColor || "#2563eb"}
+                                onChange={(color: string) => applyGlobalStyle({ tooltipBgColor: color })}
+                                className="mt-2"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-xs text-muted-foreground">Text Color</Label>
+                              <ColorPicker
+                                value={tooltipStyle.tooltipTextColor || "#ffffff"}
+                                onChange={(color: string) => applyGlobalStyle({ tooltipTextColor: color })}
+                                className="mt-2"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <Label className="text-xs text-muted-foreground">Tooltip Text Size</Label>
+                            <input
+                              type="range"
+                              min={8}
+                              max={24}
+                              step={1}
+                              value={Number(tooltipStyle.tooltipTextSizePx || 12)}
+                              onChange={(e) => applyGlobalStyle({ tooltipTextSizePx: Number(e.target.value) })}
+                              className="w-full mt-2"
+                            />
+                            <div className="text-[10px] text-muted-foreground mt-1">
+                              {Number(tooltipStyle.tooltipTextSizePx || 12)} px
+                            </div>
+                          </div>
+                        </TabsContent>
+                        </Tabs>
+
                         <div className="flex gap-2 pt-1">
                           <Button onClick={handleSave} size="sm">
                             Save
