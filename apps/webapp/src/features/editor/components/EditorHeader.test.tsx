@@ -21,7 +21,7 @@ const defaultProps: EditorHeaderProps = {
   onPreview: vi.fn(),
   onToggleStatus: vi.fn(),
   onDelete: vi.fn(),
-  onOpenBlogPreview: vi.fn(),
+  onOpenShareDialog: vi.fn(),
   onCopyPublicUrl: vi.fn(),
   onCopyEmbed: vi.fn(),
   onSave: vi.fn(),
@@ -287,19 +287,29 @@ describe("EditorHeader", () => {
     });
   });
 
-  describe("Blog Preview Visibility", () => {
-    it("shows blog preview for published demos", async () => {
-      const user = userEvent.setup();
-      render(<EditorHeader {...defaultProps} demoStatus="PUBLISHED" />);
+  describe("Button Visibility by Status", () => {
+    it("shows Copy button for published demos", () => {
+      render(<EditorHeader {...defaultProps} demoStatus="PUBLISHED" onOpenShareDialog={vi.fn()} />);
 
-      // Open dropdown menu
-      const dropdownBtn = screen.getByTestId("actions-menu");
-      await user.click(dropdownBtn);
-
-      expect(screen.getByText("Blog Preview")).toBeInTheDocument();
+      expect(screen.getByTestId("share-button")).toBeInTheDocument();
+      expect(screen.getByText("Copy")).toBeInTheDocument();
     });
 
-    it("hides blog preview for draft demos", async () => {
+    it("shows Publish button for draft demos with demoId", () => {
+      render(<EditorHeader {...defaultProps} demoStatus="DRAFT" />);
+
+      expect(screen.getByTestId("publish-button")).toBeInTheDocument();
+      expect(screen.getByText("Publish")).toBeInTheDocument();
+    });
+
+    it("shows Preview button for unsaved demos (no demoId)", () => {
+      render(<EditorHeader {...defaultProps} demoId={undefined} demoStatus="DRAFT" />);
+
+      expect(screen.getByTestId("preview-button")).toBeInTheDocument();
+      expect(screen.getByText("Preview")).toBeInTheDocument();
+    });
+
+    it("shows Preview in dropdown for draft demos with demoId", async () => {
       const user = userEvent.setup();
       render(<EditorHeader {...defaultProps} demoStatus="DRAFT" />);
 
@@ -307,21 +317,32 @@ describe("EditorHeader", () => {
       const dropdownBtn = screen.getByTestId("actions-menu");
       await user.click(dropdownBtn);
 
-      expect(screen.queryByText("Blog Preview")).not.toBeInTheDocument();
+      expect(screen.getByText("Preview")).toBeInTheDocument();
+    });
+
+    it("shows Unpublish in dropdown for published demos", async () => {
+      const user = userEvent.setup();
+      render(<EditorHeader {...defaultProps} demoStatus="PUBLISHED" />);
+
+      // Open dropdown menu
+      const dropdownBtn = screen.getByTestId("actions-menu");
+      await user.click(dropdownBtn);
+
+      expect(screen.getByText("Unpublish")).toBeInTheDocument();
     });
   });
 
   describe("Button Layout", () => {
-    it("shows Preview button before Save button", () => {
-      render(<EditorHeader {...defaultProps} />);
+    it("shows Publish button before Save button for draft with demoId", () => {
+      render(<EditorHeader {...defaultProps} demoStatus="DRAFT" />);
 
-      const previewButton = screen.getByTestId("preview-button");
+      const publishButton = screen.getByTestId("publish-button");
       const mainSaveButton = screen.getByTestId("main-save-button");
 
-      expect(previewButton).toBeInTheDocument();
+      expect(publishButton).toBeInTheDocument();
       expect(mainSaveButton).toBeInTheDocument();
 
-      const position = previewButton.compareDocumentPosition(mainSaveButton);
+      const position = publishButton.compareDocumentPosition(mainSaveButton);
       expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 

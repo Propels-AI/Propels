@@ -30,10 +30,10 @@ export type EditorHeaderProps = {
   onPreview: () => void;
   onToggleStatus: () => Promise<void> | void;
   onDelete: () => Promise<void> | void;
-  onOpenBlogPreview: () => void;
   onCopyPublicUrl: () => Promise<void> | void;
   onCopyEmbed: () => Promise<void> | void;
   onSave: () => Promise<void> | void;
+  onOpenShareDialog?: () => void;
 };
 
 export default function EditorHeader(props: EditorHeaderProps) {
@@ -55,10 +55,10 @@ export default function EditorHeader(props: EditorHeaderProps) {
     onPreview,
     onToggleStatus,
     onDelete,
-    onOpenBlogPreview,
     onCopyPublicUrl,
     onCopyEmbed,
     onSave,
+    onOpenShareDialog,
   } = props;
 
   // Title editing state
@@ -110,53 +110,55 @@ export default function EditorHeader(props: EditorHeaderProps) {
     <div className="font-sans">
       {/* Single Row Header: Title on left, Actions on right */}
       <div className="mb-4 flex items-center justify-between">
-        {/* Left: Demo Title Section */}
+        {/* Left: Demo Title Section - Only show if demo is saved */}
         <div className="flex items-center gap-2">
-          {isEditingTitle ? (
+          {demoId && (
             <>
-              <Input
-                ref={inputRef}
-                value={editingTitleValue}
-                placeholder="Enter demo name"
-                onChange={(e) => setEditingTitleValue(e.target.value)}
-                onKeyDown={handleKeyDown}
-                onBlur={handleCancelEdit}
-                className="h-8 text-sm w-64 font-sans border border-border focus-visible:border-ring focus-visible:ring-0"
-              />
-              <Button
-                onMouseDown={(e) => {
-                  e.preventDefault(); // Prevent input blur when clicking save
-                  handleSaveTitle();
-                }}
-                disabled={!!savingTitle || !!savingDemo}
-                variant="outline"
-                size="sm"
-                className={`font-sans ${savingTitle ? "opacity-60" : ""}`}
-                data-testid="title-save-button"
-              >
-                {savingTitle ? (
-                  "Saving..."
-                ) : (
-                  <>
-                    <Check className="h-3 w-3 mr-1" />
-                    Save
-                  </>
-                )}
-              </Button>
-            </>
-          ) : (
-            <>
-              <h1 className="text-lg font-medium text-foreground font-sans">{demoName || "Untitled Demo"}</h1>
-              {demoId && (
-                <Button
-                  onClick={handleEditTitle}
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 w-6 p-0 font-sans hover:bg-accent"
-                  title="Edit demo name"
-                >
-                  <Edit3 className="h-3 w-3" />
-                </Button>
+              {isEditingTitle ? (
+                <>
+                  <Input
+                    ref={inputRef}
+                    value={editingTitleValue}
+                    placeholder="Enter demo name"
+                    onChange={(e) => setEditingTitleValue(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    onBlur={handleCancelEdit}
+                    className="h-8 text-sm w-64 font-sans border border-border focus-visible:border-ring focus-visible:ring-0"
+                  />
+                  <Button
+                    onMouseDown={(e) => {
+                      e.preventDefault(); // Prevent input blur when clicking save
+                      handleSaveTitle();
+                    }}
+                    disabled={!!savingTitle || !!savingDemo}
+                    variant="outline"
+                    size="sm"
+                    className={`font-sans ${savingTitle ? "opacity-60" : ""}`}
+                    data-testid="title-save-button"
+                  >
+                    {savingTitle ? (
+                      "Saving..."
+                    ) : (
+                      <>
+                        <Check className="h-3 w-3 mr-1" />
+                        Save
+                      </>
+                    )}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <h1 className="text-lg font-medium text-foreground font-sans">{demoName || "Untitled Demo"}</h1>
+                  <Button
+                    onClick={handleEditTitle}
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0 font-sans hover:bg-accent"
+                    title="Edit demo name"
+                  >
+                    <Edit3 className="h-3 w-3" />
+                  </Button>
+                </>
               )}
             </>
           )}
@@ -164,11 +166,42 @@ export default function EditorHeader(props: EditorHeaderProps) {
 
         {/* Right: Action Buttons */}
         <div className="flex items-center gap-3">
-          {/* Primary Actions - Swapped order: Preview first, then Save */}
-          <Button data-testid="preview-button" onClick={() => onPreview()} variant="outline" className="font-sans">
-            <Eye className="h-4 w-4 mr-2" />
-            Preview
-          </Button>
+          {/* Primary Actions - Show appropriate button based on status and demoId */}
+          {demoStatus === "PUBLISHED" ? (
+            // Published: Show Copy button
+            <>
+              {onOpenShareDialog && (
+                <Button
+                  data-testid="share-button"
+                  onClick={() => onOpenShareDialog()}
+                  variant="outline"
+                  className="font-sans"
+                  title="Copy embed code and public link"
+                >
+                  <Copy className="h-4 w-4 mr-2" />
+                  Copy
+                </Button>
+              )}
+            </>
+          ) : demoId ? (
+            // Draft with demoId: Show Publish button
+            <Button
+              data-testid="publish-button"
+              onClick={() => onToggleStatus()}
+              disabled={!!togglingStatus || !!savingDemo}
+              variant="outline"
+              className="font-sans"
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Publish
+            </Button>
+          ) : (
+            // No demoId (unsaved): Show Preview button
+            <Button data-testid="preview-button" onClick={() => onPreview()} variant="outline" className="font-sans">
+              <Eye className="h-4 w-4 mr-2" />
+              Preview
+            </Button>
+          )}
 
           <Button
             data-testid="main-save-button"
@@ -207,18 +240,30 @@ export default function EditorHeader(props: EditorHeaderProps) {
 
                 <DropdownMenuSeparator />
 
-                {/* Publishing Actions */}
-                <DropdownMenuItem
-                  onClick={() => onToggleStatus()}
-                  disabled={!!togglingStatus || !!savingDemo}
-                  className="font-sans"
-                >
-                  <Upload className="h-4 w-4 mr-2" />
-                  {demoStatus === "PUBLISHED" ? "Unpublish" : "Publish"}
-                </DropdownMenuItem>
+                {/* Preview - only show in dropdown for DRAFT with demoId */}
+                {demoStatus === "DRAFT" && (
+                  <>
+                    <DropdownMenuItem onClick={() => onPreview()} className="font-sans">
+                      <Eye className="h-4 w-4 mr-2" />
+                      Preview
+                    </DropdownMenuItem>
 
+                    <DropdownMenuSeparator />
+                  </>
+                )}
+
+                {/* Publishing Actions - only show Unpublish in dropdown when published */}
                 {demoStatus === "PUBLISHED" && (
                   <>
+                    <DropdownMenuItem
+                      onClick={() => onToggleStatus()}
+                      disabled={!!togglingStatus || !!savingDemo}
+                      className="font-sans"
+                    >
+                      <Upload className="h-4 w-4 mr-2" />
+                      Unpublish
+                    </DropdownMenuItem>
+
                     <DropdownMenuItem onClick={() => onCopyPublicUrl()} className="font-sans">
                       <Link className="h-4 w-4 mr-2" />
                       Copy URL
@@ -230,12 +275,6 @@ export default function EditorHeader(props: EditorHeaderProps) {
                     </DropdownMenuItem>
 
                     <DropdownMenuSeparator />
-
-                    {/* Blog Preview */}
-                    <DropdownMenuItem onClick={() => onOpenBlogPreview()} className="font-sans">
-                      <Eye className="h-4 w-4 mr-2" />
-                      Blog Preview
-                    </DropdownMenuItem>
                   </>
                 )}
 

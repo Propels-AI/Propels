@@ -76,7 +76,7 @@ describe("DemoEditorPage Tooltip Inspector", () => {
 
     // Verify initial state - Steps tab should be active
     const stepsTab = screen.getByRole("tab", { name: /steps/i });
-    const tooltipTab = screen.getByRole("tab", { name: /tooltip/i });
+    const tooltipTab = screen.getByRole("tab", { name: /style/i });
     
     expect(stepsTab).toHaveAttribute("aria-selected", "true");
     expect(tooltipTab).toHaveAttribute("aria-selected", "false");

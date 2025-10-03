@@ -92,19 +92,27 @@ describe("PublicDemoPlayer", () => {
 
     const first = renderAt("demo-pub");
 
-    // Wait for loading to finish and header to show demo name
-    await waitFor(() => expect(screen.getByText(/My Public Demo/i)).toBeInTheDocument());
+    // Wait for loading to finish - check for navigation buttons
+    await waitFor(() => expect(screen.getByRole("button", { name: /previous step/i })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: /next step/i })).toBeInTheDocument());
 
-    // Total should include one virtual lead step at index 1 (so +1)
-    await waitFor(() => expect(screen.getByText(/Step 1 of 3/i)).toBeInTheDocument());
+    // Check that progress bar exists and shows initial progress (33.33% for step 1 of 3)
+    await waitFor(() => {
+      const progressBar = document.querySelector('.bg-blue-600');
+      expect(progressBar).toBeInTheDocument();
+      expect(progressBar).toHaveStyle({ width: '33.33333333333333%' });
+    });
 
-    // Jump to lead via query override and assert lead step container is shown (white container with LeadCaptureOverlay)
-    // We can't easily select the inner overlay, but we can assert the total still includes the lead step
+    // Jump to lead via query override and navigate to it
     first.unmount();
     renderAt("demo-pub", "?leadAt=2");
     // Initially still at Step 1 (currentIndex 0). Click Next to move to lead step (index 1)
-    const next = await screen.findByRole("button", { name: /next/i });
+    const next = await screen.findByRole("button", { name: /next step/i });
     fireEvent.click(next);
-    await waitFor(() => expect(screen.getByText(/Step 2 of 3/i)).toBeInTheDocument());
+    // Check progress bar shows 66.67% (step 2 of 3)
+    await waitFor(() => {
+      const progressBar = document.querySelector('.bg-blue-600');
+      expect(progressBar).toHaveStyle({ width: '66.66666666666666%' });
+    });
   });
 });
