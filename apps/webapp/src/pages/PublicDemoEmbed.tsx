@@ -62,9 +62,6 @@ export default function PublicDemoEmbed() {
     region,
   });
 
-  // Stable step IDs to prevent unnecessary re-renders during data refresh
-  const stepIds = useMemo(() => steps.map(s => s.itemSK).join(','), [steps]);
-  
   const currentHotspots = useMemo(() => {
     if (currentRealIndex < 0) return [] as any[];
     const s = steps[currentRealIndex];
@@ -82,7 +79,7 @@ export default function PublicDemoEmbed() {
       tooltipOffsetXNorm: (h as any).tooltipOffsetXNorm ?? hotspotStyleDefaults.tooltipOffsetXNorm,
       tooltipOffsetYNorm: (h as any).tooltipOffsetYNorm ?? hotspotStyleDefaults.tooltipOffsetYNorm,
     }));
-  }, [stepIds, currentRealIndex, hotspotStyleDefaults]);
+  }, [steps[currentRealIndex]?.hotspots, currentRealIndex, hotspotStyleDefaults]);
 
   if (!demoId)
     return (
