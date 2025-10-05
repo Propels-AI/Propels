@@ -21,7 +21,6 @@ Interested in contributing to Propels? Here’s how to get the development envir
 1.  **Clone the repository:**
     ```sh
     git clone https://github.com/Propels-AI/Propels.git
-    cd Propels/app
     ```
 
 2.  **Install dependencies:**
