@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/Propels-AI/Propels/main/apps/extension/public/icon-dark-128.png" width="128" height="128">
+  <img src="https://raw.githubusercontent.com/Propels-AI/Propels/main/apps/extension/icons/icon-dark-128.png" width="128" height="128">
   <h1>Propels</h1>
   <p>Turn your website visitors into revenue with interactive product demos.</p>
 </div>
