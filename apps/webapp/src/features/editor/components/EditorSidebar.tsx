@@ -447,7 +447,7 @@ export function EditorSidebar({
                                   onUpdateStepZoom(stepId, newZoom);
                                 }
                               }}
-                              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                              className="w-full mt-2"
                             />
                             <div className="text-[10px] text-muted-foreground mt-1 text-center">
                               {steps[selectedStepIndex]?.zoom || 100}%
