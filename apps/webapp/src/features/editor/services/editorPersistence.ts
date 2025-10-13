@@ -1,5 +1,6 @@
 import {
   updateDemoStepHotspots as _updateDemoStepHotspots,
+  updateDemoStepZoom as _updateDemoStepZoom,
   updateDemoLeadConfig as _updateDemoLeadConfig,
   updateDemoStyleConfig as _updateDemoStyleConfig,
   mirrorDemoToPublic as _mirrorDemoToPublic,
@@ -10,8 +11,17 @@ export async function updateDemoStepHotspots(params: {
   demoId: string;
   stepId: string;
   hotspots?: any[];
+  zoom?: number;
 }): Promise<void> {
   return _updateDemoStepHotspots(params as any);
+}
+
+export async function updateDemoStepZoom(params: {
+  demoId: string;
+  stepId: string;
+  zoom: number;
+}): Promise<void> {
+  return _updateDemoStepZoom(params as any);
 }
 
 export async function updateDemoLeadConfig(params: {

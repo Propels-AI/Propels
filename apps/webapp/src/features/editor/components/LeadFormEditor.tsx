@@ -19,7 +19,6 @@ export default function LeadFormEditor(props: {
 
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold mb-3 text-foreground font-sans">Lead Form</h3>
       <div className="space-y-3 text-sm text-foreground font-sans">
         <div className="space-y-2">
           <div className="grid grid-cols-2 gap-2">

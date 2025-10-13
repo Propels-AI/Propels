@@ -467,6 +467,7 @@ export async function createPublicDemoStep(params: {
   thumbnailS3Key?: string;
   hotspots?: any;
   ownerId?: string;
+  zoom?: number;
 }): Promise<void> {
   const models = getPublicMirrorWriteModels();
   let ownerId = params.ownerId;
@@ -498,6 +499,9 @@ export async function createPublicDemoStep(params: {
           : undefined,
     ownerId,
   };
+  if (typeof params.zoom === "number") {
+    payload.zoom = params.zoom;
+  }
   Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
   const res = await (models as any).PublicMirror.create(payload);
   const errs = (res as any)?.errors as any[] | undefined;
@@ -659,6 +663,7 @@ export async function mirrorDemoToPublic(
       pageUrl: freshStep.pageUrl,
       thumbnailS3Key: freshStep.thumbnailS3Key,
       hotspots,
+      zoom: freshStep.zoom,
     });
   }
 }
@@ -786,6 +791,7 @@ export async function setDemoStatus(demoId: string, status: "DRAFT" | "PUBLISHED
           pageUrl: step.pageUrl,
           thumbnailS3Key: step.thumbnailS3Key,
           hotspots,
+          zoom: step.zoom,
         });
         console.info("[mirror] step created:", step.itemSK.substring("STEP#".length));
       }
@@ -874,8 +880,9 @@ export async function createDemoStep(params: {
   pageUrl?: string;
   thumbnailS3Key?: string;
   ownerId: string;
+  zoom?: number;
 }): Promise<void> {
-  const { demoId, stepId, s3Key, hotspots, order, pageUrl, thumbnailS3Key, ownerId } = params;
+  const { demoId, stepId, s3Key, hotspots, order, pageUrl, thumbnailS3Key, ownerId, zoom } = params;
   const models = getPrivateModels();
   const payload: Record<string, any> = {
     PK: pkDemo(demoId),
@@ -890,6 +897,9 @@ export async function createDemoStep(params: {
     try {
       payload.hotspots = JSON.stringify(hotspots);
     } catch (e) {}
+  }
+  if (typeof zoom === "number") {
+    payload.zoom = zoom;
   }
   Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
 
@@ -906,8 +916,9 @@ export async function updateDemoStepHotspots(params: {
   demoId: string;
   stepId: string;
   hotspots?: Hotspot[];
+  zoom?: number;
 }): Promise<void> {
-  const { demoId, stepId, hotspots } = params;
+  const { demoId, stepId, hotspots, zoom } = params;
   const models = getPrivateModels();
   const payload: Record<string, any> = {
     PK: pkDemo(demoId),
@@ -918,11 +929,35 @@ export async function updateDemoStepHotspots(params: {
       payload.hotspots = JSON.stringify(hotspots);
     } catch (e) {}
   }
+  if (typeof zoom === "number") {
+    payload.zoom = zoom;
+  }
   const res = await (models as any).AppData.update(payload);
   console.log("[api/demos] updateDemoStepHotspots result", { stepId, res });
   if (!res?.data || (res as any)?.errors?.length) {
     throw new Error(
       `updateDemoStepHotspots failed for ${stepId}: ${(res as any)?.errors?.map((e: any) => e?.message).join(", ") || "no data returned"}`
+    );
+  }
+}
+
+export async function updateDemoStepZoom(params: {
+  demoId: string;
+  stepId: string;
+  zoom: number;
+}): Promise<void> {
+  const { demoId, stepId, zoom } = params;
+  const models = getPrivateModels();
+  const payload: Record<string, any> = {
+    PK: pkDemo(demoId),
+    SK: `STEP#${stepId}`,
+    zoom,
+  };
+  const res = await (models as any).AppData.update(payload);
+  console.log("[api/demos] updateDemoStepZoom result", { stepId, res });
+  if (!res?.data || (res as any)?.errors?.length) {
+    throw new Error(
+      `updateDemoStepZoom failed for ${stepId}: ${(res as any)?.errors?.map((e: any) => e?.message).join(", ") || "no data returned"}`
     );
   }
 }

@@ -7,6 +7,7 @@ export type PublicStep = {
   s3Key?: string;
   thumbnailS3Key?: string;
   pageUrl?: string;
+  zoom?: number;
   hotspots?: Array<{
     id: string;
     x?: number;
@@ -181,6 +182,7 @@ export function usePublicDemo(demoId?: string) {
             s3Key: it.s3Key,
             thumbnailS3Key: it.thumbnailS3Key,
             pageUrl: it.pageUrl,
+            zoom: it.zoom,
             hotspots: it.hotspots ?? [],
           }));
         stepItems.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
