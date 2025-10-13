@@ -30,6 +30,7 @@ export type HotspotOverlayProps = {
   onHotspotClick?: (id: string) => void;
   enableBubbleDrag?: boolean;
   onBubbleDrag?: (id: string, dxNorm: number, dyNorm: number) => void;
+  zoom?: number; // 100-150 representing 100%-150%
 };
 
 export const HotspotOverlay: React.FC<HotspotOverlayProps> = ({
@@ -39,6 +40,7 @@ export const HotspotOverlay: React.FC<HotspotOverlayProps> = ({
   onHotspotClick,
   enableBubbleDrag = false,
   onBubbleDrag,
+  zoom = 100,
 }) => {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -92,6 +94,7 @@ export const HotspotOverlay: React.FC<HotspotOverlayProps> = ({
       left = 0;
       top = (containerH - renderH) / 2;
     }
+
     setBox({ left, top, width: renderW, height: renderH });
   };
 
@@ -100,7 +103,7 @@ export const HotspotOverlay: React.FC<HotspotOverlayProps> = ({
     const onResize = () => measure();
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, [imageUrl]);
+  }, [imageUrl, zoom]);
 
   useEffect(() => {
     if (!enableBubbleDrag) return;
@@ -112,8 +115,9 @@ export const HotspotOverlay: React.FC<HotspotOverlayProps> = ({
       const mouseY = e.clientY - rect.top;
       const dxPx = mouseX - dragRef.current.centerX;
       const dyPx = mouseY - dragRef.current.centerY;
-      const dxNorm = Math.max(-1, Math.min(1, dxPx / box.width));
-      const dyNorm = Math.max(-1, Math.min(1, dyPx / box.height));
+      // Divide by zoomLevel to normalize the movement relative to the zoomed image
+      const dxNorm = Math.max(-1, Math.min(1, dxPx / (box.width * zoomLevel)));
+      const dyNorm = Math.max(-1, Math.min(1, dyPx / (box.height * zoomLevel)));
       onBubbleDrag?.(dragRef.current.id, dxNorm, dyNorm);
     };
     const onUp = () => {
@@ -177,18 +181,40 @@ export const HotspotOverlay: React.FC<HotspotOverlayProps> = ({
     [first]
   );
 
+  // Calculate transform origin for zoom
+  const zoomLevel = zoom / 100;
+  const transformOrigin = useMemo(() => {
+    if (hotspots.length > 0 && hotspots[0].xNorm !== undefined && hotspots[0].yNorm !== undefined) {
+      // Use first hotspot as focal point
+      return `${hotspots[0].xNorm * 100}% ${hotspots[0].yNorm * 100}%`;
+    }
+    // Default to center
+    return "50% 50%";
+  }, [hotspots]);
+
   return (
     <div ref={wrapperRef} className={className}>
-      <div className="relative w-full h-full">
+      <div
+        className="relative w-full h-full flex items-center justify-center"
+        style={{
+          overflow: "hidden",
+        }}
+      >
         {imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            ref={imgRef}
-            src={imageUrl}
-            alt="Step"
-            className="absolute inset-0 w-full h-full object-contain"
-            onLoad={measure}
-          />
+          <>
+            <img
+              ref={imgRef}
+              src={imageUrl}
+              alt="Step"
+              className="absolute inset-0 w-full h-full object-contain"
+              style={{
+                // Apply zoom transformation only to the image
+                transform: `scale(${zoomLevel})`,
+                transformOrigin,
+              }}
+              onLoad={measure}
+            />
+          </>
         ) : (
           <span className="text-gray-500">No image</span>
         )}
@@ -199,8 +225,19 @@ export const HotspotOverlay: React.FC<HotspotOverlayProps> = ({
           const dotSize = Math.max(6, Math.min(48, Number((h as any).dotSize ?? defaultSize)));
 
           if (box && typeof h.xNorm === "number" && typeof h.yNorm === "number") {
-            const left = box.left + h.xNorm * box.width - dotSize / 2;
-            const top = box.top + h.yNorm * box.height - dotSize / 2;
+            // Calculate base position
+            const baseLeft = box.left + h.xNorm * box.width - dotSize / 2;
+            const baseTop = box.top + h.yNorm * box.height - dotSize / 2;
+
+            // Apply zoom offset to align with zoomed image
+            // The image scales from its transform-origin, so we need to calculate the offset
+            const originX = box.left + (hotspots[0]?.xNorm || 0.5) * box.width;
+            const originY = box.top + (hotspots[0]?.yNorm || 0.5) * box.height;
+
+            // Calculate zoomed position
+            const left = originX + (baseLeft - originX) * zoomLevel;
+            const top = originY + (baseTop - originY) * zoomLevel;
+
             style.left = `${left}px`;
             style.top = `${top}px`;
             // Don't set width/height on parent - it constrains the tooltip bubble
@@ -237,17 +274,26 @@ export const HotspotOverlay: React.FC<HotspotOverlayProps> = ({
           let bubbleLeft = 0;
           let bubbleTop = 0;
           if (box && typeof h.xNorm === "number" && typeof h.yNorm === "number") {
-            const left = box.left + h.xNorm * box.width - dotSize / 2;
-            const top = box.top + h.yNorm * box.height - dotSize / 2;
-            const centerX = left + dotSize / 2;
-            const centerY = top + dotSize / 2;
+            // Calculate base positions
+            const baseLeft = box.left + h.xNorm * box.width - dotSize / 2;
+            const baseTop = box.top + h.yNorm * box.height - dotSize / 2;
+            const centerX = baseLeft + dotSize / 2;
+            const centerY = baseTop + dotSize / 2;
+
+            // Apply zoom offset to align with zoomed image
+            const originX = box.left + (hotspots[0]?.xNorm || 0.5) * box.width;
+            const originY = box.top + (hotspots[0]?.yNorm || 0.5) * box.height;
+            const zoomedCenterX = originX + (centerX - originX) * zoomLevel;
+            const zoomedCenterY = originY + (centerY - originY) * zoomLevel;
+
             const dxNorm = (h as any).tooltipOffsetXNorm;
             const dyNorm = (h as any).tooltipOffsetYNorm;
             // Match editor defaults: place bubble to the right (dotSize + 6) and slightly above (-8)
-            const dxPx = typeof dxNorm === "number" ? dxNorm * box.width : dotSize + 6;
-            const dyPx = typeof dyNorm === "number" ? dyNorm * box.height : -8;
-            bubbleLeft = centerX + dxPx;
-            bubbleTop = centerY + dyPx;
+            // Apply zoom to the offset distances
+            const dxPx = typeof dxNorm === "number" ? dxNorm * box.width * zoomLevel : (dotSize + 6) * zoomLevel;
+            const dyPx = typeof dyNorm === "number" ? dyNorm * box.height * zoomLevel : -8 * zoomLevel;
+            bubbleLeft = zoomedCenterX + dxPx;
+            bubbleTop = zoomedCenterY + dyPx;
           } else if (!box && typeof h.x === "number" && typeof h.y === "number") {
             const centerX = Number(h.x) + dotSize / 2;
             const centerY = Number(h.y) + dotSize / 2;
@@ -294,10 +340,15 @@ export const HotspotOverlay: React.FC<HotspotOverlayProps> = ({
                       if (!enableBubbleDrag || !box) return;
                       e.stopPropagation();
                       (e.currentTarget as HTMLDivElement).classList.add("cursor-grabbing");
-                      const left = box.left + (h.xNorm ?? 0) * box.width - dotSize / 2;
-                      const top = box.top + (h.yNorm ?? 0) * box.height - dotSize / 2;
-                      const centerX = left + dotSize / 2;
-                      const centerY = top + dotSize / 2;
+
+                      // Calculate zoomed position for drag reference
+                      const baseLeft = box.left + (h.xNorm ?? 0) * box.width - dotSize / 2;
+                      const baseTop = box.top + (h.yNorm ?? 0) * box.height - dotSize / 2;
+                      const originX = box.left + (hotspots[0]?.xNorm || 0.5) * box.width;
+                      const originY = box.top + (hotspots[0]?.yNorm || 0.5) * box.height;
+                      const centerX = originX + (baseLeft + dotSize / 2 - originX) * zoomLevel;
+                      const centerY = originY + (baseTop + dotSize / 2 - originY) * zoomLevel;
+
                       dragRef.current = { id: h.id, centerX, centerY, el: e.currentTarget as HTMLDivElement };
                       (dragRef as any).start?.();
                     }}

@@ -18,6 +18,7 @@ interface EditorSidebarProps {
     screenshotUrl?: string;
     isLeadCapture?: boolean;
     leadBg?: "white" | "black";
+    zoom?: number;
   }>;
   loadingSteps: boolean;
   selectedStepIndex: number;
@@ -34,6 +35,7 @@ interface EditorSidebarProps {
   onDeleteStep: (index: number) => void;
   onDuplicateStep: (index: number) => void;
   onReorderSteps: (fromIndex: number, toIndex: number) => void;
+  onUpdateStepZoom: (stepId: string, zoom: number) => void;
 }
 
 export function EditorSidebar({
@@ -53,6 +55,7 @@ export function EditorSidebar({
   onDeleteStep,
   onDuplicateStep,
   onReorderSteps,
+  onUpdateStepZoom,
 }: EditorSidebarProps) {
   const [leadUiOpen, setLeadUiOpen] = React.useState(false);
   const [leadInsertAnchor, setLeadInsertAnchor] = React.useState(1);
@@ -418,11 +421,44 @@ export function EditorSidebar({
                       </div>
                     ))}
                   </div>
-                </TabsContent>
+
+                  </TabsContent>
 
                 <TabsContent value="tooltip" className="mt-4 space-y-4">
                   <div className="space-y-4">
                     <h3 className="text-lg font-semibold text-foreground">Style</h3>
+
+                    {/* Step Zoom Control */}
+                    {!isCurrentLeadStep && steps.length > 0 && selectedStepIndex < steps.length && (
+                      <div className="p-3 bg-card border border-border rounded-lg">
+                        <div className="space-y-3">
+                          <Label className="text-xs text-muted-foreground">Step Zoom</Label>
+                          <div>
+                            <input
+                              type="range"
+                              min={100}
+                              max={150}
+                              step={5}
+                              value={steps[selectedStepIndex]?.zoom || 100}
+                              onChange={(e) => {
+                                const newZoom = Number(e.target.value);
+                                const stepId = steps[selectedStepIndex]?.id;
+                                if (stepId) {
+                                  onUpdateStepZoom(stepId, newZoom);
+                                }
+                              }}
+                              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                            />
+                            <div className="text-[10px] text-muted-foreground mt-1 text-center">
+                              {steps[selectedStepIndex]?.zoom || 100}%
+                            </div>
+                          </div>
+                          <div className="text-[9px] text-muted-foreground">
+                            Zoom in to highlight specific areas (100%-150%)
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     {isCurrentLeadStep ? (
                       <div className="text-xs text-muted-foreground">Lead capture step has no hotspots.</div>

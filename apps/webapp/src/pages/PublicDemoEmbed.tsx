@@ -154,8 +154,16 @@ export default function PublicDemoEmbed() {
   };
 
   return (
-    <div className="w-full bg-transparent">
-      <div className="relative w-full" style={{ aspectRatio: forcedAspect || naturalAspect || "16 / 10" }}>
+    <div className="w-full bg-transparent overflow-hidden">
+      <div
+        className="relative w-full"
+        style={{
+          aspectRatio: forcedAspect || naturalAspect || "16 / 10",
+          // Prevent scrolling when zoomed in
+          maxHeight: "100vh",
+          overflow: "hidden"
+        }}
+      >
         {isLeadDisplayIndex ? (
           <>
             <LeadCaptureOverlay
@@ -189,6 +197,7 @@ export default function PublicDemoEmbed() {
             className="absolute inset-0 w-full h-full"
             imageUrl={resolvedSrc}
             hotspots={currentHotspots as any}
+            zoom={current?.zoom || 100}
             onHotspotClick={() => go(1)}
           />
         )}

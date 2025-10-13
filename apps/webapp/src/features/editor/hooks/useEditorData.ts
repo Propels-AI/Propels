@@ -34,6 +34,7 @@ export type EditorStep = {
   thumbnailS3Key?: string;
   isLeadCapture?: boolean;
   leadBg?: "white" | "black";
+  zoom?: number;
 };
 
 export function useEditorData(demoId?: string) {
@@ -121,6 +122,7 @@ export function useEditorData(demoId?: string) {
               screenshotUrl,
               s3Key: si.s3Key,
               thumbnailS3Key: si.thumbnailS3Key,
+              zoom: si.zoom,
             });
             if (si.hotspots) {
               try {

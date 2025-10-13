@@ -23,7 +23,7 @@ export type EditedDraft = {
   draftId: string;
   createdAt: string;
   name?: string;
-  steps: Array<{ id: string; pageUrl: string; order: number }>;
+  steps: Array<{ id: string; pageUrl: string; order: number; zoom?: number }>;
   hotspotsByStep: Record<string, Hotspot[]>;
   // Optional lead-capture metadata
   leadStepIndex?: number | null;
@@ -125,6 +125,7 @@ export async function syncAnonymousDemo(options?: {
         order: s.order,
         pageUrl: s.pageUrl,
         ownerId: dataOwnerId,
+        zoom: s.zoom, // Include zoom data when creating the step
       });
       console.log("[sync] Created step record", { stepId: s.id, order: s.order });
       created++;

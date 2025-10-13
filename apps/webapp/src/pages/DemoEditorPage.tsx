@@ -3,7 +3,7 @@ import { useKeyboardShortcut } from "@/hooks/useKeyboardShortcut";
 import { syncAnonymousDemo, type EditedDraft } from "../lib/services/syncAnonymousDemo";
 import { useAuth } from "@/lib/providers/AuthProvider";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { deleteDemo, renameDemo, setDemoStatus, createDemoStep, getOwnerId } from "@/lib/api/demos";
+import { deleteDemo, renameDemo, setDemoStatus, createDemoStep, getOwnerId, updateDemoStepZoom } from "@/lib/api/demos";
 import { trackEditorEntered, trackDemoSaved } from "@/lib/analytics";
 import {
   updateDemoStepHotspots,
@@ -57,6 +57,8 @@ export function DemoEditorPage() {
       // Lead capture step flags
       isLeadCapture?: boolean;
       leadBg?: "white" | "black";
+      // Zoom level (100-150 representing 100%-150%)
+      zoom?: number;
     }>
   >([]);
   const [selectedStepIndex, setSelectedStepIndex] = useState<number>(0);
@@ -421,7 +423,12 @@ export function DemoEditorPage() {
       draftId: (crypto as any).randomUUID ? (crypto as any).randomUUID() : `${Date.now()}`,
       createdAt: new Date().toISOString(),
       name: undefined,
-      steps: steps.map((s, idx) => ({ id: s.id, pageUrl: s.pageUrl, order: idx })),
+      steps: steps.map((s, idx) => ({
+        id: s.id,
+        pageUrl: s.pageUrl,
+        order: idx,
+        zoom: s.zoom // Include zoom data in the draft for anonymous demos
+      })),
       hotspotsByStep: hotspotsByStep,
       leadStepIndex: leadIdxDraft,
       leadConfig: leadFormConfig,
@@ -465,10 +472,21 @@ export function DemoEditorPage() {
               pageUrl: s.pageUrl,
               thumbnailS3Key: (s as any).thumbnailS3Key,
               ownerId,
+              zoom: s.zoom,
             });
           } else {
-            // Existing step - update hotspots only
-            await updateDemoStepHotspots({ demoId: demoIdParam, stepId: s.id, hotspots: hs as any });
+            // Existing step - update hotspots and zoom
+            await updateDemoStepHotspots({
+              demoId: demoIdParam,
+              stepId: s.id,
+              hotspots: hs as any,
+              zoom: s.zoom
+            });
+
+            // Also update zoom separately if it exists
+            if (s.zoom && s.zoom !== 100) {
+              await updateDemoStepZoom({ demoId: demoIdParam, stepId: s.id, zoom: s.zoom });
+            }
           }
         });
         await Promise.all(updates);
@@ -811,6 +829,28 @@ export function DemoEditorPage() {
     });
   };
 
+  const handleUpdateStepZoom = async (stepId: string, zoom: number) => {
+    if (!demoIdParam) {
+      // Update local state for anonymous demos
+      setSteps((prevSteps) =>
+        prevSteps.map((step) => (step.id === stepId ? { ...step, zoom } : step))
+      );
+      return;
+    }
+
+    // Update backend for saved demos
+    try {
+      await updateDemoStepZoom({ demoId: demoIdParam, stepId, zoom });
+      // Update local state
+      setSteps((prevSteps) =>
+        prevSteps.map((step) => (step.id === stepId ? { ...step, zoom } : step))
+      );
+    } catch (e) {
+      console.error("Failed to update step zoom:", e);
+      alert("Failed to update zoom. Please try again.");
+    }
+  };
+
   return (
     <div className="min-h-screen flex">
       <EditorSidebar
@@ -884,6 +924,7 @@ export function DemoEditorPage() {
             return next;
           });
         }}
+        onUpdateStepZoom={handleUpdateStepZoom}
       />
       <div className="flex-1 p-8">
         <EditorHeader
@@ -1035,6 +1076,7 @@ export function DemoEditorPage() {
                 imageUrl={steps[selectedStepIndex]?.screenshotUrl}
                 hotspots={currentHotspots as any}
                 enableBubbleDrag
+                zoom={steps[selectedStepIndex]?.zoom || 100}
                 onBubbleDrag={(id, dxNorm, dyNorm) => {
                   setHotspotsByStep((prev) => {
                     if (!currentStepId) return prev;
@@ -1052,25 +1094,61 @@ export function DemoEditorPage() {
                 }}
               />
             ) : (
-              <img
-                src={steps[selectedStepIndex]?.screenshotUrl}
-                alt={`Step ${selectedStepIndex + 1}`}
-                onLoad={(e) => {
-                  setImageLoading(false);
-                  try {
-                    const img = e.currentTarget as HTMLImageElement;
-                    const w = img.naturalWidth || img.width || 0;
-                    const h = img.naturalHeight || img.height || 0;
-                    if (w > 0 && h > 0) setNaturalSize({ w, h });
-                  } catch {}
+              <div
+                className="absolute inset-0 w-full h-full flex items-center justify-center"
+                style={{
+                  overflow: "hidden",
                 }}
-                onError={() => setImageLoading(false)}
-                className={`absolute inset-0 w-full h-full object-contain select-none ${
-                  imageLoading ? "opacity-50" : "opacity-100"
-                }`}
-                draggable={false}
-                onDragStart={(e) => e.preventDefault()}
-              />
+              >
+                <div
+                  style={{
+                    // Apply zoom transformation only to the image container
+                    transform: `scale(${(steps[selectedStepIndex]?.zoom || 100) / 100})`,
+                    // Set transform-origin based on hotspot position or center
+                    transformOrigin: (() => {
+                      const currentHotspots = currentStepId ? (hotspotsByStep[currentStepId] ?? []) : [];
+                      const zoomLevel = (steps[selectedStepIndex]?.zoom || 100) / 100;
+
+                      if (currentHotspots.length > 0 && naturalSize) {
+                        // Use first hotspot as focal point
+                        const hotspot = currentHotspots[0];
+                        if (hotspot.xNorm !== undefined && hotspot.yNorm !== undefined) {
+                          // Calculate focal point as percentage of image dimensions
+                          return `${hotspot.xNorm * 100}% ${hotspot.yNorm * 100}%`;
+                        }
+                      }
+
+                      // Default to center if no hotspots
+                      return "50% 50%";
+                    })(),
+                  }}
+                >
+                  <img
+                    src={steps[selectedStepIndex]?.screenshotUrl}
+                    alt={`Step ${selectedStepIndex + 1}`}
+                    onLoad={(e) => {
+                      setImageLoading(false);
+                      try {
+                        const img = e.currentTarget as HTMLImageElement;
+                        const w = img.naturalWidth || img.width || 0;
+                        const h = img.naturalHeight || img.height || 0;
+                        if (w > 0 && h > 0) setNaturalSize({ w, h });
+                      } catch {}
+                    }}
+                    onError={() => setImageLoading(false)}
+                    className={`select-none ${
+                      imageLoading ? "opacity-50" : "opacity-100"
+                    }`}
+                    draggable={false}
+                    onDragStart={(e) => e.preventDefault()}
+                    style={{
+                      maxWidth: "100%",
+                      maxHeight: "100%",
+                      objectFit: "contain",
+                    }}
+                  />
+                </div>
+              </div>
             )
           ) : demoIdParam && !loadingSteps ? (
             <span className="text-gray-500 text-sm">No steps found for this demo or unable to load images.</span>
@@ -1106,10 +1184,35 @@ export function DemoEditorPage() {
               const containerRect = imageRef.current?.getBoundingClientRect();
               let centerX = 0;
               let centerY = 0;
+              const zoomLevel = (steps[selectedStepIndex]?.zoom || 100) / 100;
+
               if (hotspot.xNorm !== undefined && hotspot.yNorm !== undefined && containerRect && naturalSize) {
                 const rr = computeRenderRect(containerRect.width, containerRect.height, naturalSize.w, naturalSize.h);
-                centerX = rr.x + hotspot.xNorm * rr.w;
-                centerY = rr.y + hotspot.yNorm * rr.h;
+
+                // Calculate base position
+                const baseX = rr.x + hotspot.xNorm * rr.w;
+                const baseY = rr.y + hotspot.yNorm * rr.h;
+
+                // Apply zoom offset to align with zoomed image
+                // The image scales from its transform-origin, so we need to calculate the offset
+                const transformOrigin = (() => {
+                  const currentHotspots = currentStepId ? (hotspotsByStep[currentStepId] ?? []) : [];
+                  if (currentHotspots.length > 0 && naturalSize) {
+                    const originHotspot = currentHotspots[0];
+                    if (originHotspot.xNorm !== undefined && originHotspot.yNorm !== undefined) {
+                      return {
+                        x: rr.x + originHotspot.xNorm * rr.w,
+                        y: rr.y + originHotspot.yNorm * rr.h
+                      };
+                    }
+                  }
+                  // Default to center
+                  return { x: containerRect.width / 2, y: containerRect.height / 2 };
+                })();
+
+                // Calculate zoomed position
+                centerX = transformOrigin.x + (baseX - transformOrigin.x) * zoomLevel;
+                centerY = transformOrigin.y + (baseY - transformOrigin.y) * zoomLevel;
               } else if (typeof hotspot.x === "number" && typeof hotspot.y === "number") {
                 centerX = hotspot.x + (hotspot.width || 0) / 2;
                 centerY = hotspot.y + (hotspot.height || 0) / 2;
@@ -1117,27 +1220,21 @@ export function DemoEditorPage() {
               const dotSize = Math.max(6, Math.min(48, Number(hotspot.dotSize ?? 12)));
               const offsetXNorm: number | undefined = (hotspot as any).tooltipOffsetXNorm;
               const offsetYNorm: number | undefined = (hotspot as any).tooltipOffsetYNorm;
+              const renderRect = naturalSize ?
+                computeRenderRect(
+                  imageRef.current!.clientWidth,
+                  imageRef.current!.clientHeight,
+                  naturalSize.w,
+                  naturalSize.h
+                ) : { w: 0, h: 0 };
+
               const tooltipLeft =
                 typeof offsetXNorm === "number" && naturalSize
-                  ? centerX +
-                    offsetXNorm *
-                      computeRenderRect(
-                        imageRef.current!.clientWidth,
-                        imageRef.current!.clientHeight,
-                        naturalSize.w,
-                        naturalSize.h
-                      ).w
+                  ? centerX + offsetXNorm * renderRect.w * zoomLevel
                   : centerX + dotSize + 6;
               const tooltipTop =
                 typeof offsetYNorm === "number" && naturalSize
-                  ? centerY +
-                    offsetYNorm *
-                      computeRenderRect(
-                        imageRef.current!.clientWidth,
-                        imageRef.current!.clientHeight,
-                        naturalSize.w,
-                        naturalSize.h
-                      ).h
+                  ? centerY + offsetYNorm * renderRect.h * zoomLevel
                   : centerY - 8;
               const color = hotspot.dotColor || "#2563eb";
               const anim = hotspot.animation || "none";
@@ -1222,13 +1319,14 @@ export function DemoEditorPage() {
                             const startLeft = tooltipLeft;
                             const startTop = tooltipTop;
                             const boxRect = computeRenderRect(rect.width, rect.height, naturalSize.w, naturalSize.h);
+                            const zoomLevel = (steps[selectedStepIndex]?.zoom || 100) / 100;
                             const onMove = (ev: MouseEvent) => {
                               const dx = ev.clientX - startX;
                               const dy = ev.clientY - startY;
                               const newLeft = startLeft + dx;
                               const newTop = startTop + dy;
-                              const dxNorm = (newLeft - centerX) / boxRect.w;
-                              const dyNorm = (newTop - centerY) / boxRect.h;
+                              const dxNorm = (newLeft - centerX) / (boxRect.w * zoomLevel);
+                              const dyNorm = (newTop - centerY) / (boxRect.h * zoomLevel);
                               setHotspotsByStep((prev) => {
                                 const list = Array.isArray(prev[currentStepId!]) ? [...prev[currentStepId!]] : [];
                                 const idx = list.findIndex((h) => h.id === hotspot.id);
