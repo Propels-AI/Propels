@@ -426,60 +426,70 @@ export function EditorSidebar({
 
                 <TabsContent value="tooltip" className="mt-4 space-y-4">
                   <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-foreground">Style</h3>
-
-                    {/* Step Zoom Control */}
-                    {!isCurrentLeadStep && steps.length > 0 && selectedStepIndex < steps.length && (
-                      <div className="p-3 bg-card border border-border rounded-lg">
-                        <div className="space-y-3">
-                          <Label className="text-xs text-muted-foreground">Step Zoom</Label>
-                          <div>
-                            <input
-                              type="range"
-                              min={100}
-                              max={150}
-                              step={5}
-                              value={steps[selectedStepIndex]?.zoom || 100}
-                              onChange={(e) => {
-                                const newZoom = Number(e.target.value);
-                                const stepId = steps[selectedStepIndex]?.id;
-                                if (stepId) {
-                                  onUpdateStepZoom(stepId, newZoom);
-                                }
-                              }}
-                              className="w-full mt-2"
-                            />
-                            <div className="text-[10px] text-muted-foreground mt-1 text-center">
-                              {steps[selectedStepIndex]?.zoom || 100}%
+                    {/* Step Zoom Section */}
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-medium text-foreground">Step Zoom</h4>
+                      {!isCurrentLeadStep && steps.length > 0 && selectedStepIndex < steps.length ? (
+                        <div className="p-3 bg-card border border-border rounded-lg">
+                          <div className="space-y-3">
+                            <div>
+                              <input
+                                type="range"
+                                min={100}
+                                max={150}
+                                step={5}
+                                value={steps[selectedStepIndex]?.zoom || 100}
+                                onChange={(e) => {
+                                  const newZoom = Number(e.target.value);
+                                  const stepId = steps[selectedStepIndex]?.id;
+                                  if (stepId) {
+                                    onUpdateStepZoom(stepId, newZoom);
+                                  }
+                                }}
+                                className="w-full mt-2"
+                              />
+                              <div className="text-[10px] text-muted-foreground mt-1 text-center">
+                                {steps[selectedStepIndex]?.zoom || 100}%
+                              </div>
+                            </div>
+                            <div className="text-[9px] text-muted-foreground">
+                              Adjust the zoom level of your screenshot. Use this to highlight specific areas or make details more visible for users.
                             </div>
                           </div>
-                          <div className="text-[9px] text-muted-foreground">
-                            Zoom in to highlight specific areas (100%-150%)
-                          </div>
                         </div>
-                      </div>
-                    )}
+                      ) : (
+                        <div className="text-xs text-muted-foreground">
+                          {isCurrentLeadStep ? "Lead capture step has no zoom control." : "No steps available for zoom control."}
+                        </div>
+                      )}
+                    </div>
 
-                    {isCurrentLeadStep ? (
-                      <div className="text-xs text-muted-foreground">Lead capture step has no hotspots.</div>
-                    ) : currentHotspots.length === 0 ? (
-                      <div className="text-xs text-muted-foreground">
-                        No tooltip on this step. Click on the image to add one.
-                      </div>
-                    ) : (
-                      <div className="space-y-3 text-sm">
-                        <Tabs
-                          value={inspectorTab}
-                          onValueChange={(value) => setInspectorTab(value as "fill" | "stroke")}
-                        >
-                          <TabsList className="grid w-full grid-cols-2">
-                            <TabsTrigger value="fill" className="text-xs">
-                              Dot
-                            </TabsTrigger>
-                            <TabsTrigger value="stroke" className="text-xs">
-                              Text
-                            </TabsTrigger>
-                          </TabsList>
+                    {/* Line Divider */}
+                    <div className="border-t border-border" />
+
+                    {/* Tooltip Styling Section */}
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-medium text-foreground">Tooltip Styling</h4>
+                      {isCurrentLeadStep ? (
+                        <div className="text-xs text-muted-foreground">Lead capture step has no hotspots.</div>
+                      ) : currentHotspots.length === 0 ? (
+                        <div className="text-xs text-muted-foreground">
+                          No tooltip on this step. Click on the image to add one.
+                        </div>
+                      ) : (
+                        <div className="space-y-3 text-sm">
+                          <Tabs
+                            value={inspectorTab}
+                            onValueChange={(value) => setInspectorTab(value as "fill" | "stroke")}
+                          >
+                            <TabsList className="grid w-full grid-cols-2">
+                              <TabsTrigger value="fill" className="text-xs">
+                                Dot
+                              </TabsTrigger>
+                              <TabsTrigger value="stroke" className="text-xs">
+                                Text
+                              </TabsTrigger>
+                            </TabsList>
 
                           <TabsContent value="fill" className="mt-3 space-y-3">
                             <div>
@@ -585,6 +595,7 @@ export function EditorSidebar({
                         </Tabs>
                       </div>
                     )}
+                    </div>
                   </div>
                 </TabsContent>
 
