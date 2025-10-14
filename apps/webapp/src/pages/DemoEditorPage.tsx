@@ -440,7 +440,7 @@ export function DemoEditorPage() {
         id: s.id,
         pageUrl: s.pageUrl,
         order: idx,
-        zoom: s.zoom // Include zoom data in the draft for anonymous demos
+        zoom: s.zoom, // Include zoom data in the draft for anonymous demos
       })),
       hotspotsByStep: hotspotsByStep,
       leadStepIndex: leadIdxDraft,
@@ -493,7 +493,7 @@ export function DemoEditorPage() {
               demoId: demoIdParam,
               stepId: s.id,
               hotspots: hs as any,
-              zoom: s.zoom
+              zoom: s.zoom,
             });
 
             // Also update zoom separately if it exists
@@ -845,9 +845,7 @@ export function DemoEditorPage() {
   const handleUpdateStepZoom = async (stepId: string, zoom: number) => {
     if (!demoIdParam) {
       // Update local state for anonymous demos
-      setSteps((prevSteps) =>
-        prevSteps.map((step) => (step.id === stepId ? { ...step, zoom } : step))
-      );
+      setSteps((prevSteps) => prevSteps.map((step) => (step.id === stepId ? { ...step, zoom } : step)));
       return;
     }
 
@@ -855,9 +853,7 @@ export function DemoEditorPage() {
     try {
       await updateDemoStepZoom({ demoId: demoIdParam, stepId, zoom });
       // Update local state
-      setSteps((prevSteps) =>
-        prevSteps.map((step) => (step.id === stepId ? { ...step, zoom } : step))
-      );
+      setSteps((prevSteps) => prevSteps.map((step) => (step.id === stepId ? { ...step, zoom } : step)));
     } catch (e) {
       console.error("Failed to update step zoom:", e);
       alert("Failed to update zoom. Please try again.");
@@ -1149,9 +1145,7 @@ export function DemoEditorPage() {
                       } catch {}
                     }}
                     onError={() => setImageLoading(false)}
-                    className={`select-none ${
-                      imageLoading ? "opacity-50" : "opacity-100"
-                    }`}
+                    className={`select-none ${imageLoading ? "opacity-50" : "opacity-100"}`}
                     draggable={false}
                     onDragStart={(e) => e.preventDefault()}
                     style={{
@@ -1215,7 +1209,7 @@ export function DemoEditorPage() {
                     if (originHotspot.xNorm !== undefined && originHotspot.yNorm !== undefined) {
                       return {
                         x: rr.x + originHotspot.xNorm * rr.w,
-                        y: rr.y + originHotspot.yNorm * rr.h
+                        y: rr.y + originHotspot.yNorm * rr.h,
                       };
                     }
                   }
@@ -1233,13 +1227,14 @@ export function DemoEditorPage() {
               const dotSize = Math.max(6, Math.min(48, Number(hotspot.dotSize ?? 12)));
               const offsetXNorm: number | undefined = (hotspot as any).tooltipOffsetXNorm;
               const offsetYNorm: number | undefined = (hotspot as any).tooltipOffsetYNorm;
-              const renderRect = naturalSize ?
-                computeRenderRect(
-                  imageRef.current!.clientWidth,
-                  imageRef.current!.clientHeight,
-                  naturalSize.w,
-                  naturalSize.h
-                ) : { w: 0, h: 0 };
+              const renderRect = naturalSize
+                ? computeRenderRect(
+                    imageRef.current!.clientWidth,
+                    imageRef.current!.clientHeight,
+                    naturalSize.w,
+                    naturalSize.h
+                  )
+                : { w: 0, h: 0 };
 
               const tooltipLeft =
                 typeof offsetXNorm === "number" && naturalSize
@@ -1522,6 +1517,19 @@ export function DemoEditorPage() {
           </div>
         </UIDialogContent>
       </UIDialog>
+      {savingDemo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
+          <div className="bg-white rounded-lg p-6 shadow-xl">
+            <div className="flex items-center gap-3">
+              <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+              <div>
+                <div className="font-medium text-gray-900">Saving your demo...</div>
+                <div className="text-sm text-gray-500">Please wait while we save your changes</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <DeleteDemoModal
         isOpen={deleteModalOpen}
