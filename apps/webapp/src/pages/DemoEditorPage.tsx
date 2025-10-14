@@ -1519,14 +1519,9 @@ export function DemoEditorPage() {
       </UIDialog>
       {savingDemo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
-          <div className="bg-white rounded-lg p-6 shadow-xl">
-            <div className="flex items-center gap-3">
-              <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
-              <div>
-                <div className="font-medium text-gray-900">Saving your demo...</div>
-                <div className="text-sm text-gray-500">Please wait while we save your changes</div>
-              </div>
-            </div>
+          <div className="bg-background border rounded-lg shadow-lg px-4 py-3 flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <div className="text-sm text-foreground">Saving your demo...</div>
           </div>
         </div>
       )}
