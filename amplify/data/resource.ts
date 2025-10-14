@@ -34,6 +34,7 @@ const schema = a.schema({
       pageUrl: a.string(),
       order: a.integer(),
       hotspots: a.json(),
+      zoom: a.integer(),
 
       // Lead submission fields (owner-readable copy)
       email: a.string(),
@@ -88,6 +89,7 @@ const schema = a.schema({
       hotspotStyle: a.json(),
       leadStepIndex: a.integer(),
       leadConfig: a.json(),
+      zoom: a.integer(),
     })
     .identifier(["PK", "SK"])
     .authorization((allow) => [
