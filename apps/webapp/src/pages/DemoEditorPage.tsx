@@ -1082,7 +1082,7 @@ export function DemoEditorPage() {
                 className="absolute inset-0 w-full h-full"
                 imageUrl={steps[selectedStepIndex]?.screenshotUrl}
                 hotspots={currentHotspots as any}
-                enableBubbleDrag
+                enableBubbleDrag={false}
                 zoom={steps[selectedStepIndex]?.zoom || 100}
                 onBubbleDrag={(id, dxNorm, dyNorm) => {
                   setHotspotsByStep((prev) => {
