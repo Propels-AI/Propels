@@ -206,22 +206,24 @@ export function EditorSidebar({
                 </TabsList>
 
                 <TabsContent value="steps" className="mt-4 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <Button
-                      title="Add lead generation step"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setLeadUiOpen((v) => !v);
-                        const safeLen = Math.max(1, steps.length);
-                        const suggested = Math.min(safeLen, selectedStepIndex + 1);
-                        setLeadInsertAnchor(suggested);
-                        setLeadInsertPos("after");
-                      }}
-                    >
-                      + Lead Form
-                    </Button>
-                  </div>
+                  {!steps.some(s => s.isLeadCapture) && (
+                    <div className="flex items-center justify-between">
+                      <Button
+                        title="Add lead generation step"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setLeadUiOpen((v) => !v);
+                          const safeLen = Math.max(1, steps.length);
+                          const suggested = Math.min(safeLen, selectedStepIndex + 1);
+                          setLeadInsertAnchor(suggested);
+                          setLeadInsertPos("after");
+                        }}
+                      >
+                        + Lead Form
+                      </Button>
+                    </div>
+                  )}
                   {leadUiOpen && (
                     <div className="mb-3 p-3 bg-card border border-border rounded-lg shadow-sm text-xs text-card-foreground">
                       <div className="flex flex-wrap items-center gap-2">
