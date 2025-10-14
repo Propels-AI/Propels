@@ -564,8 +564,7 @@ export function DemoEditorPage() {
         trackDemoSaved(demoIdParam, demoStatus === "PUBLISHED", steps.length);
       } else {
         const { demoId, stepCount } = await syncAnonymousDemo({ inlineDraft: draft });
-        console.log("Saved demo", demoId, "with steps:", stepCount);
-
+  
         // Track demo saved for anonymous users
         trackDemoSaved(demoId, false, steps.length);
 
@@ -1012,8 +1011,7 @@ export function DemoEditorPage() {
           }}
           onDelete={async () => {
             if (!demoIdParam) return;
-            console.log("[DemoEditorPage] Opening delete modal. Demo name:", demoName, "Demo ID:", demoIdParam);
-            setDeleteModalOpen(true);
+              setDeleteModalOpen(true);
           }}
           onCopyPublicUrl={async () => {
             try {
