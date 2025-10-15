@@ -941,11 +941,7 @@ export async function updateDemoStepHotspots(params: {
   }
 }
 
-export async function updateDemoStepZoom(params: {
-  demoId: string;
-  stepId: string;
-  zoom: number;
-}): Promise<void> {
+export async function updateDemoStepZoom(params: { demoId: string; stepId: string; zoom: number }): Promise<void> {
   const { demoId, stepId, zoom } = params;
   const models = getPrivateModels();
   const payload: Record<string, any> = {
@@ -968,21 +964,11 @@ export async function listDemoItems(demoId: string) {
       await fetchAuthSession();
     } catch (e) {}
     try {
-      try {
-        const u = await getCurrentUser();
-        console.debug("[api/demos] identity (username,userId):", (u as any)?.username, (u as any)?.userId);
-      } catch (e) {
-        console.debug("[api/demos] identity unavailable yet", e);
-      }
       const models = getPrivateModels();
       let items: any[] = [];
       let nextToken: any = undefined;
       do {
         const res = await (models as any).AppData.list({ filter: { PK: { eq: pkDemo(demoId) } }, nextToken });
-        console.debug("[api/demos] listDemoItems page (userPool):", {
-          count: (res as any)?.data?.length ?? 0,
-          hasNext: !!(res as any)?.nextToken,
-        });
         const page = ((res as any)?.data ?? []).map((it: any) => {
           // Back-compat: expose itemSK like before the refactor
           if (it && it.itemSK === undefined && typeof it.SK === "string") {
