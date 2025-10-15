@@ -88,13 +88,19 @@ export function EditorSidebar({
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", String(index));
 
-    // Create a custom drag image with rotation effect
+    // Create a custom drag image with appropriate size
     const dragImage = e.currentTarget.cloneNode(true) as HTMLElement;
-    dragImage.style.transform = "rotate(5deg)";
-    dragImage.style.opacity = "0.8";
+    dragImage.style.transform = "rotate(5deg) scale(0.4)";
+    dragImage.style.opacity = "0.9";
     dragImage.style.pointerEvents = "none";
+    dragImage.style.maxWidth = "200px";
+    dragImage.style.maxHeight = "120px";
+    dragImage.style.position = "fixed";
+    dragImage.style.top = "-1000px";
+    dragImage.style.left = "-1000px";
+    dragImage.style.zIndex = "9999";
     document.body.appendChild(dragImage);
-    e.dataTransfer.setDragImage(dragImage, 0, 0);
+    e.dataTransfer.setDragImage(dragImage, 100, 60);
     setTimeout(() => {
       if (document.body.contains(dragImage)) {
         document.body.removeChild(dragImage);
