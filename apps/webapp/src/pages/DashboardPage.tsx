@@ -35,12 +35,9 @@ export function DashboardPage() {
               </Button>
             </div>
           </div>
-
           <div className="mb-8">
-            <p className="text-lg mb-2 text-foreground">Welcome, {user?.username}!</p>
-            <p className="text-muted-foreground">You've successfully signed in with passwordless authentication.</p>
+            <p className="text-lg mb-2 text-foreground">Welcome back! You can find your demos below.</p>
           </div>
-
           <div className="mb-4">
             <div className="inline-flex rounded-lg border border-border bg-card p-1">
               <Button variant={tab === "PUBLISHED" ? "default" : "ghost"} size="sm" onClick={() => setTab("PUBLISHED")}>
