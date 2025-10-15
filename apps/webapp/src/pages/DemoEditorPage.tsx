@@ -224,6 +224,19 @@ export function DemoEditorPage() {
                 });
               } catch (_e) {}
             }
+
+            // Insert lead form as second-to-last step for new demos
+            if (urls.length > 1) {
+              const leadStep = {
+                id: `LEAD-${Date.now()}`,
+                pageUrl: "",
+                screenshotUrl: "",
+                isLeadCapture: true as const,
+                leadBg: "white" as const,
+              };
+              urls.splice(urls.length - 1, 0, leadStep);
+            }
+
             setSteps(urls);
             setSelectedStepIndex(0);
 
@@ -427,7 +440,7 @@ export function DemoEditorPage() {
         id: s.id,
         pageUrl: s.pageUrl,
         order: idx,
-        zoom: s.zoom // Include zoom data in the draft for anonymous demos
+        zoom: s.zoom, // Include zoom data in the draft for anonymous demos
       })),
       hotspotsByStep: hotspotsByStep,
       leadStepIndex: leadIdxDraft,
@@ -480,7 +493,7 @@ export function DemoEditorPage() {
               demoId: demoIdParam,
               stepId: s.id,
               hotspots: hs as any,
-              zoom: s.zoom
+              zoom: s.zoom,
             });
 
             // Also update zoom separately if it exists
@@ -551,8 +564,7 @@ export function DemoEditorPage() {
         trackDemoSaved(demoIdParam, demoStatus === "PUBLISHED", steps.length);
       } else {
         const { demoId, stepCount } = await syncAnonymousDemo({ inlineDraft: draft });
-        console.log("Saved demo", demoId, "with steps:", stepCount);
-
+  
         // Track demo saved for anonymous users
         trackDemoSaved(demoId, false, steps.length);
 
@@ -832,9 +844,7 @@ export function DemoEditorPage() {
   const handleUpdateStepZoom = async (stepId: string, zoom: number) => {
     if (!demoIdParam) {
       // Update local state for anonymous demos
-      setSteps((prevSteps) =>
-        prevSteps.map((step) => (step.id === stepId ? { ...step, zoom } : step))
-      );
+      setSteps((prevSteps) => prevSteps.map((step) => (step.id === stepId ? { ...step, zoom } : step)));
       return;
     }
 
@@ -842,9 +852,7 @@ export function DemoEditorPage() {
     try {
       await updateDemoStepZoom({ demoId: demoIdParam, stepId, zoom });
       // Update local state
-      setSteps((prevSteps) =>
-        prevSteps.map((step) => (step.id === stepId ? { ...step, zoom } : step))
-      );
+      setSteps((prevSteps) => prevSteps.map((step) => (step.id === stepId ? { ...step, zoom } : step)));
     } catch (e) {
       console.error("Failed to update step zoom:", e);
       alert("Failed to update zoom. Please try again.");
@@ -1003,8 +1011,7 @@ export function DemoEditorPage() {
           }}
           onDelete={async () => {
             if (!demoIdParam) return;
-            console.log("[DemoEditorPage] Opening delete modal. Demo name:", demoName, "Demo ID:", demoIdParam);
-            setDeleteModalOpen(true);
+              setDeleteModalOpen(true);
           }}
           onCopyPublicUrl={async () => {
             try {
@@ -1075,7 +1082,7 @@ export function DemoEditorPage() {
                 className="absolute inset-0 w-full h-full"
                 imageUrl={steps[selectedStepIndex]?.screenshotUrl}
                 hotspots={currentHotspots as any}
-                enableBubbleDrag
+                enableBubbleDrag={false}
                 zoom={steps[selectedStepIndex]?.zoom || 100}
                 onBubbleDrag={(id, dxNorm, dyNorm) => {
                   setHotspotsByStep((prev) => {
@@ -1136,9 +1143,7 @@ export function DemoEditorPage() {
                       } catch {}
                     }}
                     onError={() => setImageLoading(false)}
-                    className={`select-none ${
-                      imageLoading ? "opacity-50" : "opacity-100"
-                    }`}
+                    className={`select-none ${imageLoading ? "opacity-50" : "opacity-100"}`}
                     draggable={false}
                     onDragStart={(e) => e.preventDefault()}
                     style={{
@@ -1202,7 +1207,7 @@ export function DemoEditorPage() {
                     if (originHotspot.xNorm !== undefined && originHotspot.yNorm !== undefined) {
                       return {
                         x: rr.x + originHotspot.xNorm * rr.w,
-                        y: rr.y + originHotspot.yNorm * rr.h
+                        y: rr.y + originHotspot.yNorm * rr.h,
                       };
                     }
                   }
@@ -1220,13 +1225,14 @@ export function DemoEditorPage() {
               const dotSize = Math.max(6, Math.min(48, Number(hotspot.dotSize ?? 12)));
               const offsetXNorm: number | undefined = (hotspot as any).tooltipOffsetXNorm;
               const offsetYNorm: number | undefined = (hotspot as any).tooltipOffsetYNorm;
-              const renderRect = naturalSize ?
-                computeRenderRect(
-                  imageRef.current!.clientWidth,
-                  imageRef.current!.clientHeight,
-                  naturalSize.w,
-                  naturalSize.h
-                ) : { w: 0, h: 0 };
+              const renderRect = naturalSize
+                ? computeRenderRect(
+                    imageRef.current!.clientWidth,
+                    imageRef.current!.clientHeight,
+                    naturalSize.w,
+                    naturalSize.h
+                  )
+                : { w: 0, h: 0 };
 
               const tooltipLeft =
                 typeof offsetXNorm === "number" && naturalSize
@@ -1509,6 +1515,14 @@ export function DemoEditorPage() {
           </div>
         </UIDialogContent>
       </UIDialog>
+      {savingDemo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
+          <div className="bg-background border rounded-lg shadow-lg px-4 py-3 flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <div className="text-sm text-foreground">Saving your demo...</div>
+          </div>
+        </div>
+      )}
 
       <DeleteDemoModal
         isOpen={deleteModalOpen}
