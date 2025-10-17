@@ -190,15 +190,15 @@ export function EditorSidebar({
     <>
       <div
         className={cn(
-          "bg-sidebar border-r border-sidebar-border transition-all duration-300 flex flex-col font-sans",
+          "bg-sidebar border-r border-sidebar-border transition-all duration-300 flex flex-col font-sans h-screen max-h-screen",
           isCollapsed ? "w-0" : "w-80"
         )}
       >
         {!isCollapsed && (
           <>
-            {/* Sidebar Header */}
-            <div className="p-4 border-b border-sidebar-border">
-              <Tabs defaultValue="steps" className="w-full">
+            <Tabs defaultValue="steps" className="w-full h-full flex flex-col overflow-hidden">
+              {/* Sidebar Header */}
+              <div className="p-4 border-b border-sidebar-border flex-shrink-0">
                 <TabsList className="grid w-full grid-cols-3">
                   <TabsTrigger value="steps" className="text-[7px] px-1 py-1">
                     Steps
@@ -210,8 +210,11 @@ export function EditorSidebar({
                     Lead Form
                   </TabsTrigger>
                 </TabsList>
+              </div>
 
-                <TabsContent value="steps" className="mt-4 space-y-4">
+              {/* Scrollable Content Area */}
+              <div className="flex-1 overflow-y-auto p-4">
+                <TabsContent value="steps" className="mt-0 space-y-4">
                   {!steps.some(s => s.isLeadCapture) && (
                     <div className="flex items-center justify-between">
                       <Button
@@ -430,7 +433,7 @@ export function EditorSidebar({
                   </div>
                 </TabsContent>
 
-                <TabsContent value="tooltip" className="mt-4 space-y-4">
+                <TabsContent value="tooltip" className="mt-0 space-y-4">
                   <div className="space-y-4">
                     {/* Step Zoom Section */}
                     <div className="space-y-3">
@@ -608,11 +611,11 @@ export function EditorSidebar({
                   </div>
                 </TabsContent>
 
-                <TabsContent value="lead" className="mt-4 space-y-4">
+                <TabsContent value="lead" className="mt-0 space-y-4">
                   <LeadFormEditor leadFormConfig={leadFormConfig} setLeadFormConfig={setLeadFormConfig} />
                 </TabsContent>
-              </Tabs>
-            </div>
+              </div>
+            </Tabs>
           </>
         )}
       </div>
