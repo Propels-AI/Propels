@@ -225,7 +225,7 @@ export function DemoEditorPage() {
               } catch (_e) {}
             }
 
-            // Insert lead form as second-to-last step for new demos
+            // Insert lead form as last step for new demos
             if (urls.length > 1) {
               const leadStep = {
                 id: `LEAD-${Date.now()}`,
@@ -234,7 +234,7 @@ export function DemoEditorPage() {
                 isLeadCapture: true as const,
                 leadBg: "white" as const,
               };
-              urls.splice(urls.length - 1, 0, leadStep);
+              urls.push(leadStep);
             }
 
             setSteps(urls);
