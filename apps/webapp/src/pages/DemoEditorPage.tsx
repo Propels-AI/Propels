@@ -3,7 +3,7 @@ import { useKeyboardShortcut } from "@/hooks/useKeyboardShortcut";
 import { syncAnonymousDemo, type EditedDraft } from "../lib/services/syncAnonymousDemo";
 import { useAuth } from "@/lib/providers/AuthProvider";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { deleteDemo, renameDemo, setDemoStatus, createDemoStep, getOwnerId, updateDemoStepZoom } from "@/lib/api/demos";
+import { deleteDemo, renameDemo, setDemoStatus, createDemoStep, getOwnerId, updateDemoStepZoom, deleteDemoStep, updateDemoStepsOrder } from "@/lib/api/demos";
 import { customScreenshotStorage } from "@/lib/customScreenshotStorage";
 import { uploadStepImage } from "@/lib/services/s3Service";
 import { fetchAuthSession } from "aws-amplify/auth";
@@ -999,21 +999,41 @@ export function DemoEditorPage() {
           stepId,
           s3Key,
           hotspots: [],
-          order: steps.length,
+          order: 0,
           pageUrl: "",
           ownerId,
         });
 
+        // Add to originalStepIds tracking
+        setOriginalStepIds((prev) => {
+          const next = new Set(prev);
+          next.add(stepId);
+          return next;
+        });
+
         // Add to local state at the beginning
-        setSteps((prev) => [
-          {
+        setSteps((prev) => {
+          const newStep = {
             id: stepId,
             pageUrl: "",
             screenshotUrl: publicUrl || s3Key,
             s3Key,
-          },
-          ...prev,
-        ]);
+          };
+          const next = [newStep, ...prev];
+          
+          // Update order for all existing steps (shift them down by 1)
+          const orderUpdates = prev
+            .map((step, index) => ({ stepId: step.id, order: index + 1 }))
+            .filter((update) => !update.stepId.startsWith('LEAD-'));
+          
+          if (orderUpdates.length > 0) {
+            updateDemoStepsOrder({ demoId: demoIdParam, steps: orderUpdates }).catch((e) => {
+              console.error("Failed to update step order after adding screenshot:", e);
+            });
+          }
+          
+          return next;
+        });
 
         // Add default hotspot at center
         setHotspotsByStep((prev) => ({
@@ -1095,6 +1115,27 @@ export function DemoEditorPage() {
         onAddLeadStep={addLeadStep}
         onAddCustomScreenshot={handleAddCustomScreenshot}
         onDeleteStep={async (index) => {
+          const stepToDelete = steps[index];
+          if (!stepToDelete) return;
+          
+          // For saved demos, delete from backend first
+          if (demoIdParam && !stepToDelete.isLeadCapture) {
+            try {
+              await deleteDemoStep({ demoId: demoIdParam, stepId: stepToDelete.id });
+              // Remove from originalStepIds tracking
+              setOriginalStepIds((prev) => {
+                const next = new Set(prev);
+                next.delete(stepToDelete.id);
+                return next;
+              });
+            } catch (e) {
+              console.error("Failed to delete step from backend:", e);
+              toast.error("Failed to delete step. Please try again.");
+              return; // Don't update local state if backend delete failed
+            }
+          }
+          
+          // Update local state
           setSteps((prev) => {
             if (index < 0 || index >= prev.length) return prev;
             const removed = prev[index];
@@ -1145,22 +1186,41 @@ export function DemoEditorPage() {
             return next;
           });
         }}
-        onReorderSteps={(from, to) => {
-          setSteps((prev) => {
-            if (from === to) return prev;
-            if (from < 0 || from >= prev.length) return prev;
-            const clampedTo = Math.max(0, Math.min(to, prev.length - 1));
-            const next = [...prev];
-            const [moved] = next.splice(from, 1);
-            next.splice(clampedTo, 0, moved);
-            // Maintain selection by id
-            setSelectedStepIndex((sel) => {
-              const currentId = prev[sel]?.id;
-              const newIndex = next.findIndex((s) => s.id === currentId);
-              return newIndex >= 0 ? newIndex : Math.max(0, Math.min(sel, next.length - 1));
-            });
-            return next;
+        onReorderSteps={async (from, to) => {
+          if (from === to) return;
+          if (from < 0 || from >= steps.length) return;
+          
+          const clampedTo = Math.max(0, Math.min(to, steps.length - 1));
+          const next = [...steps];
+          const [moved] = next.splice(from, 1);
+          next.splice(clampedTo, 0, moved);
+          
+          // Update local state immediately for responsive UI
+          setSteps(next);
+          setSelectedStepIndex((sel) => {
+            const currentId = steps[sel]?.id;
+            const newIndex = next.findIndex((s) => s.id === currentId);
+            return newIndex >= 0 ? newIndex : Math.max(0, Math.min(sel, next.length - 1));
           });
+          
+          // For saved demos, persist order to backend
+          if (demoIdParam) {
+            try {
+              // Build order update payload (exclude lead capture steps)
+              const orderUpdates = next
+                .map((step, index) => ({ stepId: step.id, order: index }))
+                .filter((update) => !update.stepId.startsWith('LEAD-'));
+              
+              if (orderUpdates.length > 0) {
+                await updateDemoStepsOrder({ demoId: demoIdParam, steps: orderUpdates });
+              }
+            } catch (e) {
+              console.error("Failed to persist step order:", e);
+              toast.error("Failed to save step order. Please try again.");
+              // Revert to original order on error
+              setSteps(steps);
+            }
+          }
         }}
         onUpdateStepZoom={handleUpdateStepZoom}
       />
