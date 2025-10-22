@@ -958,6 +958,45 @@ export async function updateDemoStepZoom(params: { demoId: string; stepId: strin
   }
 }
 
+export async function deleteDemoStep(params: { demoId: string; stepId: string }): Promise<void> {
+  const { demoId, stepId } = params;
+  const models = getPrivateModels();
+  const res = await (models as any).AppData.delete({
+    PK: pkDemo(demoId),
+    SK: `STEP#${stepId}`,
+  });
+  if ((res as any)?.errors?.length) {
+    throw new Error(
+      `deleteDemoStep failed for ${stepId}: ${(res as any)?.errors?.map((e: any) => e?.message).join(", ")}`
+    );
+  }
+}
+
+export async function updateDemoStepsOrder(params: {
+  demoId: string;
+  steps: Array<{ stepId: string; order: number }>;
+}): Promise<void> {
+  const { demoId, steps } = params;
+  const models = getPrivateModels();
+
+  // Update order for each step
+  const updates = steps.map(async ({ stepId, order }) => {
+    const payload: Record<string, any> = {
+      PK: pkDemo(demoId),
+      SK: `STEP#${stepId}`,
+      order,
+    };
+    const res = await (models as any).AppData.update(payload);
+    if (!res?.data || (res as any)?.errors?.length) {
+      throw new Error(
+        `updateDemoStepsOrder failed for ${stepId}: ${(res as any)?.errors?.map((e: any) => e?.message).join(", ") || "no data returned"}`
+      );
+    }
+  });
+
+  await Promise.all(updates);
+}
+
 export async function listDemoItems(demoId: string) {
   try {
     try {

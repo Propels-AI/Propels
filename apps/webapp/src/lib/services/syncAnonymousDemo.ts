@@ -23,7 +23,7 @@ export type EditedDraft = {
   draftId: string;
   createdAt: string;
   name?: string;
-  steps: Array<{ id: string; pageUrl: string; order: number; zoom?: number }>;
+  steps: Array<{ id: string; pageUrl: string; order: number; zoom?: number; isCustomUpload?: boolean; isLeadCapture?: boolean }>;
   hotspotsByStep: Record<string, Hotspot[]>;
   // Optional lead-capture metadata
   leadStepIndex?: number | null;
@@ -33,6 +33,7 @@ export type EditedDraft = {
 export async function syncAnonymousDemo(options?: {
   inlineDraft?: EditedDraft; // if provided, skips localStorage read
   extensionId?: string; // override for tests
+  customScreenshots?: Map<string, Blob>; // custom uploaded screenshots
 }): Promise<{ demoId: string; stepCount: number }> {
   const extId =
     options?.extensionId || (window as any)?.__EXT_ID__ || (import.meta as any).env?.VITE_CHROME_EXTENSION_ID || "";
@@ -56,20 +57,39 @@ export async function syncAnonymousDemo(options?: {
     draftId = draft.draftId;
   }
 
-  // 2) Fetch captures from extension
-  if (!(typeof chrome !== "undefined" && chrome.runtime && extId)) {
-    throw new Error("Chrome extension not available or extensionId missing");
+  // 2) Fetch captures from extension (optional if we have custom screenshots)
+  let captureMap = new Map<string, any>();
+  const hasCustomScreenshots = options?.customScreenshots && options.customScreenshots.size > 0;
+  
+  if (typeof chrome !== "undefined" && chrome.runtime && extId) {
+    try {
+      console.log("[sync] Requesting captures from extension", { extIdPresent: !!extId });
+      const response = await chrome.runtime.sendMessage(extId, { type: "GET_CAPTURE_SESSION" });
+      if (response?.success && Array.isArray(response.data)) {
+        const captures: Array<any> = response.data;
+        console.log("[sync] Retrieved captures count:", captures.length);
+        captures.forEach((c) => captureMap.set(String(c.id), c));
+      }
+    } catch (e) {
+      console.warn("[sync] Failed to retrieve extension captures:", e);
+    }
   }
-  console.log("[sync] Requesting captures from extension", { extIdPresent: !!extId });
-  const response = await chrome.runtime.sendMessage(extId, { type: "GET_CAPTURE_SESSION" });
-  if (!response?.success || !Array.isArray(response.data)) throw new Error("Failed to retrieve capture session");
-  const captures: Array<any> = response.data;
-  console.log("[sync] Retrieved captures count:", captures.length);
-  if (captures.length === 0) {
-    throw new Error("No captures returned, aborting demo creation");
+  
+  // Check if we have any data to save (either extension captures or custom screenshots)
+  const hasExtensionCaptures = captureMap.size > 0;
+  const hasProvidedBlobs = hasCustomScreenshots;
+  
+  if (!hasExtensionCaptures && !hasProvidedBlobs) {
+    console.warn("[sync] No captures or screenshots found", {
+      captureMapSize: captureMap.size,
+      customScreenshotsSize: options?.customScreenshots?.size || 0,
+      draftStepsCount: draft?.steps?.length || 0
+    });
+    // Don't throw error if we have steps in draft - we'll try to process them
+    if (!draft?.steps || draft.steps.length === 0) {
+      throw new Error("No captures or custom screenshots to save");
+    }
   }
-  const captureMap = new Map<string, any>();
-  captures.forEach((c) => captureMap.set(String(c.id), c));
 
   // 3) Create demo and upload steps
   const demoId: string = (crypto as any).randomUUID ? (crypto as any).randomUUID() : `${Date.now()}`;
@@ -99,14 +119,36 @@ export async function syncAnonymousDemo(options?: {
   }
 
   let created = 0;
+  const customScreenshots = options?.customScreenshots || new Map<string, Blob>();
+  
   for (const s of draft!.steps) {
     try {
-      const cap = captureMap.get(String(s.id));
-      if (!cap?.screenshotDataUrl) {
-        console.warn("[sync] Missing screenshot for step; skipping", s);
+      // Skip lead capture steps - they don't have screenshots and are handled separately via leadConfig
+      if (s.isLeadCapture) {
         continue;
       }
-      const blob = dataUrlToBlob(cap.screenshotDataUrl);
+      
+      let blob: Blob | undefined;
+      
+      // First, try to get blob from passed customScreenshots (includes both extension and custom uploads)
+      blob = customScreenshots.get(s.id);
+      
+      if (!blob) {
+        // Fallback: try to get from extension capture map if blob wasn't provided
+        const cap = captureMap.get(String(s.id));
+        if (cap?.screenshotDataUrl) {
+          blob = dataUrlToBlob(cap.screenshotDataUrl);
+        }
+      }
+      
+      if (!blob) {
+        console.warn("[sync] Missing screenshot data for step; skipping", { 
+          stepId: s.id, 
+          hasCustomScreenshots: customScreenshots.size > 0,
+          hasCaptureMap: captureMap.size > 0
+        });
+        continue;
+      }
       const { s3Key, publicUrl } = await uploadStepImage({
         ownerId: storageOwnerId!,
         demoId,
