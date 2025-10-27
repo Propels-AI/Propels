@@ -1122,6 +1122,7 @@ export function DemoEditorPage() {
           if (demoIdParam && !stepToDelete.isLeadCapture) {
             try {
               await deleteDemoStep({ demoId: demoIdParam, stepId: stepToDelete.id });
+              
               // Remove from originalStepIds tracking
               setOriginalStepIds((prev) => {
                 const next = new Set(prev);

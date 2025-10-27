@@ -566,6 +566,45 @@ export async function listPublicDemoItems(demoId: string) {
   return items;
 }
 
+export async function deletePublicDemoStep(params: { demoId: string; stepId: string }): Promise<void> {
+  const { demoId, stepId } = params;
+  const models = getPublicMirrorWriteModels();
+  try {
+    await (models as any).PublicMirror.delete({
+      PK: pkPub(demoId),
+      SK: `STEP#${stepId}`,
+    });
+  } catch (e) {
+    console.warn(`[deletePublicDemoStep] Failed to delete step ${stepId} from public mirror:`, e);
+    // Don't throw - this is a non-critical cleanup operation
+  }
+}
+
+export async function updatePublicDemoStepsOrder(params: {
+  demoId: string;
+  steps: Array<{ stepId: string; order: number }>;
+}): Promise<void> {
+  const { demoId, steps } = params;
+  const models = getPublicMirrorWriteModels();
+
+  // Update order for each step in public mirror
+  const updates = steps.map(async ({ stepId, order }) => {
+    try {
+      const payload: Record<string, any> = {
+        PK: pkPub(demoId),
+        SK: `STEP#${stepId}`,
+        order,
+      };
+      await (models as any).PublicMirror.update(payload);
+    } catch (e) {
+      console.warn(`[updatePublicDemoStepsOrder] Failed to update order for step ${stepId}:`, e);
+      // Don't throw - allow other updates to continue
+    }
+  });
+
+  await Promise.all(updates);
+}
+
 export async function deletePublicDemoItems(demoId: string) {
   const readModels = getPublicMirrorModels();
   const listRes = await (readModels as any).PublicMirror.list({ filter: { PK: { eq: pkPub(demoId) } } });
@@ -591,6 +630,9 @@ export async function mirrorDemoToPublic(
   demoId: string,
   overrides?: { name?: string; leadStepIndex?: number | null; leadConfig?: any }
 ): Promise<void> {
+  // First, clear existing public mirror items to ensure clean state
+  await deletePublicDemoItems(demoId);
+  
   const now = new Date().toISOString();
   const items = await listDemoItems(demoId);
   if (!Array.isArray(items) || items.length === 0) {
@@ -709,6 +751,11 @@ export async function setDemoStatus(demoId: string, status: "DRAFT" | "PUBLISHED
   try {
     if (status === "PUBLISHED") {
       console.info("[mirror] starting mirror for", demoId);
+      
+      // First, clear existing public mirror items to ensure clean state
+      console.info("[mirror] clearing existing public mirror items");
+      await deletePublicDemoItems(demoId);
+      
       const items = await listDemoItems(demoId);
       console.info("[mirror] listDemoItems returned:", items);
       if (!Array.isArray(items)) {
