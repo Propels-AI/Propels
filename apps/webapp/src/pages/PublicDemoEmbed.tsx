@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { createLeadSubmissionPublic } from "@/lib/api/demos";
 import HotspotOverlay from "@/components/HotspotOverlay";
@@ -61,6 +61,34 @@ export default function PublicDemoEmbed() {
     bucket,
     region,
   });
+
+  const preloadCache = useRef(new Set<string>());
+  const buildCdnUrl = (raw?: string) => {
+    if (!raw) return undefined;
+    const isUrl = /^(https?:)?\/\//i.test(raw);
+    if (isUrl) return raw;
+    const base = import.meta.env.VITE_PUBLIC_ASSET_BASE_URL as string | undefined;
+    return base ? `${String(base).replace(/\/$/, "")}/${String(raw).replace(/^\//, "")}` : undefined;
+  };
+  const preloadImage = (url: string) => {
+    if (!url || preloadCache.current.has(url)) return;
+    preloadCache.current.add(url);
+    const img = new Image();
+    img.src = url;
+  };
+  useEffect(() => {
+    if (currentRealIndex < 0) return;
+    if (!Array.isArray(steps) || steps.length === 0) return;
+    const lookahead = 3;
+    const start = Math.min(currentRealIndex + 1, steps.length - 1);
+    const end = Math.min(currentRealIndex + lookahead, steps.length - 1);
+    for (let i = start; i <= end; i++) {
+      const s = steps[i];
+      const raw = s?.s3Key || s?.thumbnailS3Key;
+      const url = buildCdnUrl(raw);
+      if (url) preloadImage(url);
+    }
+  }, [currentRealIndex, steps]);
 
   const currentHotspots = useMemo(() => {
     if (currentRealIndex < 0) return [] as any[];
