@@ -57,7 +57,12 @@ try {
       },
     });
   }
-} catch {}
+} catch (error) {
+  console.error(
+    "Failed to create CloudFront distribution for public demo assets:",
+    error
+  );
+}
 
 const sesPolicy = new Policy(backend.createAuthChallenge.stack, "SESPolicy", {
   statements: [
