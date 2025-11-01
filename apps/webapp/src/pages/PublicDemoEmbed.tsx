@@ -74,8 +74,9 @@ export default function PublicDemoEmbed() {
     if (currentRealIndex < 0) return;
     if (!Array.isArray(steps) || steps.length === 0) return;
     const lookahead = 3;
-    const start = Math.min(currentRealIndex + 1, steps.length - 1);
+    const start = currentRealIndex + 1;
     const end = Math.min(currentRealIndex + lookahead, steps.length - 1);
+    if (start > end || start >= steps.length) return;
     for (let i = start; i <= end; i++) {
       const s = steps[i];
       const raw = s?.s3Key || s?.thumbnailS3Key;
