@@ -1,19 +1,19 @@
 import { useEffect, useRef } from "react";
 
+export const buildCdnUrl = (raw?: string): string | undefined => {
+  if (!raw) return undefined;
+  const isUrl = /^(https?:)?\/\//i.test(raw);
+  if (isUrl) return raw;
+  const base = import.meta.env.VITE_PUBLIC_ASSET_BASE_URL as string | undefined;
+  return base ? `${String(base).replace(/\/$/, "")}/${String(raw).replace(/^\//, "")}` : undefined;
+};
+
 export function useImagePreloading(
   currentIndex: number,
   steps: Array<{ s3Key?: string; thumbnailS3Key?: string }>,
   lookahead: number = 3
 ) {
   const preloadCache = useRef(new Set<string>());
-
-  const buildCdnUrl = (raw?: string) => {
-    if (!raw) return undefined;
-    const isUrl = /^(https?:)?\/\//i.test(raw);
-    if (isUrl) return raw;
-    const base = import.meta.env.VITE_PUBLIC_ASSET_BASE_URL as string | undefined;
-    return base ? `${String(base).replace(/\/$/, "")}/${String(raw).replace(/^\//, "")}` : undefined;
-  };
 
   const preloadImage = (url: string) => {
     if (!url || preloadCache.current.has(url)) return;
