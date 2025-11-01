@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import LeadCaptureOverlay from "@/components/LeadCaptureOverlay";
 import { usePublicDemo } from "@/features/public/hooks/usePublicDemo";
 import { useImageResolver } from "@/features/public/hooks/useImageResolver";
+import { useImagePreloading, buildCdnUrl } from "@/hooks/useImagePreloading";
 import outputs from "../../../../amplify_outputs.json";
 import { Card, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -45,15 +46,7 @@ export default function PublicDemoEmbed() {
   }, [location.search]);
   const imageSrc = useMemo(() => {
     const raw = current?.s3Key || current?.thumbnailS3Key;
-    if (!raw) return undefined;
-    const isUrl = /^(https?:)?\/\//i.test(raw);
-    const base = import.meta.env.VITE_PUBLIC_ASSET_BASE_URL as string | undefined;
-    const finalSrc = isUrl
-      ? raw
-      : base
-        ? `${String(base).replace(/\/$/, "")}/${String(raw).replace(/^\//, "")}`
-        : undefined;
-    return finalSrc;
+    return buildCdnUrl(raw);
   }, [current]);
   const bucket = (outputs as any)?.storage?.bucket;
   const region = (outputs as any)?.aws_region || (outputs as any)?.awsRegion || (outputs as any)?.region;
@@ -61,6 +54,9 @@ export default function PublicDemoEmbed() {
     bucket,
     region,
   });
+
+  // Preload upcoming step images to improve perceived performance
+  useImagePreloading(currentRealIndex, steps);
 
   const currentHotspots = useMemo(() => {
     if (currentRealIndex < 0) return [] as any[];
@@ -161,7 +157,7 @@ export default function PublicDemoEmbed() {
           aspectRatio: forcedAspect || naturalAspect || "16 / 10",
           // Prevent scrolling when zoomed in
           maxHeight: "100vh",
-          overflow: "hidden"
+          overflow: "hidden",
         }}
       >
         {isLeadDisplayIndex ? (
