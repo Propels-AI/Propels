@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { createLeadSubmissionPublic } from "@/lib/api/demos";
 import HotspotOverlay from "@/components/HotspotOverlay";
@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import LeadCaptureOverlay from "@/components/LeadCaptureOverlay";
 import { usePublicDemo } from "@/features/public/hooks/usePublicDemo";
 import { useImageResolver } from "@/features/public/hooks/useImageResolver";
+import { useImagePreloading } from "@/hooks/useImagePreloading";
 import outputs from "../../../../amplify_outputs.json";
 import { Card, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -63,27 +64,8 @@ export default function PublicDemoEmbed() {
     region,
   });
 
-  const preloadCache = useRef(new Set<string>());
-  const preloadImage = (url: string) => {
-    if (!url || preloadCache.current.has(url)) return;
-    preloadCache.current.add(url);
-    const img = new Image();
-    img.src = url;
-  };
-  useEffect(() => {
-    if (currentRealIndex < 0) return;
-    if (!Array.isArray(steps) || steps.length === 0) return;
-    const lookahead = 3;
-    const start = currentRealIndex + 1;
-    const end = Math.min(currentRealIndex + lookahead, steps.length - 1);
-    if (start > end || start >= steps.length) return;
-    for (let i = start; i <= end; i++) {
-      const s = steps[i];
-      const raw = s?.s3Key || s?.thumbnailS3Key;
-      const url = buildAssetUrl(raw);
-      if (url) preloadImage(url);
-    }
-  }, [currentRealIndex, steps, buildAssetUrl]);
+  // Preload upcoming step images to improve perceived performance
+  useImagePreloading(currentRealIndex, steps);
 
   const currentHotspots = useMemo(() => {
     if (currentRealIndex < 0) return [] as any[];
