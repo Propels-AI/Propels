@@ -43,17 +43,18 @@ export default function PublicDemoEmbed() {
       return null;
     }
   }, [location.search]);
+  const buildAssetUrl = useMemo(() => {
+    const base = import.meta.env.VITE_PUBLIC_ASSET_BASE_URL as string | undefined;
+    return (raw?: string): string | undefined => {
+      if (!raw) return undefined;
+      const isUrl = /^(https?:)?\/\//i.test(raw);
+      if (isUrl) return raw;
+      return base ? `${String(base).replace(/\/$/, "")}/${String(raw).replace(/^\//, "")}` : undefined;
+    };
+  }, []);
   const imageSrc = useMemo(() => {
     const raw = current?.s3Key || current?.thumbnailS3Key;
-    if (!raw) return undefined;
-    const isUrl = /^(https?:)?\/\//i.test(raw);
-    const base = import.meta.env.VITE_PUBLIC_ASSET_BASE_URL as string | undefined;
-    const finalSrc = isUrl
-      ? raw
-      : base
-        ? `${String(base).replace(/\/$/, "")}/${String(raw).replace(/^\//, "")}`
-        : undefined;
-    return finalSrc;
+    return buildAssetUrl(raw);
   }, [current]);
   const bucket = (outputs as any)?.storage?.bucket;
   const region = (outputs as any)?.aws_region || (outputs as any)?.awsRegion || (outputs as any)?.region;
@@ -63,13 +64,6 @@ export default function PublicDemoEmbed() {
   });
 
   const preloadCache = useRef(new Set<string>());
-  const buildCdnUrl = (raw?: string) => {
-    if (!raw) return undefined;
-    const isUrl = /^(https?:)?\/\//i.test(raw);
-    if (isUrl) return raw;
-    const base = import.meta.env.VITE_PUBLIC_ASSET_BASE_URL as string | undefined;
-    return base ? `${String(base).replace(/\/$/, "")}/${String(raw).replace(/^\//, "")}` : undefined;
-  };
   const preloadImage = (url: string) => {
     if (!url || preloadCache.current.has(url)) return;
     preloadCache.current.add(url);
@@ -85,10 +79,10 @@ export default function PublicDemoEmbed() {
     for (let i = start; i <= end; i++) {
       const s = steps[i];
       const raw = s?.s3Key || s?.thumbnailS3Key;
-      const url = buildCdnUrl(raw);
+      const url = buildAssetUrl(raw);
       if (url) preloadImage(url);
     }
-  }, [currentRealIndex, steps]);
+  }, [currentRealIndex, steps, buildAssetUrl]);
 
   const currentHotspots = useMemo(() => {
     if (currentRealIndex < 0) return [] as any[];
@@ -189,7 +183,7 @@ export default function PublicDemoEmbed() {
           aspectRatio: forcedAspect || naturalAspect || "16 / 10",
           // Prevent scrolling when zoomed in
           maxHeight: "100vh",
-          overflow: "hidden"
+          overflow: "hidden",
         }}
       >
         {isLeadDisplayIndex ? (
