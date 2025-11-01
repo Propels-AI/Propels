@@ -47,7 +47,6 @@ try {
     // Output the CDN domain so the web app can use it as VITE_PUBLIC_ASSET_BASE_URL
     new CfnOutput(backend.storage.stack, "PublicAssetsCdnDomain", {
       value: assetsCdn.distributionDomainName,
-      exportName: "PublicAssetsCdnDomain",
     });
 
     // Ensure the CDN domain is included in amplify_outputs.json under the supported `custom` key
@@ -58,10 +57,7 @@ try {
     });
   }
 } catch (error) {
-  console.error(
-    "Failed to create CloudFront distribution for public demo assets:",
-    error
-  );
+  console.error("Failed to create CloudFront distribution for public demo assets:", error);
 }
 
 const sesPolicy = new Policy(backend.createAuthChallenge.stack, "SESPolicy", {
