@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { ColorPicker } from "@/components/ui/color-picker";
 import LeadFormEditor from "@/features/editor/components/LeadFormEditor";
 import { type TooltipStyle } from "@/lib/editor/deriveTooltipStyleFromHotspots";
-import { PanelLeft, PanelLeftClose, GripVertical, Copy, Trash2, Upload } from "lucide-react";
+import { PanelLeft, PanelLeftClose, GripVertical, Copy, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface EditorSidebarProps {
@@ -219,7 +219,8 @@ export function EditorSidebar({
               <div className="flex-1 overflow-y-auto p-4">
                 <TabsContent value="steps" className="mt-0 space-y-4">
                   <div className="flex items-center gap-2">
-                    <Button
+                    {/* Upload button temporarily hidden - unstable functionality */}
+                    {/* <Button
                       title="Upload screenshot"
                       size="sm"
                       variant="outline"
@@ -227,7 +228,7 @@ export function EditorSidebar({
                     >
                       <Upload className="w-3 h-3 mr-1" />
                       Upload
-                    </Button>
+                    </Button> */}
                     {!steps.some(s => s.isLeadCapture) && (
                       <Button
                         title="Add lead generation step"

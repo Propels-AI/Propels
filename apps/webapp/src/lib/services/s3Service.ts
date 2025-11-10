@@ -17,7 +17,12 @@ export async function uploadStepImage(params: {
   await uploadData({
     data: file,
     path,
-    options: { contentType: contentType || (file as any).type },
+    options: {
+      contentType: contentType || (file as any).type,
+      metadata: {
+        uploadedAt: Date.now().toString(),
+      },
+    },
   }).result;
 
   let publicUrl: string | undefined;
