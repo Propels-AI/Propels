@@ -1,13 +1,6 @@
 import { useEffect, useState } from "react";
 import { getUrl as storageGetUrl } from "aws-amplify/storage";
 
-/**
- * Resolve an image URL for a public demo step using the same strategy as pages:
- * 1) If directUrl is provided, use it.
- * 2) Try Storage.getUrl with guest access for public/ keys.
- * 3) Fallback to direct S3 bucket URL from amplify outputs.
- * 4) Finally, use the raw key as-is.
- */
 export function useImageResolver(
   rawKeyOrUrl: string | undefined,
   directUrl?: string,
@@ -19,30 +12,10 @@ export function useImageResolver(
 
   useEffect(() => {
     let cancelled = false;
-    async function resolve() {
+
+    const tryStorageFallback = async () => {
       const raw = rawKeyOrUrl;
-      const hasDirect = typeof directUrl === "string" && directUrl.length > 0;
-      if (!raw) {
-        setResolvedSrc(undefined);
-        setNaturalAspect(null);
-        return;
-      }
-      if (hasDirect) {
-        setResolvedSrc(directUrl);
-        if (computeAspect && directUrl) {
-          try {
-            const img = new Image();
-            img.onload = () => {
-              if (cancelled) return;
-              const w = img.naturalWidth || img.width || 0;
-              const h = img.naturalHeight || img.height || 0;
-              if (w > 0 && h > 0) setNaturalAspect(`${w} / ${h}`);
-            };
-            img.src = directUrl;
-          } catch {}
-        }
-        return;
-      }
+      if (!raw) return;
       // Try Storage.getUrl for public/ keys
       try {
         const isPublicPrefixed = String(raw).startsWith("public/");
@@ -106,6 +79,40 @@ export function useImageResolver(
           } catch {}
         }
       }
+    };
+
+    async function resolve() {
+      const raw = rawKeyOrUrl;
+      const hasDirect = typeof directUrl === "string" && directUrl.length > 0;
+      if (!raw) {
+        setResolvedSrc(undefined);
+        setNaturalAspect(null);
+        return;
+      }
+      if (hasDirect) {
+        setResolvedSrc(directUrl);
+        if (computeAspect && directUrl) {
+          try {
+            const img = new Image();
+            img.onload = () => {
+              if (cancelled) return;
+              const w = img.naturalWidth || img.width || 0;
+              const h = img.naturalHeight || img.height || 0;
+              if (w > 0 && h > 0) setNaturalAspect(`${w} / ${h}`);
+            };
+            img.onerror = () => {
+              // CDN failed, try fallback chain
+              if (cancelled) return;
+              console.warn("[useImageResolver] CDN load failed, attempting fallback for:", directUrl);
+              tryStorageFallback();
+            };
+            img.src = directUrl;
+          } catch {}
+        }
+        return;
+      }
+      // If no CDN URL, try fallback immediately
+      await tryStorageFallback();
     }
     resolve();
     return () => {

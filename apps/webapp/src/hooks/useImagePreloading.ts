@@ -2,9 +2,15 @@ import { useEffect, useRef } from "react";
 
 export const buildCdnUrl = (raw?: string): string | undefined => {
   if (!raw) return undefined;
-  const isUrl = /^(https?:)?\/\//i.test(raw);
-  if (isUrl) return raw;
-  const base = import.meta.env.VITE_PUBLIC_ASSET_BASE_URL as string | undefined;
+  const isAbsoluteUrl = /^(https?:\/\/|\/\/)/i.test(raw);
+  const isRelativePath = raw.startsWith("./");
+  if (isAbsoluteUrl || isRelativePath) return raw;
+
+  let base = import.meta.env.VITE_PUBLIC_ASSET_BASE_URL as string | undefined;
+  // Normalize base to include protocol if missing
+  if (base && !/^https?:\/\//i.test(base)) {
+    base = `https://${base}`;
+  }
   return base ? `${String(base).replace(/\/$/, "")}/${String(raw).replace(/^\//, "")}` : undefined;
 };
 
