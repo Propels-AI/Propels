@@ -454,6 +454,13 @@ export function DemoEditorPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Clear tooltip editor when navigating to a different step
+  useEffect(() => {
+    setEditingTooltip(null);
+    setTooltipTitle("");
+    setTooltipDescription("");
+  }, [selectedStepIndex]);
+
   // Recompute positions on container resize (image area changes with responsive layout)
   useEffect(() => {
     const el = imageRef.current;
