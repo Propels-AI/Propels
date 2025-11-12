@@ -152,12 +152,11 @@ export default function PublicDemoEmbed() {
   return (
     <div className="w-full bg-transparent overflow-hidden">
       <div
-        className="relative w-full"
+        className="relative w-full overflow-hidden"
         style={{
           aspectRatio: forcedAspect || naturalAspect || "16 / 10",
           // Prevent scrolling when zoomed in
           maxHeight: "100vh",
-          overflow: "hidden",
         }}
       >
         {isLeadDisplayIndex ? (
@@ -190,7 +189,7 @@ export default function PublicDemoEmbed() {
           </>
         ) : (
           <HotspotOverlay
-            className="absolute inset-0 w-full h-full"
+            className="absolute inset-0 w-full h-full rounded-lg overflow-hidden"
             imageUrl={resolvedSrc}
             hotspots={currentHotspots as any}
             zoom={current?.zoom || 100}
@@ -201,9 +200,14 @@ export default function PublicDemoEmbed() {
           aria-label="Previous step"
           onClick={() => go(-1)}
           disabled={currentIndex === 0}
-          className={`absolute left-2 top-1/2 -translate-y-1/2 z-50 rounded-full p-2 bg-white/80 hover:bg-white shadow ${
+          className={`absolute top-1/2 -translate-y-1/2 z-50 rounded-full p-2 bg-white/80 hover:bg-white shadow ${
             currentIndex === 0 ? "opacity-50 cursor-not-allowed" : ""
           }`}
+          style={{
+            left: naturalAspect 
+              ? `max(8px, calc(50% - ${naturalAspect.replace('/', ' / ')} * 50vh + 8px))`
+              : '8px',
+          }}
         >
           <ChevronLeft className="h-5 w-5" />
         </button>
@@ -211,13 +215,28 @@ export default function PublicDemoEmbed() {
           aria-label="Next step"
           onClick={() => go(1)}
           disabled={currentIndex >= displayTotal - 1}
-          className={`absolute right-2 top-1/2 -translate-y-1/2 z-50 rounded-full p-2 bg-white/80 hover:bg-white shadow ${
+          className={`absolute top-1/2 -translate-y-1/2 z-50 rounded-full p-2 bg-white/80 hover:bg-white shadow ${
             currentIndex >= displayTotal - 1 ? "opacity-50 cursor-not-allowed" : ""
           }`}
+          style={{
+            right: naturalAspect 
+              ? `max(8px, calc(50% - ${naturalAspect.replace('/', ' / ')} * 50vh + 8px))`
+              : '8px',
+          }}
         >
           <ChevronRight className="h-5 w-5" />
         </button>
-        <div className="absolute left-3 right-3 bottom-3 z-40 pointer-events-none">
+        <div 
+          className="absolute bottom-3 z-40 pointer-events-none"
+          style={{
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: 'calc(100% - 24px)',
+            maxWidth: naturalAspect 
+              ? `calc(${naturalAspect.replace('/', ' / ')} * 100vh - 24px)` 
+              : undefined,
+          }}
+        >
           <div className="relative w-full h-1.5 bg-black/15 rounded overflow-hidden">
             <div
               className="absolute left-0 top-0 bottom-0 bg-blue-600"
