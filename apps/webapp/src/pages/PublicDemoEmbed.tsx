@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { createLeadSubmissionPublic } from "@/lib/api/demos";
 import HotspotOverlay from "@/components/HotspotOverlay";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import LeadCaptureOverlay from "@/components/LeadCaptureOverlay";
 import { usePublicDemo } from "@/features/public/hooks/usePublicDemo";
 import { useImageResolver } from "@/features/public/hooks/useImageResolver";
@@ -109,7 +109,17 @@ export default function PublicDemoEmbed() {
         </div>
       </div>
     );
-  if (loading) return <div className="p-4 text-sm">Loading…</div>;
+  if (loading) 
+    return (
+      <div className="w-full bg-transparent">
+        <div
+          className="relative w-full flex items-center justify-center"
+          style={{ aspectRatio: forcedAspect || naturalAspect || "16 / 10", minHeight: "200px" }}
+        >
+          <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+        </div>
+      </div>
+    );
   if (error) return <div className="p-4 text-sm text-red-600">{error}</div>;
   if (displayTotal === 0)
     return (
