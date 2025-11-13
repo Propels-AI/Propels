@@ -55,6 +55,23 @@ export default function PublicDemoEmbed() {
     region,
   });
 
+  // Normalize naturalAspect to ensure consistent format (w / h with spaces)
+  const safeAspect = useMemo(() => {
+    if (!naturalAspect) return null;
+    try {
+      const cleaned = String(naturalAspect).replace(/\s+/g, "");
+      const parts = cleaned.includes(":") ? cleaned.split(":") : cleaned.split("/");
+      if (parts.length === 2) {
+        const w = Number(parts[0]);
+        const h = Number(parts[1]);
+        if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) return `${w} / ${h}`;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }, [naturalAspect]);
+
   // Preload upcoming step images to improve perceived performance
   useImagePreloading(currentRealIndex, steps);
 
@@ -214,8 +231,8 @@ export default function PublicDemoEmbed() {
             currentIndex === 0 ? "opacity-50 cursor-not-allowed" : ""
           }`}
           style={{
-            left: naturalAspect 
-              ? `max(8px, calc(50% - ${naturalAspect.replace('/', ' / ')} * 50vh + 8px))`
+            left: safeAspect 
+              ? `max(8px, calc(50% - ${safeAspect} * 50vh + 8px))`
               : '8px',
           }}
         >
@@ -229,8 +246,8 @@ export default function PublicDemoEmbed() {
             currentIndex >= displayTotal - 1 ? "opacity-50 cursor-not-allowed" : ""
           }`}
           style={{
-            right: naturalAspect 
-              ? `max(8px, calc(50% - ${naturalAspect.replace('/', ' / ')} * 50vh + 8px))`
+            right: safeAspect 
+              ? `max(8px, calc(50% - ${safeAspect} * 50vh + 8px))`
               : '8px',
           }}
         >
@@ -242,8 +259,8 @@ export default function PublicDemoEmbed() {
             left: '50%',
             transform: 'translateX(-50%)',
             width: 'calc(100% - 24px)',
-            maxWidth: naturalAspect 
-              ? `calc(${naturalAspect.replace('/', ' / ')} * 100vh - 24px)` 
+            maxWidth: safeAspect 
+              ? `calc(${safeAspect} * 100vh - 24px)` 
               : undefined,
           }}
         >
