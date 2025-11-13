@@ -184,13 +184,33 @@ export const HotspotOverlay: React.FC<HotspotOverlayProps> = ({
   // Calculate transform origin for zoom
   const zoomLevel = zoom / 100;
   const transformOrigin = useMemo(() => {
+    if (!box) return "50% 50%";
+    
+    // Calculate the transform origin relative to the actual image position within the container
+    const img = imgRef.current;
+    if (!img) return "50% 50%";
+    
+    const containerRect = wrapperRef.current?.getBoundingClientRect();
+    if (!containerRect) return "50% 50%";
+    
+    // Get focal point (first hotspot or center)
+    let focalXNorm = 0.5;
+    let focalYNorm = 0.5;
     if (hotspots.length > 0 && hotspots[0].xNorm !== undefined && hotspots[0].yNorm !== undefined) {
-      // Use first hotspot as focal point
-      return `${hotspots[0].xNorm * 100}% ${hotspots[0].yNorm * 100}%`;
+      focalXNorm = hotspots[0].xNorm;
+      focalYNorm = hotspots[0].yNorm;
     }
-    // Default to center
-    return "50% 50%";
-  }, [hotspots]);
+    
+    // Calculate the focal point in absolute pixels within the rendered image
+    const focalX = box.left + focalXNorm * box.width;
+    const focalY = box.top + focalYNorm * box.height;
+    
+    // Convert to percentage of the container
+    const originX = (focalX / containerRect.width) * 100;
+    const originY = (focalY / containerRect.height) * 100;
+    
+    return `${originX}% ${originY}%`;
+  }, [hotspots, box]);
 
   return (
     <div ref={wrapperRef} className={className}>
