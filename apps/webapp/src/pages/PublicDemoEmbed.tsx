@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { createLeadSubmissionPublic } from "@/lib/api/demos";
 import HotspotOverlay from "@/components/HotspotOverlay";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import LeadCaptureOverlay from "@/components/LeadCaptureOverlay";
 import { usePublicDemo } from "@/features/public/hooks/usePublicDemo";
 import { useImageResolver } from "@/features/public/hooks/useImageResolver";
@@ -54,6 +54,23 @@ export default function PublicDemoEmbed() {
     bucket,
     region,
   });
+
+  // Normalize naturalAspect to ensure consistent format (w / h with spaces)
+  const safeAspect = useMemo(() => {
+    if (!naturalAspect) return null;
+    try {
+      const cleaned = String(naturalAspect).replace(/\s+/g, "");
+      const parts = cleaned.includes(":") ? cleaned.split(":") : cleaned.split("/");
+      if (parts.length === 2) {
+        const w = Number(parts[0]);
+        const h = Number(parts[1]);
+        if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) return `${w} / ${h}`;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }, [naturalAspect]);
 
   // Preload upcoming step images to improve perceived performance
   useImagePreloading(currentRealIndex, steps);
@@ -109,7 +126,17 @@ export default function PublicDemoEmbed() {
         </div>
       </div>
     );
-  if (loading) return <div className="p-4 text-sm">Loading…</div>;
+  if (loading) 
+    return (
+      <div className="w-full bg-transparent">
+        <div
+          className="relative w-full flex items-center justify-center"
+          style={{ aspectRatio: forcedAspect || naturalAspect || "16 / 10", minHeight: "200px" }}
+        >
+          <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+        </div>
+      </div>
+    );
   if (error) return <div className="p-4 text-sm text-red-600">{error}</div>;
   if (displayTotal === 0)
     return (
@@ -152,12 +179,11 @@ export default function PublicDemoEmbed() {
   return (
     <div className="w-full bg-transparent overflow-hidden">
       <div
-        className="relative w-full"
+        className="relative w-full overflow-hidden"
         style={{
           aspectRatio: forcedAspect || naturalAspect || "16 / 10",
           // Prevent scrolling when zoomed in
           maxHeight: "100vh",
-          overflow: "hidden",
         }}
       >
         {isLeadDisplayIndex ? (
@@ -190,7 +216,7 @@ export default function PublicDemoEmbed() {
           </>
         ) : (
           <HotspotOverlay
-            className="absolute inset-0 w-full h-full"
+            className="absolute inset-0 w-full h-full rounded-lg overflow-hidden"
             imageUrl={resolvedSrc}
             hotspots={currentHotspots as any}
             zoom={current?.zoom || 100}
@@ -201,9 +227,14 @@ export default function PublicDemoEmbed() {
           aria-label="Previous step"
           onClick={() => go(-1)}
           disabled={currentIndex === 0}
-          className={`absolute left-2 top-1/2 -translate-y-1/2 z-50 rounded-full p-2 bg-white/80 hover:bg-white shadow ${
+          className={`absolute top-1/2 -translate-y-1/2 z-50 rounded-full p-2 bg-white/80 hover:bg-white shadow ${
             currentIndex === 0 ? "opacity-50 cursor-not-allowed" : ""
           }`}
+          style={{
+            left: safeAspect 
+              ? `max(8px, calc(50% - ${safeAspect} * 50vh + 8px))`
+              : '8px',
+          }}
         >
           <ChevronLeft className="h-5 w-5" />
         </button>
@@ -211,13 +242,28 @@ export default function PublicDemoEmbed() {
           aria-label="Next step"
           onClick={() => go(1)}
           disabled={currentIndex >= displayTotal - 1}
-          className={`absolute right-2 top-1/2 -translate-y-1/2 z-50 rounded-full p-2 bg-white/80 hover:bg-white shadow ${
+          className={`absolute top-1/2 -translate-y-1/2 z-50 rounded-full p-2 bg-white/80 hover:bg-white shadow ${
             currentIndex >= displayTotal - 1 ? "opacity-50 cursor-not-allowed" : ""
           }`}
+          style={{
+            right: safeAspect 
+              ? `max(8px, calc(50% - ${safeAspect} * 50vh + 8px))`
+              : '8px',
+          }}
         >
           <ChevronRight className="h-5 w-5" />
         </button>
-        <div className="absolute left-3 right-3 bottom-3 z-40 pointer-events-none">
+        <div 
+          className="absolute bottom-3 z-40 pointer-events-none"
+          style={{
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: 'calc(100% - 24px)',
+            maxWidth: safeAspect 
+              ? `calc(${safeAspect} * 100vh - 24px)` 
+              : undefined,
+          }}
+        >
           <div className="relative w-full h-1.5 bg-black/15 rounded overflow-hidden">
             <div
               className="absolute left-0 top-0 bottom-0 bg-blue-600"
