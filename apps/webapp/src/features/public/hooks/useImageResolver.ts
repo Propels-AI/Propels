@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getUrl as storageGetUrl } from "aws-amplify/storage";
+import { presignedUrlCache } from "@/hooks/usePresignedUrlCache";
 
 export function useImageResolver(
   rawKeyOrUrl: string | undefined,
@@ -16,13 +16,10 @@ export function useImageResolver(
     const tryStorageFallback = async () => {
       const raw = rawKeyOrUrl;
       if (!raw) return;
-      // Try Storage.getUrl for public/ keys
+      // Try Storage.getUrl for public/ keys (using cache)
       try {
-        const isPublicPrefixed = String(raw).startsWith("public/");
-        const keyForStorage = isPublicPrefixed ? String(raw).replace(/^public\//, "") : String(raw);
-        const { url } = await storageGetUrl({ key: keyForStorage, options: { accessLevel: "guest" as any } });
+        const u = await presignedUrlCache.getUrl(raw);
         if (!cancelled) {
-          const u = url.toString();
           setResolvedSrc(u);
           if (computeAspect) {
             try {

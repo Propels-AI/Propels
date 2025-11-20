@@ -73,7 +73,7 @@ export default function PublicDemoEmbed() {
   }, [naturalAspect]);
 
   // Preload upcoming step images to improve perceived performance
-  useImagePreloading(currentRealIndex, steps);
+  useImagePreloading(currentRealIndex, steps, 3, { bucket, region });
 
   const currentHotspots = useMemo(() => {
     if (currentRealIndex < 0) return [] as any[];
@@ -126,7 +126,7 @@ export default function PublicDemoEmbed() {
         </div>
       </div>
     );
-  if (loading) 
+  if (loading)
     return (
       <div className="w-full bg-transparent">
         <div
@@ -231,9 +231,7 @@ export default function PublicDemoEmbed() {
             currentIndex === 0 ? "opacity-50 cursor-not-allowed" : ""
           }`}
           style={{
-            left: safeAspect 
-              ? `max(8px, calc(50% - ${safeAspect} * 50vh + 8px))`
-              : '8px',
+            left: safeAspect ? `max(8px, calc(50% - ${safeAspect} * 50vh + 8px))` : "8px",
           }}
         >
           <ChevronLeft className="h-5 w-5" />
@@ -246,22 +244,18 @@ export default function PublicDemoEmbed() {
             currentIndex >= displayTotal - 1 ? "opacity-50 cursor-not-allowed" : ""
           }`}
           style={{
-            right: safeAspect 
-              ? `max(8px, calc(50% - ${safeAspect} * 50vh + 8px))`
-              : '8px',
+            right: safeAspect ? `max(8px, calc(50% - ${safeAspect} * 50vh + 8px))` : "8px",
           }}
         >
           <ChevronRight className="h-5 w-5" />
         </button>
-        <div 
+        <div
           className="absolute bottom-3 z-40 pointer-events-none"
           style={{
-            left: '50%',
-            transform: 'translateX(-50%)',
-            width: 'calc(100% - 24px)',
-            maxWidth: safeAspect 
-              ? `calc(${safeAspect} * 100vh - 24px)` 
-              : undefined,
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: "calc(100% - 24px)",
+            maxWidth: safeAspect ? `calc(${safeAspect} * 100vh - 24px)` : undefined,
           }}
         >
           <div className="relative w-full h-1.5 bg-black/15 rounded overflow-hidden">
