@@ -48,7 +48,7 @@ export const TooltipEditor: React.FC<TooltipEditorProps> = ({
           autoFocus
         />
         <textarea
-          placeholder="Add a description..."
+          placeholder="Description"
           value={description}
           onChange={(e) => onDescriptionChange(e.target.value)}
           onKeyDown={(e) => {

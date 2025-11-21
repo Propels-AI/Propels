@@ -990,8 +990,24 @@ export function DemoEditorPage() {
     if (!currentStepId) return;
     setHotspotsByStep((prev) => {
       const list = prev[currentStepId] ?? [];
-      // Create structured tooltip object if title exists, otherwise use plain description for backward compatibility
-      const tooltipValue = title.trim() ? { title: title.trim(), description: description.trim() } : description.trim();
+
+      const trimmedTitle = title.trim();
+      const trimmedDescription = description.trim();
+
+      // Defense in depth: Validate here too in case called from other places
+      let tooltipValue: string | { title: string; description: string };
+
+      if (trimmedTitle && !trimmedDescription) {
+        // Invalid: title without description - save as empty
+        tooltipValue = "";
+      } else if (trimmedTitle && trimmedDescription) {
+        // Valid: both title and description provided
+        tooltipValue = { title: trimmedTitle, description: trimmedDescription };
+      } else {
+        // Valid: only description (backward compatible) or both empty
+        tooltipValue = trimmedDescription;
+      }
+
       return {
         ...prev,
         [currentStepId]: list.map((h) => (h.id === id ? { ...h, tooltip: tooltipValue } : h)),
@@ -1000,6 +1016,18 @@ export function DemoEditorPage() {
   };
 
   const handleTooltipSubmit = (id: string) => {
+    const trimmedTitle = tooltipTitle.trim();
+    const trimmedDescription = tooltipDescription.trim();
+
+    // Validation: If title is provided, description must also be provided
+    if (trimmedTitle && !trimmedDescription) {
+      toast.error("Description required", {
+        description: "When you add a title, you must also add a description for the tooltip.",
+        duration: 4000,
+      });
+      return;
+    }
+
     handleTooltipChange(id, tooltipTitle, tooltipDescription);
 
     setEditingTooltip(null);
