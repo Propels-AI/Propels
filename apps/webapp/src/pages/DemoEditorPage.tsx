@@ -84,6 +84,33 @@ export function DemoEditorPage() {
   const customBlobsRef = useRef<Map<string, Blob>>(new Map());
   const extensionBlobsRef = useRef<Map<string, Blob>>(new Map()); // Store extension capture blobs
   const isSavingRef = useRef(false);
+  // Version counters to track blob changes (since refs don't trigger re-renders)
+  const [blobsVersion, setBlobsVersion] = useState(0);
+
+  // Helper functions to manage blobs and automatically increment version counter
+  const blobHelpers = {
+    addExtensionBlob: (id: string, blob: Blob) => {
+      extensionBlobsRef.current.set(id, blob);
+      setBlobsVersion((v) => v + 1);
+    },
+    addCustomBlob: (id: string, blob: Blob) => {
+      customBlobsRef.current.set(id, blob);
+      setBlobsVersion((v) => v + 1);
+    },
+    deleteCustomBlob: (id: string) => {
+      const deleted = customBlobsRef.current.delete(id);
+      if (deleted) setBlobsVersion((v) => v + 1);
+    },
+    clearAllBlobs: () => {
+      extensionBlobsRef.current.clear();
+      customBlobsRef.current.clear();
+      setBlobsVersion((v) => v + 1);
+    },
+    clearExtensionBlobs: () => {
+      extensionBlobsRef.current.clear();
+      setBlobsVersion((v) => v + 1);
+    },
+  };
 
   // Delete handler function
   const handleDeleteDemo = async () => {
@@ -205,7 +232,7 @@ export function DemoEditorPage() {
       }
     });
     return missing;
-  }, [steps, extensionBlobsRef.current.size, customBlobsRef.current.size]);
+  }, [steps, blobsVersion]); // Use version counter instead of ref.current.size
 
   useEffect(() => {
     const loadFromExtension = async () => {
@@ -237,7 +264,7 @@ export function DemoEditorPage() {
             }> = [];
 
             // Clear extension blobs from previous session
-            extensionBlobsRef.current.clear();
+            blobHelpers.clearExtensionBlobs();
 
             for (let captureIndex = 0; captureIndex < sorted.length; captureIndex++) {
               const d = sorted[captureIndex];
@@ -285,7 +312,7 @@ export function DemoEditorPage() {
                 }
 
                 // Store blob for later use when saving
-                extensionBlobsRef.current.set(d.id, blob);
+                blobHelpers.addExtensionBlob(d.id, blob);
 
                 urls.push({
                   id: d.id,
@@ -470,6 +497,7 @@ export function DemoEditorPage() {
             // Clear blob refs
             customBlobsRef.current.clear();
             extensionBlobsRef.current.clear();
+            // Note: Don't call setBlobsVersion here - component is unmounting
           } catch (e) {
             console.error("[editor] Failed to clean up unsaved demo data:", e);
           }
@@ -753,8 +781,7 @@ export function DemoEditorPage() {
         });
 
         // Clear screenshots after successful save
-        customBlobsRef.current.clear();
-        extensionBlobsRef.current.clear();
+        blobHelpers.clearAllBlobs();
 
         // Track demo saved for anonymous users
         trackDemoSaved(demoId, false, steps.length);
@@ -1139,7 +1166,7 @@ export function DemoEditorPage() {
       } else {
         // Unsaved demo: Keep in memory only (will be cleared on page leave)
         // Store blob in ref for later upload when saving
-        customBlobsRef.current.set(stepId, blob);
+        blobHelpers.addCustomBlob(stepId, blob);
 
         // Create object URL for display
         const objectUrl = URL.createObjectURL(blob);
@@ -1232,7 +1259,7 @@ export function DemoEditorPage() {
 
             // Delete from ref if it's a custom upload
             if (removed.isCustomUpload) {
-              customBlobsRef.current.delete(removed.id);
+              blobHelpers.deleteCustomBlob(removed.id);
             }
 
             // Cleanup hotspots for removed step

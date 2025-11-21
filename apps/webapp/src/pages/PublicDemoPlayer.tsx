@@ -37,8 +37,8 @@ export default function PublicDemoPlayer() {
   const { allLoaded, loadProgress } = useAllImagesPreload(steps, { bucket, region });
 
   // Get aspect ratio and natural size from first step to maintain consistent container dimensions
-  const firstStepKey = steps[0]?.s3Key || steps[0]?.thumbnailS3Key;
-  const firstStepCdnUrl = useMemo(() => buildCdnUrl(firstStepKey), [firstStepKey]);
+  const firstStepKey = steps.length > 0 ? (steps[0]?.s3Key || steps[0]?.thumbnailS3Key) : undefined;
+  const firstStepCdnUrl = useMemo(() => (firstStepKey ? buildCdnUrl(firstStepKey) : undefined), [firstStepKey]);
   const { naturalAspect: firstStepAspect, naturalSize: firstStepSize } = useImageResolver(
     firstStepKey,
     firstStepCdnUrl,
