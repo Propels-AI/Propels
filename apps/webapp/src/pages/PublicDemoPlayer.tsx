@@ -36,7 +36,21 @@ export default function PublicDemoPlayer() {
   // Preload ALL images before showing the demo
   const { allLoaded, loadProgress } = useAllImagesPreload(steps, { bucket, region });
 
-  const { resolvedSrc, naturalAspect } = useImageResolver(current?.s3Key || current?.thumbnailS3Key, imageSrc, true, {
+  // Get aspect ratio and natural size from first step to maintain consistent container dimensions
+  const firstStepKey = steps[0]?.s3Key || steps[0]?.thumbnailS3Key;
+  const firstStepCdnUrl = useMemo(() => buildCdnUrl(firstStepKey), [firstStepKey]);
+  const { naturalAspect: firstStepAspect, naturalSize: firstStepSize } = useImageResolver(
+    firstStepKey,
+    firstStepCdnUrl,
+    true,
+    {
+      bucket,
+      region,
+    }
+  );
+
+  // Get current step's resolved image URL (but don't use its aspect ratio)
+  const { resolvedSrc } = useImageResolver(current?.s3Key || current?.thumbnailS3Key, imageSrc, false, {
     bucket,
     region,
   });
@@ -142,10 +156,12 @@ export default function PublicDemoPlayer() {
       <div
         className="relative w-full"
         style={{
-          aspectRatio: naturalAspect || "16 / 10",
+          aspectRatio: firstStepAspect || "16 / 10",
           // Prevent scrolling when zoomed in
           maxHeight: "100vh",
           overflow: "hidden",
+          maxWidth: firstStepSize ? `${firstStepSize.w}px` : undefined,
+          margin: "0 auto",
         }}
       >
         {isLeadDisplayIndex ? (

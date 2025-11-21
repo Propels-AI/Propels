@@ -50,16 +50,34 @@ export default function PublicDemoEmbed() {
   }, [current]);
   const bucket = (outputs as any)?.storage?.bucket;
   const region = (outputs as any)?.aws_region || (outputs as any)?.awsRegion || (outputs as any)?.region;
-  const { resolvedSrc, naturalAspect } = useImageResolver(current?.s3Key || current?.thumbnailS3Key, imageSrc, true, {
+
+  // Get aspect ratio and natural size from first step to maintain consistent container dimensions
+  const firstStepKey = steps[0]?.s3Key || steps[0]?.thumbnailS3Key;
+  const firstStepCdnUrl = useMemo(() => buildCdnUrl(firstStepKey), [firstStepKey]);
+  const { naturalAspect: firstStepAspect, naturalSize: firstStepSize } = useImageResolver(
+    firstStepKey,
+    firstStepCdnUrl,
+    true,
+    {
+      bucket,
+      region,
+    }
+  );
+
+  // Debug: log first step size
+  console.log("[PublicDemoEmbed] firstStepSize:", firstStepSize, "aspect:", firstStepAspect);
+
+  // Get current step's resolved image URL (but don't use its aspect ratio)
+  const { resolvedSrc } = useImageResolver(current?.s3Key || current?.thumbnailS3Key, imageSrc, false, {
     bucket,
     region,
   });
 
-  // Normalize naturalAspect to ensure consistent format (w / h with spaces)
+  // Normalize firstStepAspect to ensure consistent format (w / h with spaces)
   const safeAspect = useMemo(() => {
-    if (!naturalAspect) return null;
+    if (!firstStepAspect) return null;
     try {
-      const cleaned = String(naturalAspect).replace(/\s+/g, "");
+      const cleaned = String(firstStepAspect).replace(/\s+/g, "");
       const parts = cleaned.includes(":") ? cleaned.split(":") : cleaned.split("/");
       if (parts.length === 2) {
         const w = Number(parts[0]);
@@ -70,7 +88,7 @@ export default function PublicDemoEmbed() {
     } catch {
       return null;
     }
-  }, [naturalAspect]);
+  }, [firstStepAspect]);
 
   // Preload upcoming step images to improve perceived performance
   useImagePreloading(currentRealIndex, steps, 3, { bucket, region });
@@ -99,7 +117,7 @@ export default function PublicDemoEmbed() {
       <div className="w-full bg-transparent">
         <div
           className="relative w-full flex items-center justify-center p-4"
-          style={{ aspectRatio: forcedAspect || naturalAspect || "16 / 10" }}
+          style={{ aspectRatio: forcedAspect || safeAspect || "16 / 10" }}
         >
           <Card className="w-full max-w-md">
             <CardHeader className="text-center">
@@ -131,7 +149,7 @@ export default function PublicDemoEmbed() {
       <div className="w-full bg-transparent">
         <div
           className="relative w-full flex items-center justify-center"
-          style={{ aspectRatio: forcedAspect || naturalAspect || "16 / 10", minHeight: "200px" }}
+          style={{ aspectRatio: forcedAspect || safeAspect || "16 / 10", minHeight: "200px" }}
         >
           <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
         </div>
@@ -143,7 +161,7 @@ export default function PublicDemoEmbed() {
       <div className="w-full bg-transparent">
         <div
           className="relative w-full flex items-center justify-center p-4"
-          style={{ aspectRatio: forcedAspect || naturalAspect || "16 / 10" }}
+          style={{ aspectRatio: forcedAspect || safeAspect || "16 / 10" }}
         >
           <Card className="w-full max-w-md">
             <CardHeader className="text-center">
@@ -181,9 +199,11 @@ export default function PublicDemoEmbed() {
       <div
         className="relative w-full overflow-hidden"
         style={{
-          aspectRatio: forcedAspect || naturalAspect || "16 / 10",
+          aspectRatio: forcedAspect || safeAspect || "16 / 10",
           // Prevent scrolling when zoomed in
           maxHeight: "100vh",
+          maxWidth: firstStepSize ? `${firstStepSize.w}px` : undefined,
+          margin: "0 auto",
         }}
       >
         {isLeadDisplayIndex ? (
