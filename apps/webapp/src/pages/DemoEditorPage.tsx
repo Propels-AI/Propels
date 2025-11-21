@@ -3,7 +3,16 @@ import { useKeyboardShortcut } from "@/hooks/useKeyboardShortcut";
 import { syncAnonymousDemo, type EditedDraft } from "../lib/services/syncAnonymousDemo";
 import { useAuth } from "@/lib/providers/AuthProvider";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { deleteDemo, renameDemo, setDemoStatus, createDemoStep, getOwnerId, updateDemoStepZoom, deleteDemoStep, updateDemoStepsOrder } from "@/lib/api/demos";
+import {
+  deleteDemo,
+  renameDemo,
+  setDemoStatus,
+  createDemoStep,
+  getOwnerId,
+  updateDemoStepZoom,
+  deleteDemoStep,
+  updateDemoStepsOrder,
+} from "@/lib/api/demos";
 import { customScreenshotStorage } from "@/lib/customScreenshotStorage";
 import { uploadStepImage } from "@/lib/services/s3Service";
 import { fetchAuthSession } from "aws-amplify/auth";
@@ -75,6 +84,33 @@ export function DemoEditorPage() {
   const customBlobsRef = useRef<Map<string, Blob>>(new Map());
   const extensionBlobsRef = useRef<Map<string, Blob>>(new Map()); // Store extension capture blobs
   const isSavingRef = useRef(false);
+  // Version counters to track blob changes (since refs don't trigger re-renders)
+  const [blobsVersion, setBlobsVersion] = useState(0);
+
+  // Helper functions to manage blobs and automatically increment version counter
+  const blobHelpers = {
+    addExtensionBlob: (id: string, blob: Blob) => {
+      extensionBlobsRef.current.set(id, blob);
+      setBlobsVersion((v) => v + 1);
+    },
+    addCustomBlob: (id: string, blob: Blob) => {
+      customBlobsRef.current.set(id, blob);
+      setBlobsVersion((v) => v + 1);
+    },
+    deleteCustomBlob: (id: string) => {
+      const deleted = customBlobsRef.current.delete(id);
+      if (deleted) setBlobsVersion((v) => v + 1);
+    },
+    clearAllBlobs: () => {
+      extensionBlobsRef.current.clear();
+      customBlobsRef.current.clear();
+      setBlobsVersion((v) => v + 1);
+    },
+    clearExtensionBlobs: () => {
+      extensionBlobsRef.current.clear();
+      setBlobsVersion((v) => v + 1);
+    },
+  };
 
   // Delete handler function
   const handleDeleteDemo = async () => {
@@ -186,6 +222,18 @@ export function DemoEditorPage() {
   const currentStepId = steps[selectedStepIndex]?.id;
   const currentHotspots: Hotspot[] = currentStepId ? (hotspotsByStep[currentStepId] ?? []) : [];
 
+  // Track which steps have missing screenshot blobs (for validation warnings)
+  const stepsWithMissingBlobs = React.useMemo(() => {
+    const allScreenshots = new Map([...extensionBlobsRef.current, ...customBlobsRef.current]);
+    const missing = new Set<string>();
+    steps.forEach((s) => {
+      if (!s.isLeadCapture && !allScreenshots.has(s.id)) {
+        missing.add(s.id);
+      }
+    });
+    return missing;
+  }, [steps, blobsVersion]); // Use version counter instead of ref.current.size
+
   useEffect(() => {
     const loadFromExtension = async () => {
       try {
@@ -204,45 +252,68 @@ export function DemoEditorPage() {
             const urls: Array<{
               id: string;
               pageUrl: string;
-              screenshotUrl: string;
+              screenshotUrl?: string;
               xNorm?: number;
               yNorm?: number;
               clickX?: number;
               clickY?: number;
               viewportWidth?: number;
               viewportHeight?: number;
+              isLeadCapture?: boolean;
+              leadBg?: "white" | "black";
             }> = [];
-            
+
             // Clear extension blobs from previous session
-            extensionBlobsRef.current.clear();
-            
-            for (const d of sorted) {
+            blobHelpers.clearExtensionBlobs();
+
+            for (let captureIndex = 0; captureIndex < sorted.length; captureIndex++) {
+              const d = sorted[captureIndex];
               try {
                 let url = d.screenshotDataUrl as string | undefined;
                 let blob: Blob | undefined;
-                
-                if (d.screenshotBlob) {
-                  // Use blob directly if available
-                  blob = d.screenshotBlob as Blob;
-                  url = URL.createObjectURL(blob);
-                } else if (d.screenshotDataUrl) {
-                  // Convert data URL to blob for storage
+
+                // CRITICAL: Prioritize dataUrl over blob for Chrome message passing compatibility
+                // Blobs often get corrupted during cross-extension messaging
+                if (d.screenshotDataUrl) {
+                  // Use data URL - most reliable for extension → webapp transfer
                   url = d.screenshotDataUrl;
                   try {
                     const response = await fetch(d.screenshotDataUrl);
                     blob = await response.blob();
+
+                    // Validate blob is actually usable
+                    if (!blob || blob.size === 0) {
+                      continue;
+                    }
+
+                    // Validate blob type is an image
+                    if (!blob.type.startsWith("image/")) {
+                      continue;
+                    }
                   } catch (e) {
-                    console.warn("[editor] Failed to convert data URL to blob for step", d.id);
+                    console.error("[editor] Failed to convert data URL to blob for step", d.id, e);
+                    continue;
                   }
+                } else if (d.screenshotBlob) {
+                  // Fallback to blob if no dataUrl (shouldn't happen with new code)
+                  blob = d.screenshotBlob as Blob;
+
+                  // Validate blob before using
+                  if (!blob.size || blob.size === 0) {
+                    continue;
+                  }
+
+                  url = URL.createObjectURL(blob);
+                  continue;
                 }
-                
-                if (!url) continue;
-                
+
+                if (!url || !blob) {
+                  continue;
+                }
+
                 // Store blob for later use when saving
-                if (blob) {
-                  extensionBlobsRef.current.set(d.id, blob);
-                }
-                
+                blobHelpers.addExtensionBlob(d.id, blob);
+
                 urls.push({
                   id: d.id,
                   pageUrl: d.pageUrl,
@@ -254,7 +325,9 @@ export function DemoEditorPage() {
                   viewportWidth: (d as any).viewportWidth,
                   viewportHeight: (d as any).viewportHeight,
                 });
-              } catch (_e) {}
+              } catch (captureError) {
+                console.error(`[editor] Failed to process capture ${captureIndex}:`, captureError);
+              }
             }
 
             // Insert lead form as last step for new demos
@@ -275,7 +348,6 @@ export function DemoEditorPage() {
             // Clear custom screenshots from previous session when loading new extension data
             try {
               await customScreenshotStorage.clearAll();
-              console.log("[editor] Cleared custom screenshots for new recording");
             } catch (e) {
               console.error("[editor] Failed to clear custom screenshots:", e);
             }
@@ -343,7 +415,11 @@ export function DemoEditorPage() {
                           resolve();
                         };
                         img.onerror = () => resolve();
-                        img.src = s.screenshotUrl;
+                        if (s.screenshotUrl) {
+                          img.src = s.screenshotUrl;
+                        } else {
+                          resolve();
+                        }
                       })
                   )
                 );
@@ -366,7 +442,6 @@ export function DemoEditorPage() {
     }
   }, [demoIdParam]);
 
-
   // Warn user before leaving page with unsaved changes
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -374,7 +449,7 @@ export function DemoEditorPage() {
       if (isSavingRef.current) {
         return;
       }
-      
+
       // Only warn for unsaved demos with steps
       if (!demoIdParam && steps.length > 0) {
         e.preventDefault();
@@ -388,34 +463,48 @@ export function DemoEditorPage() {
   }, [demoIdParam, steps.length]);
 
   // Clean up unsaved demo data when component unmounts (user left without saving)
+  // CRITICAL: Only cleanup when actually leaving the page, not on React remounts
   useEffect(() => {
+    // Track if user is navigating away
+    let isNavigatingAway = false;
+
+    const handleBeforeUnload = () => {
+      isNavigatingAway = true;
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
     return () => {
-      // Only clean up if it's an unsaved demo
-      if (!demoIdParam) {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+
+      // CRITICAL: Only clean up if:
+      // 1. It's an unsaved demo (no demoIdParam)
+      // 2. User is actually leaving (not just React remounting)
+      // 3. Save is not in progress
+      if (!demoIdParam && isNavigatingAway && !isSavingRef.current) {
         // Clean up in the next tick to avoid issues during navigation
         setTimeout(async () => {
           try {
             // Clear custom screenshots
             await customScreenshotStorage.clearAll();
-            
+
             // Clear extension captures
             const extId = (import.meta as any).env?.VITE_CHROME_EXTENSION_ID || "";
             if (typeof chrome !== "undefined" && chrome.runtime && extId) {
               await chrome.runtime.sendMessage(extId, { type: "CLEAR_CAPTURE_SESSION" });
             }
-            
+
             // Clear blob refs
             customBlobsRef.current.clear();
             extensionBlobsRef.current.clear();
-            
-            console.log("[editor] Cleaned up unsaved demo data on unmount");
+            // Note: Don't call setBlobsVersion here - component is unmounting
           } catch (e) {
             console.error("[editor] Failed to clean up unsaved demo data:", e);
           }
         }, 0);
       }
     };
-  }, [demoIdParam]);
+  }, [demoIdParam, steps.length]);
 
   // Sync local UI state from useEditorData when editing a saved demo
   useEffect(() => {
@@ -529,6 +618,21 @@ export function DemoEditorPage() {
   }, []);
 
   const handleSave = async () => {
+    // Pre-save validation: Check for missing blobs in unauthenticated saves
+    if (!isAuthenticated && !demoIdParam) {
+      const allScreenshots = new Map([...extensionBlobsRef.current, ...customBlobsRef.current]);
+      const screenshotSteps = steps.filter((s) => !s.isLeadCapture);
+      const missingBlobSteps = screenshotSteps.filter((s) => !allScreenshots.has(s.id));
+
+      if (missingBlobSteps.length > 0) {
+        toast.error(`Cannot save demo: ${missingBlobSteps.length} step(s) are missing screenshot data`, {
+          description: "This usually means the extension failed to capture those screenshots. Try recording again.",
+          duration: 6000,
+        });
+        return;
+      }
+    }
+
     const { leadStepIndex: leadIdxDraft } = extractLeadConfig(steps, leadFormConfig);
     const draft: EditedDraft = {
       draftId: (crypto as any).randomUUID ? (crypto as any).randomUUID() : `${Date.now()}`,
@@ -667,19 +771,18 @@ export function DemoEditorPage() {
         // Get custom screenshots and extension captures from refs for unsaved demos
         const customScreenshots = customBlobsRef.current;
         const extensionScreenshots = extensionBlobsRef.current;
-        
+
         // Combine both maps for syncAnonymousDemo
         const allScreenshots = new Map([...extensionScreenshots, ...customScreenshots]);
-        
-        const { demoId, stepCount } = await syncAnonymousDemo({ 
+
+        const { demoId } = await syncAnonymousDemo({
           inlineDraft: draft,
           customScreenshots: allScreenshots,
         });
-  
+
         // Clear screenshots after successful save
-        customBlobsRef.current.clear();
-        extensionBlobsRef.current.clear();
-        
+        blobHelpers.clearAllBlobs();
+
         // Track demo saved for anonymous users
         trackDemoSaved(demoId, false, steps.length);
 
@@ -1027,18 +1130,18 @@ export function DemoEditorPage() {
             s3Key,
           };
           const next = [newStep, ...prev];
-          
+
           // Update order for all existing steps (shift them down by 1)
           const orderUpdates = prev
             .map((step, index) => ({ stepId: step.id, order: index + 1 }))
-            .filter((update) => !update.stepId.startsWith('LEAD-'));
-          
+            .filter((update) => !update.stepId.startsWith("LEAD-"));
+
           if (orderUpdates.length > 0) {
             updateDemoStepsOrder({ demoId: demoIdParam, steps: orderUpdates }).catch((e) => {
               console.error("Failed to update step order after adding screenshot:", e);
             });
           }
-          
+
           return next;
         });
 
@@ -1063,8 +1166,8 @@ export function DemoEditorPage() {
       } else {
         // Unsaved demo: Keep in memory only (will be cleared on page leave)
         // Store blob in ref for later upload when saving
-        customBlobsRef.current.set(stepId, blob);
-        
+        blobHelpers.addCustomBlob(stepId, blob);
+
         // Create object URL for display
         const objectUrl = URL.createObjectURL(blob);
 
@@ -1121,10 +1224,11 @@ export function DemoEditorPage() {
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
         onAddLeadStep={addLeadStep}
         onAddCustomScreenshot={handleAddCustomScreenshot}
+        stepsWithMissingBlobs={stepsWithMissingBlobs}
         onDeleteStep={async (index) => {
           const stepToDelete = steps[index];
           if (!stepToDelete) return;
-          
+
           // For saved demos, delete from backend first
           if (demoIdParam && !stepToDelete.isLeadCapture) {
             try {
@@ -1141,23 +1245,23 @@ export function DemoEditorPage() {
               return; // Don't update local state if backend delete failed
             }
           }
-          
+
           // Update local state
           setSteps((prev) => {
             if (index < 0 || index >= prev.length) return prev;
             const removed = prev[index];
             const next = [...prev.slice(0, index), ...prev.slice(index + 1)];
-            
+
             // Cleanup object URL if it's a blob URL
-            if (removed.screenshotUrl?.startsWith('blob:')) {
+            if (removed.screenshotUrl?.startsWith("blob:")) {
               URL.revokeObjectURL(removed.screenshotUrl);
             }
-            
+
             // Delete from ref if it's a custom upload
             if (removed.isCustomUpload) {
-              customBlobsRef.current.delete(removed.id);
+              blobHelpers.deleteCustomBlob(removed.id);
             }
-            
+
             // Cleanup hotspots for removed step
             setHotspotsByStep((prevHs) => {
               const { [removed.id]: _omit, ...rest } = prevHs;
@@ -1196,12 +1300,12 @@ export function DemoEditorPage() {
         onReorderSteps={async (from, to) => {
           if (from === to) return;
           if (from < 0 || from >= steps.length) return;
-          
+
           const clampedTo = Math.max(0, Math.min(to, steps.length - 1));
           const next = [...steps];
           const [moved] = next.splice(from, 1);
           next.splice(clampedTo, 0, moved);
-          
+
           // Update local state immediately for responsive UI
           setSteps(next);
           setSelectedStepIndex((sel) => {
@@ -1209,15 +1313,15 @@ export function DemoEditorPage() {
             const newIndex = next.findIndex((s) => s.id === currentId);
             return newIndex >= 0 ? newIndex : Math.max(0, Math.min(sel, next.length - 1));
           });
-          
+
           // For saved demos, persist order to backend
           if (demoIdParam) {
             try {
               // Build order update payload (exclude lead capture steps)
               const orderUpdates = next
                 .map((step, index) => ({ stepId: step.id, order: index }))
-                .filter((update) => !update.stepId.startsWith('LEAD-'));
-              
+                .filter((update) => !update.stepId.startsWith("LEAD-"));
+
               if (orderUpdates.length > 0) {
                 await updateDemoStepsOrder({ demoId: demoIdParam, steps: orderUpdates });
               }
@@ -1308,7 +1412,7 @@ export function DemoEditorPage() {
           }}
           onDelete={async () => {
             if (!demoIdParam) return;
-              setDeleteModalOpen(true);
+            setDeleteModalOpen(true);
           }}
           onCopyPublicUrl={async () => {
             try {
@@ -1411,7 +1515,6 @@ export function DemoEditorPage() {
                     // Set transform-origin based on hotspot position or center
                     transformOrigin: (() => {
                       const currentHotspots = currentStepId ? (hotspotsByStep[currentStepId] ?? []) : [];
-                      const zoomLevel = (steps[selectedStepIndex]?.zoom || 100) / 100;
 
                       if (currentHotspots.length > 0 && naturalSize) {
                         // Use first hotspot as focal point

@@ -62,6 +62,8 @@ keepAlive();
 let currentCaptureSession: DemoCapture[] = [];
 let stepCount = 0;
 let isRecording = false;
+let lastCaptureTime = 0;
+const MIN_CAPTURE_INTERVAL_MS = 600; // Chrome allows ~2 captures/sec, so 600ms between captures is safe
 
 async function updateActionIcon(options?: { recording?: boolean; count?: number }) {
   const rec = options?.recording ?? isRecording;
@@ -322,8 +324,88 @@ function handleSaveCaptureSession(data: DemoCapture[]) {
 
 async function handleGetCaptureSession(sendResponse: (response: CaptureSessionResponse) => void) {
   try {
-    const captures = await indexedDBManager.getAllCaptures();
-    sendResponse({ success: true, data: captures });
+    // CRITICAL FIX: Prefer in-memory captures over IndexedDB
+    // IndexedDB saves can fail silently, but in-memory captures are reliable
+    let captures: DemoCapture[] = [];
+
+    if (currentCaptureSession && currentCaptureSession.length > 0) {
+      // Use in-memory session (most reliable)
+      captures = [...currentCaptureSession];
+      console.log("[background] Using in-memory capture session", {
+        count: captures.length,
+        source: "currentCaptureSession",
+      });
+    } else {
+      // Fallback to IndexedDB if memory is empty
+      captures = await indexedDBManager.getAllCaptures();
+      console.log("[background] Using IndexedDB capture session", {
+        count: captures.length,
+        source: "IndexedDB",
+      });
+    }
+
+    // Validate all captures before sending
+    const validatedCaptures: any[] = [];
+
+    for (let index = 0; index < captures.length; index++) {
+      const capture = captures[index];
+      const hasBlob = !!capture.screenshotBlob;
+      const blobSize = capture.screenshotBlob?.size || 0;
+      const blobType = capture.screenshotBlob?.type || "";
+      const isValid = hasBlob && blobSize > 0 && blobType.startsWith("image/");
+
+      console.log(`[background] Capture ${index} validation`, {
+        id: capture.id?.substring(0, 12),
+        hasBlob,
+        blobSize,
+        blobType,
+        isValid,
+      });
+
+      if (!isValid) {
+        console.warn(`[background] Capture ${index} has invalid blob`, {
+          id: capture.id,
+          hasBlob,
+          blobSize,
+          blobType,
+        });
+        // Include capture anyway but mark it as invalid
+        validatedCaptures.push(capture);
+        continue;
+      }
+
+      // CRITICAL: Convert blob to data URL for Chrome message passing
+      // Blobs don't serialize properly across extension message boundaries
+      try {
+        const reader = new FileReader();
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(capture.screenshotBlob);
+        });
+
+        // Send capture with BOTH blob and dataUrl for maximum compatibility
+        validatedCaptures.push({
+          ...capture,
+          screenshotDataUrl: dataUrl,
+          screenshotBlob: capture.screenshotBlob, // Include blob too (works in some contexts)
+        });
+
+        console.log(`[background] Converted capture ${index} to data URL`, {
+          id: capture.id?.substring(0, 12),
+          dataUrlLength: dataUrl.length,
+        });
+      } catch (conversionError) {
+        console.error(`[background] Failed to convert blob to data URL for capture ${index}`, {
+          id: capture.id,
+          error: conversionError,
+        });
+        // Include capture anyway, editor will handle missing data
+        validatedCaptures.push(capture);
+      }
+    }
+
+    sendResponse({ success: true, data: validatedCaptures });
   } catch (error) {
     console.error("Error getting capture session:", error);
     sendResponse({
@@ -370,6 +452,30 @@ function handleDeleteRecording() {
 
 async function handleCaptureScreenshot(captureData: DemoCapture, sendResponse: (response: any) => void) {
   try {
+    // Validate captureData exists
+    if (!captureData || !captureData.id) {
+      console.error("[background] Invalid captureData received", {
+        captureData: captureData ? "exists but missing id" : "undefined",
+      });
+      sendResponse({ success: false, error: "Invalid capture data" });
+      return;
+    }
+
+    // Rate limiting: Prevent Chrome quota errors
+    const now = Date.now();
+    const timeSinceLastCapture = now - lastCaptureTime;
+
+    if (timeSinceLastCapture < MIN_CAPTURE_INTERVAL_MS) {
+      const waitTime = MIN_CAPTURE_INTERVAL_MS - timeSinceLastCapture;
+      console.log(`[background] Rate limiting: waiting ${waitTime}ms before capture`, {
+        captureId: captureData.id,
+        timeSinceLastCapture,
+      });
+      await new Promise((resolve) => setTimeout(resolve, waitTime));
+    }
+
+    lastCaptureTime = Date.now();
+
     const [tab] = await chrome.tabs.query({
       active: true,
       currentWindow: true,
@@ -381,7 +487,48 @@ async function handleCaptureScreenshot(captureData: DemoCapture, sendResponse: (
     }
 
     const screenshotDataUrl = await chrome.tabs.captureVisibleTab();
+
+    // Validate the data URL before converting
+    if (!screenshotDataUrl || screenshotDataUrl.length < 100) {
+      console.error("[background] Screenshot data URL is invalid or too short", {
+        captureId: captureData.id,
+        dataUrlLength: screenshotDataUrl?.length,
+      });
+      sendResponse({ success: false, error: "Invalid screenshot data" });
+      return;
+    }
+
     const screenshotBlob = await fetch(screenshotDataUrl).then((res) => res.blob());
+
+    // Validate the blob before storing
+    if (!screenshotBlob || screenshotBlob.size === 0) {
+      console.error("[background] Screenshot blob is invalid or empty", {
+        captureId: captureData.id,
+        blobSize: screenshotBlob?.size,
+        blobType: screenshotBlob?.type,
+        dataUrlLength: screenshotDataUrl.length,
+      });
+      sendResponse({ success: false, error: "Failed to convert screenshot to blob" });
+      return;
+    }
+
+    // Validate blob type
+    if (!screenshotBlob.type.startsWith("image/")) {
+      console.error("[background] Screenshot blob has invalid type", {
+        captureId: captureData.id,
+        blobType: screenshotBlob.type,
+        blobSize: screenshotBlob.size,
+      });
+      sendResponse({ success: false, error: "Invalid image type" });
+      return;
+    }
+
+    console.log("[background] Screenshot captured successfully", {
+      captureId: captureData.id,
+      blobSize: screenshotBlob.size,
+      blobType: screenshotBlob.type,
+      stepNumber: stepCount + 1,
+    });
 
     const updatedCapture: DemoCapture = {
       ...captureData,
@@ -389,10 +536,21 @@ async function handleCaptureScreenshot(captureData: DemoCapture, sendResponse: (
       pageUrl: tab.url || captureData.pageUrl,
     };
 
-    await indexedDBManager.saveCapture(updatedCapture);
-
+    // Store in memory first (most reliable)
     currentCaptureSession.push(updatedCapture);
     stepCount = currentCaptureSession.length;
+
+    // Try to save to IndexedDB (fallback, non-fatal if it fails)
+    try {
+      await indexedDBManager.saveCapture(updatedCapture);
+      console.log("[background] Saved to IndexedDB", { captureId: updatedCapture.id });
+    } catch (dbError) {
+      console.warn("[background] IndexedDB save failed (non-fatal, using memory)", {
+        captureId: updatedCapture.id,
+        error: dbError,
+      });
+      // Continue anyway - in-memory storage is sufficient
+    }
 
     chrome.storage.local.set({ stepCount: stepCount }, () => {});
 
