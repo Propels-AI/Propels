@@ -37,6 +37,7 @@ interface EditorSidebarProps {
   onDuplicateStep: (index: number) => void;
   onReorderSteps: (fromIndex: number, toIndex: number) => void;
   onUpdateStepZoom: (stepId: string, zoom: number) => void;
+  stepsWithMissingBlobs?: Set<string>; // Optional: IDs of steps that have no blob data
 }
 
 export function EditorSidebar({
@@ -58,6 +59,7 @@ export function EditorSidebar({
   onDuplicateStep,
   onReorderSteps,
   onUpdateStepZoom,
+  stepsWithMissingBlobs,
 }: EditorSidebarProps) {
   const [leadUiOpen, setLeadUiOpen] = React.useState(false);
   const [leadInsertAnchor, setLeadInsertAnchor] = React.useState(1);
