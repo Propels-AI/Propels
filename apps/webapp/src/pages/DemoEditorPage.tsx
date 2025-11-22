@@ -799,6 +799,7 @@ export function DemoEditorPage() {
       alert("Failed to save demo. Please try again.");
     } finally {
       setSavingDemo(false);
+      isSavingRef.current = false;
     }
   };
 

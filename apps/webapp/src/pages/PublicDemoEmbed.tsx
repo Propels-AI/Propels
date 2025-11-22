@@ -64,9 +64,6 @@ export default function PublicDemoEmbed() {
     }
   );
 
-  // Debug: log first step size
-  console.log("[PublicDemoEmbed] firstStepSize:", firstStepSize, "aspect:", firstStepAspect);
-
   // Get current step's resolved image URL (but don't use its aspect ratio)
   const { resolvedSrc } = useImageResolver(current?.s3Key || current?.thumbnailS3Key, imageSrc, false, {
     bucket,
