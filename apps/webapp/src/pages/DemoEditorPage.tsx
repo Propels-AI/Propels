@@ -618,8 +618,8 @@ export function DemoEditorPage() {
   }, []);
 
   const handleSave = async () => {
-    // Pre-save validation: Check for missing blobs in unauthenticated saves
-    if (!isAuthenticated && !demoIdParam) {
+    // Pre-save validation: Check for missing blobs in new demos (no demoId yet)
+    if (!demoIdParam) {
       const allScreenshots = new Map([...extensionBlobsRef.current, ...customBlobsRef.current]);
       const screenshotSteps = steps.filter((s) => !s.isLeadCapture);
       const missingBlobSteps = screenshotSteps.filter((s) => !allScreenshots.has(s.id));
