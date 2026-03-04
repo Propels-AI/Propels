@@ -54,3 +54,6 @@ Here’s how you can contribute:
 ## License
 
 This project is licensed under the **GNU Affero General Public License v3.0** (AGPL-3.0). See the [LICENSE](LICENSE) file for more details.
+
+## About the Team
+Propels is built and maintained by the team behind [Citeful](https://citeful.ai).
