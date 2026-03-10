@@ -2,11 +2,12 @@ import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { createLeadSubmissionPublic } from "@/lib/api/demos";
 import HotspotOverlay from "@/components/HotspotOverlay";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import LeadCaptureOverlay from "@/components/LeadCaptureOverlay";
 import { usePublicDemo } from "@/features/public/hooks/usePublicDemo";
 import { useImageResolver } from "@/features/public/hooks/useImageResolver";
-import { useImagePreloading, buildCdnUrl } from "@/hooks/useImagePreloading";
+import { buildCdnUrl } from "@/hooks/useImagePreloading";
+import { useAllImagesPreload } from "@/hooks/useAllImagesPreload";
 import outputs from "../../../../amplify_outputs.json";
 import { Card, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,13 +32,28 @@ export default function PublicDemoPlayer() {
   }, [current]);
   const bucket = (outputs as any)?.storage?.bucket;
   const region = (outputs as any)?.aws_region || (outputs as any)?.awsRegion || (outputs as any)?.region;
-  const { resolvedSrc, naturalAspect } = useImageResolver(current?.s3Key || current?.thumbnailS3Key, imageSrc, true, {
+
+  // Preload ALL images before showing the demo
+  const { allLoaded, loadProgress } = useAllImagesPreload(steps, { bucket, region });
+
+  // Get aspect ratio and natural size from first step to maintain consistent container dimensions
+  const firstStepKey = steps.length > 0 ? (steps[0]?.s3Key || steps[0]?.thumbnailS3Key) : undefined;
+  const firstStepCdnUrl = useMemo(() => (firstStepKey ? buildCdnUrl(firstStepKey) : undefined), [firstStepKey]);
+  const { naturalAspect: firstStepAspect, naturalSize: firstStepSize } = useImageResolver(
+    firstStepKey,
+    firstStepCdnUrl,
+    true,
+    {
+      bucket,
+      region,
+    }
+  );
+
+  // Get current step's resolved image URL (but don't use its aspect ratio)
+  const { resolvedSrc } = useImageResolver(current?.s3Key || current?.thumbnailS3Key, imageSrc, false, {
     bucket,
     region,
   });
-
-  // Preload upcoming step images
-  useImagePreloading(currentRealIndex, steps);
 
   const currentHotspots = useMemo(() => {
     if (currentRealIndex < 0) return [] as any[];
@@ -87,6 +103,21 @@ export default function PublicDemoPlayer() {
     );
   if (loading) return <div className="p-6">Loading…</div>;
   if (error) return <div className="p-6 text-red-600">{error}</div>;
+
+  // Show loading state while preloading all images
+  if (!allLoaded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+          <div className="text-sm text-gray-600">Loading demo... {loadProgress}%</div>
+          <div className="w-64 h-2 bg-gray-200 rounded-full overflow-hidden">
+            <div className="h-full bg-blue-600 transition-all duration-300" style={{ width: `${loadProgress}%` }} />
+          </div>
+        </div>
+      </div>
+    );
+  }
   if (displayTotal === 0)
     return (
       <div className="min-h-screen flex items-center justify-center p-6">
@@ -125,10 +156,12 @@ export default function PublicDemoPlayer() {
       <div
         className="relative w-full"
         style={{
-          aspectRatio: naturalAspect || "16 / 10",
+          aspectRatio: firstStepAspect || "16 / 10",
           // Prevent scrolling when zoomed in
           maxHeight: "100vh",
-          overflow: "hidden"
+          overflow: "hidden",
+          maxWidth: firstStepSize ? `${firstStepSize.w}px` : undefined,
+          margin: "0 auto",
         }}
       >
         {isLeadDisplayIndex ? (

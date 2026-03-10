@@ -184,13 +184,33 @@ export const HotspotOverlay: React.FC<HotspotOverlayProps> = ({
   // Calculate transform origin for zoom
   const zoomLevel = zoom / 100;
   const transformOrigin = useMemo(() => {
+    if (!box) return "50% 50%";
+
+    // Calculate the transform origin relative to the actual image position within the container
+    const img = imgRef.current;
+    if (!img) return "50% 50%";
+
+    const containerRect = wrapperRef.current?.getBoundingClientRect();
+    if (!containerRect) return "50% 50%";
+
+    // Get focal point (first hotspot or center)
+    let focalXNorm = 0.5;
+    let focalYNorm = 0.5;
     if (hotspots.length > 0 && hotspots[0].xNorm !== undefined && hotspots[0].yNorm !== undefined) {
-      // Use first hotspot as focal point
-      return `${hotspots[0].xNorm * 100}% ${hotspots[0].yNorm * 100}%`;
+      focalXNorm = hotspots[0].xNorm;
+      focalYNorm = hotspots[0].yNorm;
     }
-    // Default to center
-    return "50% 50%";
-  }, [hotspots]);
+
+    // Calculate the focal point in absolute pixels within the rendered image
+    const focalX = box.left + focalXNorm * box.width;
+    const focalY = box.top + focalYNorm * box.height;
+
+    // Convert to percentage of the container
+    const originX = (focalX / containerRect.width) * 100;
+    const originY = (focalY / containerRect.height) * 100;
+
+    return `${originX}% ${originY}%`;
+  }, [hotspots, box]);
 
   return (
     <div ref={wrapperRef} className={className}>
@@ -317,67 +337,69 @@ export const HotspotOverlay: React.FC<HotspotOverlayProps> = ({
                   }}
                 />
               </div>
-              {hasTooltip && (() => {
-                // Parse tooltip for display - support both string and object format
-                const tooltipData = typeof (h as any).tooltip === "string" 
-                  ? { title: "", description: (h as any).tooltip }
-                  : { 
-                      title: (h as any).tooltip?.title || "", 
-                      description: (h as any).tooltip?.description || (h as any).tooltip?.text || tooltipText
-                    };
-                const hasTitle = tooltipData.title.trim().length > 0;
-                
-                return (
-                  <div
-                    className={`absolute px-3 py-2 rounded shadow-lg opacity-100 max-w-sm break-words ${enableBubbleDrag ? "cursor-grab" : ""}`}
-                    style={{
-                      backgroundColor: bubbleBg,
-                      color: bubbleText,
-                      left: `${bubbleLeft}px`,
-                      top: `${bubbleTop}px`,
-                    }}
-                    onMouseDown={(e) => {
-                      if (!enableBubbleDrag || !box) return;
-                      e.stopPropagation();
-                      (e.currentTarget as HTMLDivElement).classList.add("cursor-grabbing");
+              {hasTooltip &&
+                (() => {
+                  // Parse tooltip for display - support both string and object format
+                  const tooltipData =
+                    typeof (h as any).tooltip === "string"
+                      ? { title: "", description: (h as any).tooltip }
+                      : {
+                          title: (h as any).tooltip?.title || "",
+                          description: (h as any).tooltip?.description || (h as any).tooltip?.text || tooltipText,
+                        };
+                  const hasTitle = tooltipData.title.trim().length > 0;
 
-                      // Calculate zoomed position for drag reference
-                      const baseLeft = box.left + (h.xNorm ?? 0) * box.width - dotSize / 2;
-                      const baseTop = box.top + (h.yNorm ?? 0) * box.height - dotSize / 2;
-                      const originX = box.left + (hotspots[0]?.xNorm || 0.5) * box.width;
-                      const originY = box.top + (hotspots[0]?.yNorm || 0.5) * box.height;
-                      const centerX = originX + (baseLeft + dotSize / 2 - originX) * zoomLevel;
-                      const centerY = originY + (baseTop + dotSize / 2 - originY) * zoomLevel;
-
-                      dragRef.current = { id: h.id, centerX, centerY, el: e.currentTarget as HTMLDivElement };
-                      (dragRef as any).start?.();
-                    }}
-                    onMouseUp={(e) => {
-                      if (!enableBubbleDrag) return;
-                      (e.currentTarget as HTMLDivElement).classList.remove("cursor-grabbing");
-                    }}
-                  >
-                    {hasTitle && (
-                      <div 
-                        className="font-semibold mb-1"
-                        style={{
-                          fontSize: `${bubbleSizePx + 2}px`,
-                        }}
-                      >
-                        {tooltipData.title}
-                      </div>
-                    )}
+                  return (
                     <div
-                      className="whitespace-pre-wrap break-words"
+                      className={`absolute px-3 py-2 rounded shadow-lg opacity-100 max-w-sm break-words ${enableBubbleDrag ? "cursor-grab" : ""}`}
                       style={{
-                        fontSize: `${bubbleSizePx}px`,
+                        backgroundColor: bubbleBg,
+                        color: bubbleText,
+                        left: `${bubbleLeft}px`,
+                        top: `${bubbleTop}px`,
+                      }}
+                      onMouseDown={(e) => {
+                        if (!enableBubbleDrag || !box) return;
+                        e.stopPropagation();
+                        (e.currentTarget as HTMLDivElement).classList.add("cursor-grabbing");
+
+                        // Calculate zoomed position for drag reference
+                        const baseLeft = box.left + (h.xNorm ?? 0) * box.width - dotSize / 2;
+                        const baseTop = box.top + (h.yNorm ?? 0) * box.height - dotSize / 2;
+                        const originX = box.left + (hotspots[0]?.xNorm || 0.5) * box.width;
+                        const originY = box.top + (hotspots[0]?.yNorm || 0.5) * box.height;
+                        const centerX = originX + (baseLeft + dotSize / 2 - originX) * zoomLevel;
+                        const centerY = originY + (baseTop + dotSize / 2 - originY) * zoomLevel;
+
+                        dragRef.current = { id: h.id, centerX, centerY, el: e.currentTarget as HTMLDivElement };
+                        (dragRef as any).start?.();
+                      }}
+                      onMouseUp={(e) => {
+                        if (!enableBubbleDrag) return;
+                        (e.currentTarget as HTMLDivElement).classList.remove("cursor-grabbing");
                       }}
                     >
-                      {tooltipData.description}
+                      {hasTitle && (
+                        <div
+                          className="font-semibold mb-1"
+                          style={{
+                            fontSize: `${bubbleSizePx + 2}px`,
+                          }}
+                        >
+                          {tooltipData.title}
+                        </div>
+                      )}
+                      <div
+                        className="whitespace-pre-wrap break-words"
+                        style={{
+                          fontSize: `${bubbleSizePx}px`,
+                        }}
+                      >
+                        {tooltipData.description}
+                      </div>
                     </div>
-                  </div>
-                );
-              })()}
+                  );
+                })()}
             </React.Fragment>
           );
         })}
